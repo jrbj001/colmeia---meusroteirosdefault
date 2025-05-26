@@ -1,0 +1,1 @@
+export { FindInPage } from "./FindInPage";

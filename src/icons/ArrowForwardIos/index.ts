@@ -1,0 +1,1 @@
+export { ArrowForwardIos } from "./ArrowForwardIos";
