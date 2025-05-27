@@ -21,7 +21,7 @@ export const ArrowForwardIos = ({ className }: Props): JSX.Element => {
     >
       <path
         d="M14.9042 3.14165L13.4292 1.66665L5.09584 9.99998L13.4292 18.3333L14.9042 16.8583L8.04584 9.99998L14.9042 3.14165Z"
-        fill="black"
+        fill="currentColor"
       />
     </svg>
   );
