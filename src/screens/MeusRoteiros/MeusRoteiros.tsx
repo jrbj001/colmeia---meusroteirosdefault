@@ -8,6 +8,7 @@ import { Difference4 } from "../../icons/Difference4";
 import { Delete4 } from "../../icons/Delete4";
 import { Pagination } from "./sections/Pagination";
 import axios from "axios";
+import { LoadingColmeia } from "./components/LoadingColmeia";
 
 // Definir a interface dos dados da view
 interface Roteiro {
@@ -111,7 +112,9 @@ export const MeusRoteiros: React.FC = () => {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={5} className="text-center py-4">Carregando...</td>
+                      <td colSpan={5} className="py-16">
+                        <LoadingColmeia />
+                      </td>
                     </tr>
                   ) : dados.length === 0 ? (
                     <tr>
