@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Avatar } from "../../components/Avatar";
 import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { Topbar } from "../../components/Topbar/Topbar";
@@ -7,42 +7,26 @@ import { StyleOutlined7 } from "../../icons/StyleOutlined7";
 import { Difference4 } from "../../icons/Difference4";
 import { Delete4 } from "../../icons/Delete4";
 import { Pagination } from "./sections/Pagination";
+import axios from "axios";
 
-const dados = [
-  {
-    nome: "J2448_DM9_IFOOD_CARNAVAL_2025",
-    data: "12/01/25",
-    tipo: "SIMULADO",
-    periodo: "4 SEMANAS",
-  },
-  {
-    nome: "J2356_DM9_IFOOD_PASCOA_2025",
-    data: "20/02/25",
-    tipo: "FINAL",
-    periodo: "12 SEMANAS",
-  },
-  {
-    nome: "J2356_DM9_IFOOD_PASCOA_2025",
-    data: "30/03/25",
-    tipo: "FINAL",
-    periodo: "6 SEMANAS",
-  },
-  {
-    nome: "J1867_GUT_AVON_DIADASMAES_2025",
-    data: "11/04/25",
-    tipo: "SIMULADO",
-    periodo: "2 SEMANAS",
-  },
-  {
-    nome: "J0987_GUT_NATURA_DIADOSNAMORADOS_2025",
-    data: "09/05/25",
-    tipo: "SIMULADO",
-    periodo: "5 SEMANAS",
-  },
-];
+// Definir a interface dos dados da view
+interface Roteiro {
+  planoMidiaDesc_st: string;
+  date_dh: string;
+  class_st: string;
+  semanas_vl: number;
+  // Adicione outros campos se quiser exibir mais
+}
 
 export const MeusRoteiros: React.FC = () => {
   const [menuReduzido, setMenuReduzido] = useState(false);
+  const [dados, setDados] = useState<Roteiro[]>([]);
+
+  useEffect(() => {
+    axios.get<Roteiro[]>("http://localhost:3001/api/roteiros")
+      .then((res) => setDados(res.data))
+      .catch((err) => console.error(err));
+  }, []);
 
   return (
     <>
@@ -102,10 +86,10 @@ export const MeusRoteiros: React.FC = () => {
                       key={idx}
                       className={`${idx % 2 === 0 ? "bg-[#f7f7f7]" : "bg-white"} hover:bg-[#ececec] transition-colors duration-200`}
                     >
-                      <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.nome}</td>
-                      <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.data}</td>
-                      <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.tipo}</td>
-                      <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.periodo}</td>
+                      <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.planoMidiaDesc_st}</td>
+                      <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.date_dh}</td>
+                      <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.class_st}</td>
+                      <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.semanas_vl}</td>
                       <td className="text-[#222] text-xs px-6 py-4 whitespace-nowrap text-right flex items-center gap-4 justify-end font-sans">
                         <StyleOutlined7 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
                         <Difference4 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
