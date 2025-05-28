@@ -15,18 +15,46 @@ interface Roteiro {
   date_dh: string;
   class_st: string;
   semanas_vl: number;
-  // Adicione outros campos se quiser exibir mais
+}
+
+interface PaginationInfo {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  pageSize: number;
 }
 
 export const MeusRoteiros: React.FC = () => {
   const [menuReduzido, setMenuReduzido] = useState(false);
   const [dados, setDados] = useState<Roteiro[]>([]);
+  const [paginacao, setPaginacao] = useState<PaginationInfo>({
+    currentPage: 1,
+    totalPages: 1,
+    totalItems: 0,
+    pageSize: 50
+  });
+  const [loading, setLoading] = useState(false);
+
+  const carregarDados = async (pagina: number) => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`http://localhost:3001/api/roteiros?page=${pagina}`);
+      setDados(response.data.data);
+      setPaginacao(response.data.pagination);
+    } catch (err) {
+      console.error('Erro ao carregar dados:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    axios.get<Roteiro[]>("http://localhost:3001/api/roteiros")
-      .then((res) => setDados(res.data))
-      .catch((err) => console.error(err));
+    carregarDados(1);
   }, []);
+
+  const handlePageChange = (novaPagina: number) => {
+    carregarDados(novaPagina);
+  };
 
   return (
     <>
@@ -35,12 +63,12 @@ export const MeusRoteiros: React.FC = () => {
         <div
           className={`fixed top-0 z-20 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? "left-20" : "left-64"}`}
         />
-        <div className={`flex-1 transition-all duration-300 min-h-screen w-full ${menuReduzido ? "ml-20" : "ml-64"}`}>
+        <div className={`flex-1 transition-all duration-300 min-h-screen w-full ${menuReduzido ? "ml-20" : "ml-64"} flex flex-col`}>
           <Topbar menuReduzido={menuReduzido} />
           <div
             className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`}
           />
-          <div className="w-full overflow-x-auto pt-20">
+          <div className="w-full overflow-x-auto pt-20 flex-1 overflow-auto">
             <h1 className="text-lg font-bold text-[#222] tracking-wide mb-4 uppercase font-sans mt-12 pl-6">
               Meus roteiros
             </h1>
@@ -81,38 +109,53 @@ export const MeusRoteiros: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {dados.map((item, idx) => (
-                    <tr
-                      key={idx}
-                      className={`${idx % 2 === 0 ? "bg-[#f7f7f7]" : "bg-white"} hover:bg-[#ececec] transition-colors duration-200`}
-                    >
-                      <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.planoMidiaDesc_st}</td>
-                      <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.date_dh}</td>
-                      <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.class_st}</td>
-                      <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.semanas_vl}</td>
-                      <td className="text-[#222] text-xs px-6 py-4 whitespace-nowrap text-right flex items-center gap-4 justify-end font-sans">
-                        <StyleOutlined7 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
-                        <Difference4 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
-                        <Delete4 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
-                      </td>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={5} className="text-center py-4">Carregando...</td>
                     </tr>
-                  ))}
+                  ) : dados.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-center py-4">Nenhum roteiro encontrado</td>
+                    </tr>
+                  ) : (
+                    dados.map((item, idx) => (
+                      <tr
+                        key={idx}
+                        className={`${idx % 2 === 0 ? "bg-[#f7f7f7]" : "bg-white"} hover:bg-[#ececec] transition-colors duration-200`}
+                      >
+                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.planoMidiaDesc_st}</td>
+                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.date_dh}</td>
+                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.class_st}</td>
+                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.semanas_vl}</td>
+                        <td className="text-[#222] text-xs px-6 py-4 whitespace-nowrap text-right flex items-center gap-4 justify-end font-sans">
+                          <StyleOutlined7 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
+                          <Difference4 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
+                          <Delete4 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
         </div>
+        <div className={`fixed bottom-0 z-30 flex flex-col items-center pointer-events-none transition-all duration-300 ${menuReduzido ? 'left-20 w-[calc(100%-5rem)]' : 'left-64 w-[calc(100%-16rem)]'}`}>
+          <div className="absolute left-0 top-0 h-full w-px bg-[#c1c1c1]" />
+          <div className="w-full bg-white py-4 border-t border-[#e5e5e5] flex justify-center pointer-events-auto">
+            <Pagination 
+              currentPage={paginacao.currentPage} 
+              totalPages={paginacao.totalPages} 
+              onPageChange={handlePageChange} 
+            />
+          </div>
+          <footer className="w-full border-t border-[#c1c1c1] p-4 text-center text-[10px] italic text-[#b0b0b0] tracking-wide bg-white z-10 font-sans pointer-events-auto relative">
+            <div className="absolute left-0 top-0 h-full w-px bg-[#c1c1c1]" />
+            <div className="w-full h-[1px] bg-[#c1c1c1] absolute top-0 left-0" />
+            © 2025 Colmeia. All rights are reserved to Be Mediatech OOH.
+          </footer>
+        </div>
       </div>
-      <div
-        className={`fixed z-20 bg-white py-4 border-t border-[#e5e5e5] flex justify-center transition-all duration-300 ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`}
-        style={{ bottom: '56px' }}
-      >
-        <Pagination currentPage={1} totalPages={10} onPageChange={() => {}} />
-      </div>
-      <footer className="w-full border-t border-[#c1c1c1] p-4 text-center text-[10px] italic text-[#b0b0b0] tracking-wide fixed bottom-0 left-0 bg-white z-10 font-sans">
-        <div className="w-full h-[1px] bg-[#c1c1c1] absolute top-0 left-0" />
-        © 2025 Colmeia. All rights are reserved to Be Mediatech OOH.
-      </footer>
     </>
   );
 };

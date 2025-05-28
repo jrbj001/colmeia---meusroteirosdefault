@@ -19,9 +19,33 @@ const config = {
 
 app.get('/api/roteiros', async (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = 50;
+    const offset = (page - 1) * pageSize;
+
     await sql.connect(config);
-    const result = await sql.query('SELECT TOP 500 * FROM serv_product_be180.planoMidiaDescResumo_dm_vw');
-    res.json(result.recordset);
+    
+    // Primeiro, vamos contar o total de registros
+    const countResult = await sql.query('SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaDescResumo_dm_vw');
+    const total = countResult.recordset[0].total;
+    
+    // Agora, vamos buscar os registros paginados
+    const result = await sql.query(`
+      SELECT * FROM serv_product_be180.planoMidiaDescResumo_dm_vw
+      ORDER BY date_dh DESC
+      OFFSET ${offset} ROWS
+      FETCH NEXT ${pageSize} ROWS ONLY
+    `);
+
+    res.json({
+      data: result.recordset,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(total / pageSize),
+        totalItems: total,
+        pageSize: pageSize
+      }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
