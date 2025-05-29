@@ -9,7 +9,7 @@ const app = express();
 // Configuração do CORS mais específica
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://colmeia-meusroteirosdefault.vercel.app', 'https://colmeia-meusroteirosdefault-5yqk6umhq-jrbj001-5242s-projects.vercel.app'] // URLs do frontend em produção
+    ? ['https://colmeia-meusroteirosdefault.vercel.app', 'https://colmeia-meusroteirosdefault-5yqk6umhq-jrbj001-5242s-projects.vercel.app', 'https://*.vercel.app'] // URLs do frontend em produção
     : ['http://localhost:5173', 'http://localhost:4173'], // URLs do frontend em desenvolvimento
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
