@@ -9,4 +9,4 @@ COPY . .
 
 EXPOSE 3001
 
-CMD ["node", "src/api/index.cjs"] 
+CMD ["node", "src/api/dev-server.cjs"] 
