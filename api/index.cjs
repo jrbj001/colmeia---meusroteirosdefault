@@ -92,3 +92,7 @@ if (isLocal) {
 } else {
   module.exports = serverless(app);
 } 
+
+app.get('/api/teste', (req, res) => {
+  res.json({ ok: true });
+});
