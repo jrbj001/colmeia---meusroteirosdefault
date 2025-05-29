@@ -5,7 +5,18 @@ const sql = require('mssql');
 const cors = require('cors');
 
 const app = express();
-app.use(cors());
+
+// Configuração do CORS mais específica
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://colmeia-meusroteirosdefault.vercel.app', 'https://colmeia-meusroteirosdefault-5yqk6umhq-jrbj001-5242s-projects.vercel.app'] // URLs do frontend em produção
+    : 'http://localhost:5173', // URL do frontend em desenvolvimento
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+};
+
+app.use(cors(corsOptions));
 
 const config = {
   user: process.env.DB_USER,

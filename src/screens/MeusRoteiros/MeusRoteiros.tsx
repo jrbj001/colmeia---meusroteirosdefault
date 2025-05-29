@@ -7,7 +7,7 @@ import { StyleOutlined7 } from "../../icons/StyleOutlined7";
 import { Difference4 } from "../../icons/Difference4";
 import { Delete4 } from "../../icons/Delete4";
 import { Pagination } from "./sections/Pagination";
-import axios from "axios";
+import api from "../../config/axios";
 import { LoadingColmeia } from "./components/LoadingColmeia";
 
 // Definir a interface dos dados da view
@@ -39,7 +39,7 @@ export const MeusRoteiros: React.FC = () => {
   const carregarDados = async (pagina: number) => {
     try {
       setLoading(true);
-      const response = await axios.get(`http://localhost:3001/api/roteiros?page=${pagina}`);
+      const response = await api.get(`/api/roteiros?page=${pagina}`);
       setDados(response.data.data);
       setPaginacao(response.data.pagination);
     } catch (err) {
