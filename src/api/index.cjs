@@ -14,9 +14,24 @@ const config = {
   database: process.env.DB_DATABASE,
   options: {
     encrypt: true,
-    trustServerCertificate: false
+    trustServerCertificate: true,
+    enableArithAbort: true,
+    connectionTimeout: 30000
   }
 };
+
+let pool;
+
+async function getPool() {
+  if (pool) return pool;
+  try {
+    pool = await sql.connect(config);
+    return pool;
+  } catch (err) {
+    console.error('Erro ao conectar ao banco:', err);
+    throw err;
+  }
+}
 
 app.get('/api/roteiros', async (req, res) => {
   try {
@@ -24,14 +39,14 @@ app.get('/api/roteiros', async (req, res) => {
     const pageSize = 50;
     const offset = (page - 1) * pageSize;
 
-    await sql.connect(config);
+    const pool = await getPool();
     
     // Primeiro, vamos contar o total de registros
-    const countResult = await sql.query('SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaDescResumo_dm_vw');
+    const countResult = await pool.request().query('SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaDescResumo_dm_vw');
     const total = countResult.recordset[0].total;
     
     // Agora, vamos buscar os registros paginados
-    const result = await sql.query(`
+    const result = await pool.request().query(`
       SELECT * FROM serv_product_be180.planoMidiaDescResumo_dm_vw
       ORDER BY date_dh DESC
       OFFSET ${offset} ROWS
@@ -48,7 +63,11 @@ app.get('/api/roteiros', async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro na API:', err);
+    res.status(500).json({ 
+      error: 'Erro interno do servidor',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 });
 

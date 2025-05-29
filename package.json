@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:api": "cp -r src/api api",
     "start:api": "node src/api/index.cjs",
     "dev:all": "concurrently \"npm run dev\" \"npm run start:api\"",
-    "vercel-build": "npm run build",
+    "vercel-build": "npm run build && npm run build:api",
     "start": "vite preview"
   },
   "dependencies": {
