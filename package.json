@@ -10,7 +10,8 @@
     "start:api": "node src/api/index.cjs",
     "dev:all": "concurrently \"npm run dev\" \"npm run start:api\"",
     "vercel-build": "npm run build",
-    "start": "vite preview"
+    "start": "vite preview",
+    "start:api:dev": "node src/api/dev-server.cjs"
   },
   "dependencies": {
     "@types/mssql": "^9.1.7",

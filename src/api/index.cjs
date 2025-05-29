@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const serverless = require('serverless-http');
 const sql = require('mssql');
 const cors = require('cors');
 
@@ -51,7 +52,5 @@ app.get('/api/roteiros', async (req, res) => {
   }
 });
 
-const PORT = process.env.API_PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`API rodando na porta ${PORT}`);
-}); 
+module.exports = app;
+module.exports.handler = serverless(app); 
