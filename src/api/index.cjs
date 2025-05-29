@@ -52,5 +52,13 @@ app.get('/api/roteiros', async (req, res) => {
   }
 });
 
-module.exports = app;
-module.exports.handler = serverless(app); 
+const isLocal = !process.env.VERCEL;
+
+if (isLocal) {
+  const PORT = process.env.API_PORT || 3001;
+  app.listen(PORT, () => {
+    console.log(`API rodando na porta ${PORT}`);
+  });
+} else {
+  module.exports = serverless(app);
+} 
