@@ -22,7 +22,8 @@
     "mssql": "^10.0.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.8.1"
+    "react-router-dom": "^6.8.1",
+    "serverless-http": "^3.2.0"
   },
   "devDependencies": {
     "@animaapp/vite-plugin-screen-graph": "^0.1.5",
