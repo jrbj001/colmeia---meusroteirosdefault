@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:api": "cp -r src/api api",
+    "build:api": "mkdir -p api && cp src/api/index.cjs api/index.cjs",
     "start:api": "node src/api/index.cjs",
     "dev:all": "concurrently \"npm run dev\" \"npm run start:api\"",
     "vercel-build": "npm run build && npm run build:api",
