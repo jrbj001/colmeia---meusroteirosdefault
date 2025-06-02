@@ -94,5 +94,9 @@ if (isLocal) {
 } 
 
 app.get('/api/teste', (req, res) => {
-  res.json({ ok: true });
+  res.json({ message: 'hello world' });
+});
+
+app.get('/api/hello', (req, res) => {
+  res.json({ message: 'hello from Express serverless!' });
 });
