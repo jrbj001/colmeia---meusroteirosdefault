@@ -82,20 +82,17 @@ app.get('/api/roteiros', async (req, res) => {
   }
 });
 
-const isLocal = !process.env.VERCEL;
+const isLocal = !process.env.VERCEL && !process.env.VERCEL_ENV;
 
 if (isLocal) {
   const PORT = process.env.API_PORT || 3001;
   app.listen(PORT, () => {
     console.log(`API rodando na porta ${PORT}`);
   });
-} else {
-  // Export correto para Vercel
-  module.exports = serverless(app);
 }
 
-// Garantir que o handler seja exportado corretamente para Vercel
-module.exports.default = serverless(app);
+// Export para Vercel (tanto CLI quanto online)
+module.exports = serverless(app);
 
 app.get('/api/teste', (req, res) => {
   res.json({ message: 'hello world' });
