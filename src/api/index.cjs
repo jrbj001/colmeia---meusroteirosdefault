@@ -95,6 +95,10 @@ app.get('/api/roteiros', async (req, res) => {
   }
 });
 
+app.get('/api/teste', (req, res) => {
+  res.json({ message: 'hello world' });
+});
+
 const isLocal = !process.env.VERCEL;
 
 if (isLocal) {
