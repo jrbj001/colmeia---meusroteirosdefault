@@ -90,8 +90,12 @@ if (isLocal) {
     console.log(`API rodando na porta ${PORT}`);
   });
 } else {
+  // Export correto para Vercel
   module.exports = serverless(app);
-} 
+}
+
+// Garantir que o handler seja exportado corretamente para Vercel
+module.exports.default = serverless(app);
 
 app.get('/api/teste', (req, res) => {
   res.json({ message: 'hello world' });
