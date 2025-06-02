@@ -5,7 +5,7 @@
   "source": "./index.html",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && npm run build:api",
     "build:api": "rm -rf api && mkdir -p api && cp src/api/index.cjs api/index.cjs",
     "start:api": "node src/api/index.cjs",
     "dev:all": "concurrently \"npm run dev\" \"npm run start:api\"",

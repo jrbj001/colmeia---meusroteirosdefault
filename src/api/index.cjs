@@ -6,11 +6,24 @@ const cors = require('cors');
 
 const app = express();
 
-// Configuração do CORS mais específica
+// Configuração do CORS aprimorada para produção, preview e desenvolvimento
+const allowedOrigins = [
+  'https://colmeia-meusroteirosdefault.vercel.app', // produção
+  'http://localhost:5173',
+  'http://localhost:4173'
+];
+
+// Permite todos os previews da Vercel
+const vercelPreviewRegex = /^https:\/\/colmeia-meusroteirosdefault-[a-z0-9-]+\.vercel\.app$/;
+
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://colmeia-meusroteirosdefault.vercel.app', 'https://colmeia-meusroteirosdefault-5yqk6umhq-jrbj001-5242s-projects.vercel.app'] // URLs do frontend em produção
-    : ['http://localhost:5173', 'http://localhost:4173'], // URLs do frontend em desenvolvimento
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // permite requests sem origin (ex: server-to-server)
+    if (allowedOrigins.includes(origin) || vercelPreviewRegex.test(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
