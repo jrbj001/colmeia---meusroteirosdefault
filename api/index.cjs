@@ -6,44 +6,42 @@ const cors = require('cors');
 
 const app = express();
 
-// Configuração do CORS mais específica
+// Configuração do CORS
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://colmeia-meusroteirosdefault.vercel.app', 'https://colmeia-meusroteirosdefault-5yqk6umhq-jrbj001-5242s-projects.vercel.app', 'https://*.vercel.app'] // URLs do frontend em produção
-    : ['http://localhost:5173', 'http://localhost:4173'], // URLs do frontend em desenvolvimento
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+    ? ['https://colmeia-meusroteirosdefault.vercel.app'] 
+    : ['http://localhost:5173'],
+  methods: ['GET'],
+  allowedHeaders: ['Content-Type'],
   credentials: true
 };
 
 app.use(cors(corsOptions));
 
-const config = {
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
+// Configuração do banco de dados
+const dbConfig = {
   server: process.env.DB_SERVER,
   database: process.env.DB_DATABASE,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  port: 1433,
   options: {
     encrypt: true,
     trustServerCertificate: true,
     enableArithAbort: true,
-    connectionTimeout: 30000
+    connectTimeout: 30000
   }
 };
 
 let pool;
 
 async function getPool() {
-  if (pool) return pool;
-  try {
-    pool = await sql.connect(config);
-    return pool;
-  } catch (err) {
-    console.error('Erro ao conectar ao banco:', err);
-    throw err;
-  }
+  if (pool && pool.connected) return pool;
+  pool = await sql.connect(dbConfig);
+  return pool;
 }
 
+// Endpoint principal de roteiros
 app.get('/api/roteiros', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -52,11 +50,9 @@ app.get('/api/roteiros', async (req, res) => {
 
     const pool = await getPool();
     
-    // Primeiro, vamos contar o total de registros
     const countResult = await pool.request().query('SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaDescResumo_dm_vw');
     const total = countResult.recordset[0].total;
     
-    // Agora, vamos buscar os registros paginados
     const result = await pool.request().query(`
       SELECT * FROM serv_product_be180.planoMidiaDescResumo_dm_vw
       ORDER BY date_dh DESC
@@ -82,8 +78,8 @@ app.get('/api/roteiros', async (req, res) => {
   }
 });
 
+// Inicialização local
 const isLocal = !process.env.VERCEL && !process.env.VERCEL_ENV;
-
 if (isLocal) {
   const PORT = process.env.API_PORT || 3001;
   app.listen(PORT, () => {
@@ -91,13 +87,5 @@ if (isLocal) {
   });
 }
 
-// Export para Vercel (tanto CLI quanto online)
+// Export para Vercel
 module.exports = serverless(app);
-
-app.get('/api/teste', (req, res) => {
-  res.json({ message: 'hello world' });
-});
-
-app.get('/api/hello', (req, res) => {
-  res.json({ message: 'hello from Express serverless!' });
-});
