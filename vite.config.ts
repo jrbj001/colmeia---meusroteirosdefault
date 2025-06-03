@@ -11,5 +11,8 @@ export default defineConfig({
       plugins: [tailwind()],
     },
   },
-  assetsInclude: ["**/*.html"]
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets'
+  }
 });
