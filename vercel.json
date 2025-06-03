@@ -3,7 +3,11 @@
   "builds": [
     {
       "src": "api/index.cjs",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "memory": 1024,
+        "maxDuration": 10
+      }
     },
     {
       "src": "package.json",
@@ -32,6 +36,6 @@
     }
   ],
   "env": {
-    "NODE_ENV": "development"
+    "NODE_ENV": "production"
   }
 } 
