@@ -8,6 +8,20 @@
         "distDir": "dist",
         "buildCommand": "npm run build"
       }
+    },
+    {
+      "src": "api/index.cjs",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "api/index.cjs"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/dist/$1"
     }
   ]
 } 
