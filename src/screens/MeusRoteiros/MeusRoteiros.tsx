@@ -39,7 +39,7 @@ export const MeusRoteiros: React.FC = () => {
   const carregarDados = async (pagina: number) => {
     try {
       setLoading(true);
-      const response = await api.get(`/api/roteiros?page=${pagina}`);
+      const response = await api.get(`/roteiros?page=${pagina}`);
       setDados(response.data.data);
       setPaginacao(response.data.pagination);
     } catch (err) {
