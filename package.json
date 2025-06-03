@@ -9,7 +9,9 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run start:api\"",
     "start": "vite preview",
     "preview": "vite preview",
-    "vercel-build": "vite build"
+    "vercel-build": "vite build",
+    "vercel:dev": "vercel dev",
+    "vercel:dev:all": "concurrently \"vercel dev\" \"npm run start:api\""
   },
   "dependencies": {
     "@types/mssql": "^9.1.7",

@@ -21,7 +21,7 @@ npm run dev
 After a few seconds, your project should be accessible at the address
 [http://localhost:5173/](http://localhost:5173/)
 
-## Configuração do Ambiente (.env) / Environment Setup (.env)
+## Configuração do Ambiente (.env e .env.local) / Environment Setup (.env and .env.local)
 
 Antes de rodar o projeto localmente, crie um arquivo chamado `.env` na raiz do projeto com o seguinte conteúdo (preencha com suas credenciais):
 
@@ -49,6 +49,25 @@ DB_DATABASE=db-azr-sql-clients-0001
 > - Você pode precisar de VPN ou liberar seu IP no firewall do Azure SQL para acessar o banco.
 > - You may need VPN or to whitelist your IP in Azure SQL firewall to access the database.
 
+### Configuração do Frontend (.env.local)
+
+Crie um arquivo `.env.local` na raiz do projeto para definir a URL da API usada pelo frontend:
+
+```
+VITE_API_URL=http://localhost:3001
+```
+
+No deploy de produção (Vercel), defina a variável de ambiente `VITE_API_URL` no painel da Vercel:
+
+```
+VITE_API_URL=https://seu-projeto.vercel.app/api
+```
+
+No código, a URL da API será acessada via:
+```js
+import.meta.env.VITE_API_URL
+```
+
 ## Rodando o projeto localmente / Running the project locally
 
 Para rodar o frontend e a API juntos:
@@ -60,6 +79,16 @@ npm run dev:all
 
 - O frontend estará em / The frontend will be at: [http://localhost:5173/](http://localhost:5173/)
 - A API estará em / The API will be at: [http://localhost:3001/api/roteiros](http://localhost:3001/api/roteiros)
+
+Se quiser rodar apenas o frontend:
+```
+npm run dev
+```
+
+Se quiser rodar apenas a API:
+```
+npm run start:api
+```
 
 If you are satisfied with the result, you can finally build the project for release with:
 
@@ -73,7 +102,13 @@ npm run build
 
 1. Suba seu código para o repositório remoto (GitHub, GitLab, etc).
 2. Importe o projeto na Vercel.
-3. Configure as variáveis de ambiente na dashboard da Vercel (DB_USER, DB_PASSWORD, DB_SERVER, DB_DATABASE, etc).
+3. Configure as variáveis de ambiente na dashboard da Vercel:
+   - DB_USER
+   - DB_PASSWORD
+   - DB_SERVER
+   - DB_DATABASE
+   - NODE_ENV=production
+   - VITE_API_URL=https://seu-projeto.vercel.app/api
 4. Use o seguinte comando de build na Vercel:
 
 ```

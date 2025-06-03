@@ -10,7 +10,7 @@ const app = express();
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
     ? ['https://colmeia-meusroteirosdefault.vercel.app'] 
-    : ['http://localhost:5173'],
+    : ['http://localhost:3000'],
   methods: ['GET'],
   allowedHeaders: ['Content-Type'],
   credentials: true
@@ -40,6 +40,11 @@ async function getPool() {
   pool = await sql.connect(dbConfig);
   return pool;
 }
+
+// Teste de API
+app.get('/api/test', (req, res) => {
+  res.json({ ok: true, msg: 'API Vercel funcionando!' });
+});
 
 // Endpoint principal de roteiros
 app.get('/api/roteiros', async (req, res) => {
