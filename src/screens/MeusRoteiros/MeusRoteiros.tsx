@@ -12,9 +12,21 @@ import { LoadingColmeia } from "./components/LoadingColmeia";
 
 // Definir a interface dos dados da view
 interface Roteiro {
+  pk: number;
+  pkOriginal: number;
   planoMidiaDesc_st: string;
-  date_dh: string;
+  usuarioId_st: string;
+  usuarioName_st: string;
+  gender_st: string;
   class_st: string;
+  age_st: string;
+  ibgeCode_vl: number | null;
+  date_dh: string;
+  date_dt: string;
+  active_bl: number;
+  delete_bl: number;
+  planoMidiaType_st: string;
+  cidadeUpper_st: string;
   semanas_vl: number;
 }
 
@@ -35,15 +47,34 @@ export const MeusRoteiros: React.FC = () => {
     pageSize: 50
   });
   const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const formatarData = (dataString: string) => {
+    const data = new Date(dataString);
+    return data.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
 
   const carregarDados = async (pagina: number) => {
     try {
       setLoading(true);
+      setErro(null);
       const response = await api.get(`/roteiros?page=${pagina}`);
-      setDados(response.data.data);
-      setPaginacao(response.data.pagination);
-    } catch (err) {
+      console.log('Resposta da API:', response.data);
+      if (response.data && response.data.data) {
+        setDados(response.data.data);
+        setPaginacao(response.data.pagination);
+      } else {
+        setErro('Formato de resposta inválido da API');
+      }
+    } catch (err: any) {
       console.error('Erro ao carregar dados:', err);
+      setErro(err.response?.data?.message || 'Erro ao carregar os dados. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -116,6 +147,10 @@ export const MeusRoteiros: React.FC = () => {
                         <LoadingColmeia />
                       </td>
                     </tr>
+                  ) : erro ? (
+                    <tr>
+                      <td colSpan={5} className="text-center py-4 text-red-500">{erro}</td>
+                    </tr>
                   ) : dados.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="text-center py-4">Nenhum roteiro encontrado</td>
@@ -127,9 +162,9 @@ export const MeusRoteiros: React.FC = () => {
                         className={`${idx % 2 === 0 ? "bg-[#f7f7f7]" : "bg-white"} hover:bg-[#ececec] transition-colors duration-200`}
                       >
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.planoMidiaDesc_st}</td>
-                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.date_dh}</td>
-                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.class_st}</td>
-                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.semanas_vl}</td>
+                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{formatarData(item.date_dh)}</td>
+                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.planoMidiaType_st}</td>
+                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.semanas_vl} {item.semanas_vl === 1 ? 'semana' : 'semanas'}</td>
                         <td className="text-[#222] text-xs px-6 py-4 whitespace-nowrap text-right flex items-center gap-4 justify-end font-sans">
                           <StyleOutlined7 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
                           <Difference4 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
