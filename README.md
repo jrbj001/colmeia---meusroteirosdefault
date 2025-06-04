@@ -1,164 +1,126 @@
+# Colmeia Meus Roteiros - Guia Completo
 
+## Pré-requisitos
 
-## Getting started
+- [NodeJS](https://nodejs.org/en/) instalado na máquina.
+- Conta na [Vercel](https://vercel.com/) para deploy.
 
-> **Prerequisites:**
-> The following steps require [NodeJS](https://nodejs.org/en/) to be installed on your system, so please
-> install it beforehand if you haven't already.
+---
 
-To get started with your project, you'll first need to install the dependencies with:
+## 1. Instalação
 
-```
+```bash
 npm install
 ```
 
-Then, you'll be able to run a development version of the project with:
+---
 
-```
-npm run dev
-```
+## 2. Configuração de Ambiente
 
-After a few seconds, your project should be accessible at the address
-[http://localhost:5173/](http://localhost:5173/)
+### Backend (.env)
 
-## Configuração do Ambiente (.env e .env.local) / Environment Setup (.env and .env.local)
-
-Antes de rodar o projeto localmente, crie um arquivo chamado `.env` na raiz do projeto com o seguinte conteúdo (preencha com suas credenciais):
-
-Before running the project locally, create a file named `.env` in the project root with the following content (fill in with your credentials):
+Crie um arquivo `.env` na raiz com:
 
 ```env
-DB_USER=seu_usuario / your_user
-DB_PASSWORD=sua_senha / your_password
-DB_SERVER=seu_servidor / your_server
-DB_DATABASE=seu_banco / your_database
-
-API_PORT=3001
+DB_USER=seu_usuario
+DB_PASSWORD=sua_senha
+DB_SERVER=seu_servidor
+DB_DATABASE=seu_banco
 NODE_ENV=development
 ```
 
-Exemplo para Azure SQL / Example for Azure SQL:
-```env
-DB_USER=ReaderUser_be180
-DB_PASSWORD=********
-DB_SERVER=mct-serv-prd-0001.database.windows.net
-DB_DATABASE=db-azr-sql-clients-0001
-```
+### Frontend (.env.local)
 
-> **Atenção / Attention:**
-> - Você pode precisar de VPN ou liberar seu IP no firewall do Azure SQL para acessar o banco.
-> - You may need VPN or to whitelist your IP in Azure SQL firewall to access the database.
-
-### Configuração do Frontend (.env.local)
-
-Crie um arquivo `.env.local` na raiz do projeto para definir a URL da API usada pelo frontend:
+Para desenvolvimento local, crie `.env.local` na raiz com:
 
 ```
-VITE_API_URL=http://localhost:3001
+VITE_API_URL=/api
 ```
 
-No deploy de produção (Vercel), defina a variável de ambiente `VITE_API_URL` no painel da Vercel:
+> **Em produção (Vercel), defina `VITE_API_URL=https://seu-projeto.vercel.app/api` nas variáveis de ambiente do painel da Vercel.**
 
-```
-VITE_API_URL=https://seu-projeto.vercel.app/api
-```
+---
 
-No código, a URL da API será acessada via:
-```js
-import.meta.env.VITE_API_URL
-```
+## 3. Modos de Execução
 
-## Rodando o projeto localmente / Running the project locally
+### **A) Desenvolvimento Local (Frontend + Backend separados, hot reload)**
 
-Para rodar o frontend e a API juntos:
-To run both frontend and API together:
+1. **Terminal 1:**  
+   ```bash
+   vercel dev
+   ```
+   (roda o backend serverless e simula o ambiente Vercel em http://localhost:3000)
 
-```bash
-npm run dev:all
-```
+2. **Terminal 2:**  
+   ```bash
+   npm run dev
+   ```
+   (roda o frontend Vite em http://localhost:5173)
 
-- O frontend estará em / The frontend will be at: [http://localhost:5173/](http://localhost:5173/)
-- A API estará em / The API will be at: [http://localhost:3001/api/roteiros](http://localhost:3001/api/roteiros)
+- O proxy do Vite já está configurado para redirecionar `/api` para o backend.
 
-Se quiser rodar apenas o frontend:
-```
-npm run dev
-```
+---
 
-Se quiser rodar apenas a API:
-```
-npm run start:api
-```
+### **B) Testar o Build de Produção Localmente**
 
-If you are satisfied with the result, you can finally build the project for release with:
+1. Gere o build:
+   ```bash
+   npm run build
+   ```
+2. Rode o preview:
+   ```bash
+   npm run preview
+   ```
+3. Acesse: [http://localhost:4173](http://localhost:4173)
 
-```
-npm run build
-```
+> **Obs:** O backend serverless não é simulado nesse modo, apenas o frontend estático.
 
-# Deploy na Vercel
+---
 
-## Passos para Deploy
-
-1. Suba seu código para o repositório remoto (GitHub, GitLab, etc).
-2. Importe o projeto na Vercel.
-3. Configure as variáveis de ambiente na dashboard da Vercel:
-   - DB_USER
-   - DB_PASSWORD
-   - DB_SERVER
-   - DB_DATABASE
-   - NODE_ENV=production
-   - VITE_API_URL=https://seu-projeto.vercel.app/api
-4. Use o seguinte comando de build na Vercel:
-
-```
-npm run build
-```
-
-A Vercel irá rodar o build do front-end e copiar a API para a pasta correta.
-
-5. O diretório de saída do front-end é `dist`.
-6. A API ficará disponível em `/api/roteiros`.
-
-Se precisar de mais detalhes, consulte o assistente ou a documentação oficial da Vercel.
-
-# Modos de desenvolvimento e testes locais
-
-## 1. Desenvolvimento rápido (hot reload)
-Use para desenvolver o frontend e backend com recarregamento automático:
-
-```bash
-npm run dev:all
-```
-- Frontend: http://localhost:5173
-- Backend: http://localhost:3001
-- Ideal para desenvolvimento do dia a dia.
-
-## 2. Simular build de produção local
-Use para testar o build real do frontend e a API local:
-
-```bash
-npm run build
-npm run preview:all
-```
-- Frontend: http://localhost:4173
-- Backend: http://localhost:3001
-- Ideal para testar o build final antes do deploy.
-
-## 3. Simular ambiente Vercel (serverless)
-Use para simular exatamente o ambiente da Vercel localmente:
+### **C) Simular Ambiente Vercel Localmente**
 
 ```bash
 vercel dev
 ```
-- Tudo disponível em http://localhost:3000
-- Frontend e backend (API) juntos, com rotas serverless.
-- Ideal para testar antes do deploy na Vercel.
-
-**Dica:**
-- No modo `vercel dev`, use `VITE_API_URL=/api` no `.env.local`.
-- Nos outros modos, use `VITE_API_URL=http://localhost:3001/api`.
+- Tudo disponível em [http://localhost:3000](http://localhost:3000)
+- Frontend e backend (API) juntos, igual produção.
 
 ---
 
-Se seguir esse fluxo, você garante que o que funciona localmente funcionará igual na Vercel!
+## 4. Deploy na Vercel
+
+1. Suba o código para o GitHub/GitLab.
+2. Importe o projeto na Vercel.
+3. Configure as variáveis de ambiente:
+   - `DB_USER`
+   - `DB_PASSWORD`
+   - `DB_SERVER`
+   - `DB_DATABASE`
+   - `NODE_ENV=production`
+   - `VITE_API_URL=https://seu-projeto.vercel.app/api`
+4. Build Command: `npm run build`
+5. Output Directory: `dist`
+6. Deploy!
+
+---
+
+## 5. Dicas e Restrições
+
+- **Nunca coloque segredos no frontend** (qualquer variável começando com `VITE_` vai para o browser).
+- Sempre use `/api` como base para chamadas no frontend.
+- O backend só funciona como serverless na Vercel ou com `vercel dev` localmente.
+- Para rodar tudo igual produção, sempre use `vercel dev`.
+
+---
+
+## 6. Testando a API
+
+- Teste endpoints com:
+  ```bash
+  curl http://localhost:3000/api/roteiros
+  ```
+- O frontend deve consumir a API via `/api/roteiros`.
+
+---
+
+Se seguir este guia, seu projeto funcionará igual localmente e em produção na Vercel!
