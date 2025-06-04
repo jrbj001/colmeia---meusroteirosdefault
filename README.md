@@ -121,3 +121,44 @@ A Vercel irá rodar o build do front-end e copiar a API para a pasta correta.
 6. A API ficará disponível em `/api/roteiros`.
 
 Se precisar de mais detalhes, consulte o assistente ou a documentação oficial da Vercel.
+
+# Modos de desenvolvimento e testes locais
+
+## 1. Desenvolvimento rápido (hot reload)
+Use para desenvolver o frontend e backend com recarregamento automático:
+
+```bash
+npm run dev:all
+```
+- Frontend: http://localhost:5173
+- Backend: http://localhost:3001
+- Ideal para desenvolvimento do dia a dia.
+
+## 2. Simular build de produção local
+Use para testar o build real do frontend e a API local:
+
+```bash
+npm run build
+npm run preview:all
+```
+- Frontend: http://localhost:4173
+- Backend: http://localhost:3001
+- Ideal para testar o build final antes do deploy.
+
+## 3. Simular ambiente Vercel (serverless)
+Use para simular exatamente o ambiente da Vercel localmente:
+
+```bash
+vercel dev
+```
+- Tudo disponível em http://localhost:3000
+- Frontend e backend (API) juntos, com rotas serverless.
+- Ideal para testar antes do deploy na Vercel.
+
+**Dica:**
+- No modo `vercel dev`, use `VITE_API_URL=/api` no `.env.local`.
+- Nos outros modos, use `VITE_API_URL=http://localhost:3001/api`.
+
+---
+
+Se seguir esse fluxo, você garante que o que funciona localmente funcionará igual na Vercel!

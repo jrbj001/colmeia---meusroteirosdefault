@@ -16,8 +16,11 @@ export default defineConfig({
     assetsDir: 'assets'
   },
   server: {
-    port: 3000,
+    port: 5173,
     strictPort: true,
-    host: true
+    host: true,
+    proxy: {
+      '/api': 'http://localhost:3000'
+    }
   }
 });

@@ -1,6 +1,5 @@
 require('dotenv').config();
 const express = require('express');
-const serverless = require('serverless-http');
 const sql = require('mssql');
 const cors = require('cors');
 
@@ -10,7 +9,7 @@ const app = express();
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
     ? ['https://colmeia-meusroteirosdefault.vercel.app'] 
-    : ['http://localhost:3000'],
+    : ['http://localhost:3000', 'http://localhost:4173'],
   methods: ['GET'],
   allowedHeaders: ['Content-Type'],
   credentials: true
@@ -83,14 +82,5 @@ app.get('/api/roteiros', async (req, res) => {
   }
 });
 
-// Inicialização local
-const isLocal = !process.env.VERCEL && !process.env.VERCEL_ENV;
-if (isLocal) {
-  const PORT = process.env.API_PORT || 3001;
-  app.listen(PORT, () => {
-    console.log(`API rodando na porta ${PORT}`);
-  });
-}
-
-// Export para Vercel
-module.exports = serverless(app);
+// Exportação para Vercel
+module.exports = app;
