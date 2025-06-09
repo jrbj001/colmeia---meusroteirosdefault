@@ -54,11 +54,11 @@ app.get('/api/roteiros', async (req, res) => {
 
     const pool = await getPool();
     
-    const countResult = await pool.request().query('SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaDescResumo_dm_vw');
+    const countResult = await pool.request().query('SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaGrupo_dm_vw');
     const total = countResult.recordset[0].total;
     
     const result = await pool.request().query(`
-      SELECT * FROM serv_product_be180.planoMidiaDescResumo_dm_vw
+      SELECT * FROM serv_product_be180.planoMidiaGrupo_dm_vw
       ORDER BY date_dh DESC
       OFFSET ${offset} ROWS
       FETCH NEXT ${pageSize} ROWS ONLY
