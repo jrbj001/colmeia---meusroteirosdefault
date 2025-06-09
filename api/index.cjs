@@ -8,15 +8,19 @@ const app = express();
 // Configuração do CORS
 const corsOptions = {
   origin: (origin, callback) => {
+    // Permite requisições sem origin (ex: do próprio backend, healthchecks, etc)
+    if (!origin) return callback(null, true);
+
+    // Permite o domínio principal e todos os subdomínios .vercel.app
     if (
-      process.env.NODE_ENV !== 'production' ||
       origin === 'https://colmeia-meusroteirosdefault.vercel.app' ||
-      (origin && origin.endsWith('.vercel.app'))
+      origin.endsWith('.vercel.app')
     ) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+      return callback(null, true);
     }
+
+    // Bloqueia qualquer outro origin
+    return callback(new Error('Not allowed by CORS'));
   },
   methods: ['GET'],
   allowedHeaders: ['Content-Type'],
