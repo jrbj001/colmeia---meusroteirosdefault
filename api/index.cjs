@@ -63,38 +63,14 @@ app.get('/api/roteiros', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const pageSize = 50;
     const offset = (page - 1) * pageSize;
-    const search = req.query.search ? String(req.query.search).toLowerCase() : null;
 
     const pool = await getPool();
-
-    let whereClause = '';
-    let params = {};
-    if (search) {
-      whereClause = 'WHERE planoMidiaDesc_st_concat LIKE @search';
-      params.search = `%${search}%`;
-    }
-
-    console.log('Search param:', search);
-    console.log('WhereClause:', whereClause);
-
-    // Count query
-    const countRequest = pool.request();
-    if (params.search) {
-      console.log('Passando parâmetro search para SQL (count):', params.search);
-      countRequest.input('search', sql.VarChar, params.search);
-    }
-    const countResult = await countRequest.query(`SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaGrupo_dm_vw ${whereClause}`);
+    
+    const countResult = await pool.request().query('SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaGrupo_dm_vw');
     const total = countResult.recordset[0].total;
-
-    // Data query
-    const dataRequest = pool.request();
-    if (params.search) {
-      console.log('Passando parâmetro search para SQL (data):', params.search);
-      dataRequest.input('search', sql.VarChar, params.search);
-    }
-    const result = await dataRequest.query(`
+    
+    const result = await pool.request().query(`
       SELECT * FROM serv_product_be180.planoMidiaGrupo_dm_vw
-      ${whereClause}
       ORDER BY date_dh DESC
       OFFSET ${offset} ROWS
       FETCH NEXT ${pageSize} ROWS ONLY
