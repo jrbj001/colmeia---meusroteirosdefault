@@ -68,14 +68,22 @@ app.get('/api/roteiros', async (req, res) => {
     const pool = await getPool();
 
     let whereClause = '';
+    let params = {};
     if (search) {
-      whereClause = `WHERE LOWER(planoMidiaDesc_st_concat) LIKE '%${search.replace(/'/g, "''")}%'`;
+      whereClause = 'WHERE LOWER(planoMidiaDesc_st_concat) LIKE @search';
+      params.search = `%${search}%`;
     }
 
-    const countResult = await pool.request().query(`SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaGrupo_dm_vw ${whereClause}`);
+    // Count query
+    const countRequest = pool.request();
+    if (params.search) countRequest.input('search', sql.NVarChar, params.search);
+    const countResult = await countRequest.query(`SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaGrupo_dm_vw ${whereClause}`);
     const total = countResult.recordset[0].total;
 
-    const result = await pool.request().query(`
+    // Data query
+    const dataRequest = pool.request();
+    if (params.search) dataRequest.input('search', sql.NVarChar, params.search);
+    const result = await dataRequest.query(`
       SELECT * FROM serv_product_be180.planoMidiaGrupo_dm_vw
       ${whereClause}
       ORDER BY date_dh DESC
