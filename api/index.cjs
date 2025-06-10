@@ -70,7 +70,7 @@ app.get('/api/roteiros', async (req, res) => {
     let whereClause = '';
     let params = {};
     if (search) {
-      whereClause = 'WHERE LOWER(planoMidiaDesc_st_concat) LIKE @search';
+      whereClause = 'WHERE planoMidiaDesc_st_concat COLLATE Latin1_General_CI_AI LIKE @search';
       params.search = `%${search}%`;
     }
 
