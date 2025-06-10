@@ -74,15 +74,24 @@ app.get('/api/roteiros', async (req, res) => {
       params.search = `%${search}%`;
     }
 
+    console.log('Search param:', search);
+    console.log('WhereClause:', whereClause);
+
     // Count query
     const countRequest = pool.request();
-    if (params.search) countRequest.input('search', sql.NVarChar, params.search);
+    if (params.search) {
+      console.log('Passando parâmetro search para SQL (count):', params.search);
+      countRequest.input('search', sql.NVarChar, params.search);
+    }
     const countResult = await countRequest.query(`SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaGrupo_dm_vw ${whereClause}`);
     const total = countResult.recordset[0].total;
 
     // Data query
     const dataRequest = pool.request();
-    if (params.search) dataRequest.input('search', sql.NVarChar, params.search);
+    if (params.search) {
+      console.log('Passando parâmetro search para SQL (data):', params.search);
+      dataRequest.input('search', sql.NVarChar, params.search);
+    }
     const result = await dataRequest.query(`
       SELECT * FROM serv_product_be180.planoMidiaGrupo_dm_vw
       ${whereClause}
