@@ -9,6 +9,8 @@ import { Delete4 } from "../../icons/Delete4";
 import { Pagination } from "./sections/Pagination";
 import api from "../../config/axios";
 import { LoadingColmeia } from "./components/LoadingColmeia";
+import { PinDrop } from "../../icons/PinDrop/PinDrop";
+import { SearchInput } from "../../components/SearchInput";
 
 // Definir a interface dos dados da view
 interface Roteiro {
@@ -45,6 +47,7 @@ export const MeusRoteiros: React.FC = () => {
   });
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [busca, setBusca] = useState("");
 
   const formatarData = (dataString: string) => {
     const data = new Date(dataString);
@@ -57,11 +60,12 @@ export const MeusRoteiros: React.FC = () => {
     });
   };
 
-  const carregarDados = async (pagina: number) => {
+  const carregarDados = async (pagina: number, termoBusca?: string) => {
     try {
       setLoading(true);
       setErro(null);
-      const response = await api.get(`/roteiros?page=${pagina}`);
+      const searchParam = termoBusca !== undefined ? termoBusca : busca;
+      const response = await api.get(`/roteiros?page=${pagina}${searchParam ? `&search=${encodeURIComponent(searchParam)}` : ''}`);
       console.log('Resposta da API:', response.data);
       if (response.data && response.data.data) {
         setDados(response.data.data);
@@ -81,9 +85,17 @@ export const MeusRoteiros: React.FC = () => {
     carregarDados(1);
   }, []);
 
+  // Atualizar busca
+  useEffect(() => {
+    carregarDados(1, busca);
+  }, [busca]);
+
   const handlePageChange = (novaPagina: number) => {
     carregarDados(novaPagina);
   };
+
+  // Não filtra mais localmente, usa só os dados recebidos da API
+  const dadosFiltrados = dados;
 
   return (
     <>
@@ -98,9 +110,14 @@ export const MeusRoteiros: React.FC = () => {
             className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`}
           />
           <div className="w-full overflow-x-auto pt-20 flex-1 overflow-auto">
-            <h1 className="text-lg font-bold text-[#222] tracking-wide mb-4 uppercase font-sans mt-12 pl-6">
-              Meus roteiros
-            </h1>
+            <div className="flex items-center justify-between mb-4 pl-6 pr-6">
+              <h1 className="text-lg font-bold text-[#222] tracking-wide uppercase font-sans mt-12">
+                Meus roteiros
+              </h1>
+              <div className="mt-12">
+                <SearchInput onSearch={setBusca} placeholder="Buscar por nome..." />
+              </div>
+            </div>
 
             <div className="w-full">
               <table className="w-full border-separate border-spacing-0 font-sans">
@@ -148,12 +165,12 @@ export const MeusRoteiros: React.FC = () => {
                     <tr>
                       <td colSpan={5} className="text-center py-4 text-red-500">{erro}</td>
                     </tr>
-                  ) : dados.length === 0 ? (
+                  ) : dadosFiltrados.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="text-center py-4">Nenhum roteiro encontrado</td>
                     </tr>
                   ) : (
-                    dados.map((item, idx) => (
+                    dadosFiltrados.map((item, idx) => (
                       <tr
                         key={idx}
                         className={`${idx % 2 === 0 ? "bg-[#f7f7f7]" : "bg-white"} hover:bg-[#ececec] transition-colors duration-200`}
@@ -163,7 +180,9 @@ export const MeusRoteiros: React.FC = () => {
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.planoMidiaType_st}</td>
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.semanasMax_vl} {item.semanasMax_vl === 1 ? 'semana' : 'semanas'}</td>
                         <td className="text-[#222] text-xs px-6 py-4 whitespace-nowrap text-right flex items-center gap-4 justify-end font-sans">
-                          <StyleOutlined7 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
+                          <PinDrop
+                            className="w-6 h-6 transition-transform duration-200 hover:scale-110 cursor-pointer text-[#3A3A3A] hover:text-[#FF9800]"
+                          />
                           <Difference4 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
                           <Delete4 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
                         </td>

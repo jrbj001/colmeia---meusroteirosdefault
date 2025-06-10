@@ -63,14 +63,21 @@ app.get('/api/roteiros', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const pageSize = 50;
     const offset = (page - 1) * pageSize;
+    const search = req.query.search ? String(req.query.search).toLowerCase() : null;
 
     const pool = await getPool();
-    
-    const countResult = await pool.request().query('SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaGrupo_dm_vw');
+
+    let whereClause = '';
+    if (search) {
+      whereClause = `WHERE LOWER(planoMidiaDesc_st_concat) LIKE '%${search.replace(/'/g, "''")}%'`;
+    }
+
+    const countResult = await pool.request().query(`SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaGrupo_dm_vw ${whereClause}`);
     const total = countResult.recordset[0].total;
-    
+
     const result = await pool.request().query(`
       SELECT * FROM serv_product_be180.planoMidiaGrupo_dm_vw
+      ${whereClause}
       ORDER BY date_dh DESC
       OFFSET ${offset} ROWS
       FETCH NEXT ${pageSize} ROWS ONLY
