@@ -94,5 +94,72 @@ app.get('/api/roteiros', async (req, res) => {
   }
 });
 
+// Endpoint para buscar cidades por grupo
+app.get('/api/cidades', async (req, res) => {
+  try {
+    const grupo = req.query.grupo;
+    if (!grupo) {
+      return res.status(400).json({ error: 'Parâmetro grupo é obrigatório' });
+    }
+    const pool = await getPool();
+    const result = await pool.request().query(`
+      SELECT DISTINCT cidadeUpper_st, planoMidiaGrupo_st
+      FROM serv_product_be180.planoMidiaGrupoPivot_dm_vw
+      WHERE planoMidiaGrupo_pk = ${grupo}
+      ORDER BY cidadeUpper_st
+    `);
+    const cidades = result.recordset.map(r => r.cidadeUpper_st);
+    const nomeGrupo = result.recordset.length > 0 ? result.recordset[0].planoMidiaGrupo_st : null;
+    res.json({ cidades, nomeGrupo });
+  } catch (err) {
+    console.error('Erro na API de cidades:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Endpoint para buscar semanas por planoMidiaDesc_pk
+app.get('/api/semanas', async (req, res) => {
+  try {
+    const desc_pk = req.query.desc_pk;
+    if (!desc_pk) {
+      return res.status(400).json({ error: 'Parâmetro desc_pk é obrigatório' });
+    }
+    const pool = await getPool();
+    const result = await pool.request().query(`
+      SELECT semanaInicial_vl, semanaFinal_vl
+      FROM serv_product_be180.planoMidia_dm_vw
+      WHERE planoMidiaDesc_vl = ${desc_pk}
+    `);
+    res.json({ semanas: result.recordset });
+  } catch (err) {
+    console.error('Erro na API de semanas:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Endpoint para buscar o mapeamento cidade -> planoMidiaDesc_pk
+app.get('/api/pivot-descpks', async (req, res) => {
+  try {
+    const grupo = req.query.grupo;
+    if (!grupo) {
+      return res.status(400).json({ error: 'Parâmetro grupo é obrigatório' });
+    }
+    const pool = await getPool();
+    const result = await pool.request().query(`
+      SELECT cidadeUpper_st, planoMidiaDesc_pk
+      FROM serv_product_be180.planoMidiaGrupoPivot_dm_vw
+      WHERE planoMidiaGrupo_pk = ${grupo}
+    `);
+    const descPks = {};
+    result.recordset.forEach(r => {
+      descPks[r.cidadeUpper_st] = r.planoMidiaDesc_pk;
+    });
+    res.json({ descPks });
+  } catch (err) {
+    console.error('Erro na API de pivot-descpks:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
 // Exportação para Vercel
 module.exports = app;

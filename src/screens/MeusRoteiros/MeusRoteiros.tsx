@@ -165,7 +165,7 @@ export const MeusRoteiros: React.FC = () => {
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.planoMidiaType_st}</td>
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.semanasMax_vl} {item.semanasMax_vl === 1 ? 'semana' : 'semanas'}</td>
                         <td className="text-[#222] text-xs px-6 py-4 whitespace-nowrap text-right flex items-center gap-4 justify-end font-sans">
-                          <Link to="/mapa">
+                          <Link to={`/mapa?grupo=${item.planoMidiaGrupo_pk}`}>
                             <PinDrop
                               className="w-6 h-6 transition-transform duration-200 hover:scale-110 cursor-pointer text-[#3A3A3A] hover:text-[#FF9800]"
                             />

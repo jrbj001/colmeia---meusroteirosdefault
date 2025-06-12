@@ -2,9 +2,46 @@ import React from "react";
 import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { Topbar } from "../../components/Topbar/Topbar";
 import { Pagination } from "../MeusRoteiros/sections/Pagination";
+import { useSearchParams } from "react-router-dom";
+import api from "../../config/axios";
 
 export const Mapa: React.FC = () => {
   const [menuReduzido, setMenuReduzido] = React.useState(false);
+  const [searchParams] = useSearchParams();
+  const grupo = searchParams.get("grupo");
+  const [cidades, setCidades] = React.useState<string[]>([]);
+  const [cidadeSelecionada, setCidadeSelecionada] = React.useState("");
+  const [nomeGrupo, setNomeGrupo] = React.useState("");
+  const [semanas, setSemanas] = React.useState<{ semanaInicial_vl: number, semanaFinal_vl: number }[]>([]);
+  const [semanaSelecionada, setSemanaSelecionada] = React.useState("");
+  const [descPks, setDescPks] = React.useState<{ [cidade: string]: number }>({});
+
+  React.useEffect(() => {
+    if (grupo) {
+      api.get(`/cidades?grupo=${grupo}`)
+        .then(res => {
+          setCidades(res.data.cidades);
+          if (res.data.nomeGrupo) setNomeGrupo(res.data.nomeGrupo);
+          // Buscar os planoMidiaDesc_pk para cada cidade
+          if (res.data.cidades && res.data.cidades.length) {
+            api.get(`/pivot-descpks?grupo=${grupo}`)
+              .then(r => setDescPks(r.data.descPks))
+              .catch(() => setDescPks({}));
+          }
+        })
+        .catch(() => setCidades([]));
+    }
+  }, [grupo]);
+
+  React.useEffect(() => {
+    if (cidadeSelecionada && descPks[cidadeSelecionada]) {
+      api.get(`/semanas?desc_pk=${descPks[cidadeSelecionada]}`)
+        .then(res => setSemanas(res.data.semanas))
+        .catch(() => setSemanas([]));
+    } else {
+      setSemanas([]);
+    }
+  }, [cidadeSelecionada, descPks]);
 
   return (
     <div className="min-h-screen bg-white flex font-sans">
@@ -29,7 +66,7 @@ export const Mapa: React.FC = () => {
                 <tbody>
                   <tr>
                     <td className="text-[#222] text-sm font-bold px-6 py-4 whitespace-nowrap font-sans border-b border-[#c1c1c1]">
-                      J2448_DM9_IFOOD_CARNAVAL_2025 <span className="ml-2">→</span>
+                      {nomeGrupo || <span className="italic text-[#b0b0b0]">Carregando...</span>} <span className="ml-2">→</span>
                     </td>
                   </tr>
                 </tbody>
@@ -37,14 +74,30 @@ export const Mapa: React.FC = () => {
               <p className="mb-6 text-[#222] text-base">Selecione a praça e a semana do roteiro para visualizar o mapa em html.</p>
               <div className="mb-4">
                 <label className="block text-[#222] mb-2 font-semibold">Praça</label>
-                <select className="w-full border border-[#c1c1c1] rounded px-4 py-2 text-[#b0b0b0] bg-[#f7f7f7] text-base" disabled>
-                  <option>Ex.: São Paulo</option>
+                <select
+                  className="w-full border border-[#c1c1c1] rounded px-4 py-2 text-[#b0b0b0] bg-[#f7f7f7] text-base"
+                  value={cidadeSelecionada}
+                  onChange={e => setCidadeSelecionada(e.target.value)}
+                  disabled={!cidades.length}
+                >
+                  <option value="">Ex.: São Paulo</option>
+                  {cidades.map((cidade) => (
+                    <option key={cidade} value={cidade}>{cidade}</option>
+                  ))}
                 </select>
               </div>
               <div className="mb-6">
                 <label className="block text-[#222] mb-2 font-semibold">Semana</label>
-                <select className="w-full border border-[#c1c1c1] rounded px-4 py-2 text-[#b0b0b0] bg-[#f7f7f7] text-base" disabled>
-                  <option>Ex.: São Paulo</option>
+                <select
+                  className="w-full border border-[#c1c1c1] rounded px-4 py-2 text-[#b0b0b0] bg-[#f7f7f7] text-base"
+                  value={semanaSelecionada}
+                  onChange={e => setSemanaSelecionada(e.target.value)}
+                  disabled={!semanas.length}
+                >
+                  <option value="">Ex.: São Paulo</option>
+                  {semanas.map((semana, idx) => (
+                    <option key={idx} value={semana.semanaInicial_vl}>{`Semana ${semana.semanaInicial_vl} - ${semana.semanaFinal_vl}`}</option>
+                  ))}
                 </select>
               </div>
               <button className="w-full bg-[#b0b0b0] text-white font-semibold py-2 rounded cursor-not-allowed text-base" disabled>Gerar mapa</button>
