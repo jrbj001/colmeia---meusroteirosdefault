@@ -1,5 +1,5 @@
 module.exports = (req, res) => {
-  res.json({
+  res.status(200).json({
     ok: true,
     msg: 'Debug endpoint funcionando!',
     timestamp: new Date().toISOString(),

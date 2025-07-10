@@ -1,0 +1,29 @@
+# Arquivos de desenvolvimento
+src/
+node_modules/
+.git/
+*.log
+
+# Configurações locais
+.env.local
+.env.*.local
+
+# Build artifacts serão gerados pelo Vercel
+dist/
+.vite/
+.turbo/
+
+# IDE e sistema
+.vscode/
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Backup e arquivos temporários
+*.backup
+*.tmp
+*.temp 
