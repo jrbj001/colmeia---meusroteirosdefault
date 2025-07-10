@@ -11,6 +11,13 @@ const corsOptions = {
     // Permite requisições sem origin (ex: do próprio backend, healthchecks, etc)
     if (!origin) return callback(null, true);
 
+    // Em desenvolvimento, permite localhost
+    if (process.env.NODE_ENV !== 'production') {
+      if (origin.startsWith('http://localhost:') || origin.startsWith('https://localhost:')) {
+        return callback(null, true);
+      }
+    }
+
     // Permite o domínio principal e todos os subdomínios .vercel.app
     if (
       origin === 'https://colmeia-meusroteirosdefault.vercel.app' ||
@@ -57,6 +64,16 @@ app.get('/api/test', (req, res) => {
   res.json({ ok: true, msg: 'API Vercel funcionando!' });
 });
 
+// Endpoint de debug para testar CORS
+app.get('/api/debug', (req, res) => {
+  res.json({ 
+    ok: true, 
+    msg: 'Debug endpoint funcionando!',
+    timestamp: new Date().toISOString(),
+    headers: req.headers
+  });
+});
+
 // Endpoint principal de roteiros
 app.get('/api/roteiros', async (req, res) => {
   try {
@@ -97,19 +114,26 @@ app.get('/api/roteiros', async (req, res) => {
 // Endpoint para buscar cidades por grupo
 app.get('/api/cidades', async (req, res) => {
   try {
+    console.log('API cidades chamada com query:', req.query);
     const grupo = req.query.grupo;
     if (!grupo) {
+      console.log('API cidades: grupo não fornecido');
       return res.status(400).json({ error: 'Parâmetro grupo é obrigatório' });
     }
+    console.log('API cidades: buscando grupo:', grupo);
     const pool = await getPool();
-    const result = await pool.request().query(`
+    const query = `
       SELECT DISTINCT cidadeUpper_st, planoMidiaGrupo_st
       FROM serv_product_be180.planoMidiaGrupoPivot_dm_vw
       WHERE planoMidiaGrupo_pk = ${grupo}
       ORDER BY cidadeUpper_st
-    `);
+    `;
+    console.log('API cidades: executando query:', query);
+    const result = await pool.request().query(query);
+    console.log('API cidades: resultado encontrado:', result.recordset.length, 'registros');
     const cidades = result.recordset.map(r => r.cidadeUpper_st);
     const nomeGrupo = result.recordset.length > 0 ? result.recordset[0].planoMidiaGrupo_st : null;
+    console.log('API cidades: retornando:', { cidades, nomeGrupo });
     res.json({ cidades, nomeGrupo });
   } catch (err) {
     console.error('Erro na API de cidades:', err);
@@ -140,20 +164,27 @@ app.get('/api/semanas', async (req, res) => {
 // Endpoint para buscar o mapeamento cidade -> planoMidiaDesc_pk
 app.get('/api/pivot-descpks', async (req, res) => {
   try {
+    console.log('API pivot-descpks chamada com query:', req.query);
     const grupo = req.query.grupo;
     if (!grupo) {
+      console.log('API pivot-descpks: grupo não fornecido');
       return res.status(400).json({ error: 'Parâmetro grupo é obrigatório' });
     }
+    console.log('API pivot-descpks: buscando grupo:', grupo);
     const pool = await getPool();
-    const result = await pool.request().query(`
+    const query = `
       SELECT cidadeUpper_st, planoMidiaDesc_pk
       FROM serv_product_be180.planoMidiaGrupoPivot_dm_vw
       WHERE planoMidiaGrupo_pk = ${grupo}
-    `);
+    `;
+    console.log('API pivot-descpks: executando query:', query);
+    const result = await pool.request().query(query);
+    console.log('API pivot-descpks: resultado encontrado:', result.recordset.length, 'registros');
     const descPks = {};
     result.recordset.forEach(r => {
       descPks[r.cidadeUpper_st] = r.planoMidiaDesc_pk;
     });
+    console.log('API pivot-descpks: retornando descPks:', descPks);
     res.json({ descPks });
   } catch (err) {
     console.error('Erro na API de pivot-descpks:', err);
