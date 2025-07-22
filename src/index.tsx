@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { MeusRoteiros } from "./screens/MeusRoteiros";
 import { Mapa } from "./screens/Mapa";
+import '../tailwind.css';
 
 createRoot(document.getElementById("app") as HTMLElement).render(
   <StrictMode>
