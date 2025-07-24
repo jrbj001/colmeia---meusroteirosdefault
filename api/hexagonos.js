@@ -7,12 +7,16 @@ module.exports = async (req, res) => {
   }
   
   try {
-    const { desc_pk, grupo_st, planoMidiaDesc_st } = req.query;
+    const { desc_pk, semana } = req.query;
     
     if (!desc_pk) {
       return res.status(400).json({ 
         error: 'Parâmetro desc_pk é obrigatório' 
       });
+    }
+
+    if (semana) {
+      console.warn('Filtro de semana recebido, mas ainda não implementado na view. Ignorando filtro.');
     }
 
     // Consulta simples, apenas por planoMidia_pk

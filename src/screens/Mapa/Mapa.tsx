@@ -76,7 +76,7 @@ export const Mapa: React.FC = () => {
             api.get(`pivot-descpks?grupo=${grupo}`)
               .then(r => {
                 console.log("Mapa: resposta da API pivot-descpks:", r.data);
-                setDescPks(r.data.descPks);
+                setDescPks(Object.fromEntries(Object.entries(r.data.descPks).map(([k, v]) => [k.trim().toUpperCase(), Number(v)])));
               })
               .catch(err => {
                 console.error("Mapa: erro na API pivot-descpks:", err);
@@ -113,19 +113,15 @@ export const Mapa: React.FC = () => {
     }
   }, [cidadeSelecionada, descPks]);
 
-  // Novo useEffect para buscar hexágonos
+  // Novo useEffect para buscar hexágonos assim que o grupo for selecionado
   React.useEffect(() => {
-    if (cidadeSelecionada && descPks[cidadeSelecionada]) {
+    if (grupo) {
       setLoadingHexagonos(true);
-      console.log("Mapa: fazendo requisição para hexágonos com desc_pk:", descPks[cidadeSelecionada]);
-      
-      api.get(`hexagonos?desc_pk=${descPks[cidadeSelecionada]}`)
+      api.get(`hexagonos?desc_pk=${grupo}`)
         .then(res => {
-          console.log("Mapa: resposta da API hexágonos:", res.data);
           setHexagonos(res.data.hexagonos);
         })
         .catch(err => {
-          console.error("Mapa: erro na API hexágonos:", err);
           setHexagonos([]);
         })
         .finally(() => {
@@ -134,7 +130,14 @@ export const Mapa: React.FC = () => {
     } else {
       setHexagonos([]);
     }
-  }, [cidadeSelecionada, descPks]);
+  }, [grupo]);
+
+  // Mensagem de aviso sobre o filtro
+  {grupo && (
+    <div className="mb-4 p-3 bg-yellow-100 border border-yellow-300 text-yellow-800 rounded">
+      No momento, todos os pontos do roteiro estão sendo exibidos. O filtro por praça e semana estará disponível em breve.
+    </div>
+  )}
 
   // Componente do Mapa simples (usando um mapa básico)
   const MapaVisualizacao = () => {
@@ -244,6 +247,7 @@ export const Mapa: React.FC = () => {
                 </div>
               )}
               
+              {/* Remover ou desabilitar selects de cidade e semana temporariamente */}
               <div className="mb-4">
                 <label className="block text-[#222] mb-2 font-semibold">
                   Praça {loading && <span className="text-blue-500">(Carregando...)</span>}
@@ -320,7 +324,7 @@ export const Mapa: React.FC = () => {
                   <CircleMarker
                     key={idx}
                     center={[hex.hex_centroid_lat, hex.hex_centroid_lon]}
-                    pathOptions={{ color: `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`, fillOpacity: 0.7 }}
+                    pathOptions={{ color: hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`, fillOpacity: 0.7 }}
                     radius={8}
                   >
                     <Popup>
