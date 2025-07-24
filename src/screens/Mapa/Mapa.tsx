@@ -4,7 +4,7 @@ import { Topbar } from "../../components/Topbar/Topbar";
 import { Pagination } from "../MeusRoteiros/sections/Pagination";
 import { useSearchParams } from "react-router-dom";
 import api from "../../config/axios";
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap, Polygon } from 'react-leaflet';
 import L from 'leaflet';
 
 // Tipo para os dados dos hexágonos
@@ -19,6 +19,8 @@ interface Hexagono {
   rgbColorB_vl: number;
   hexColor_st: string;
   planoMidiaDesc_st: string;
+  geometry_8: string; // Adicionado para armazenar o WKT do polígono
+  grupoDesc_st: string;
 }
 
 // Componente auxiliar para ajustar o centro e bounds do mapa
@@ -31,6 +33,17 @@ function AjustarMapa({ hexagonos }: { hexagonos: Hexagono[] }) {
     }
   }, [hexagonos, map]);
   return null;
+}
+
+// Função para converter WKT para array de coordenadas [lat, lon]
+function wktToLatLngs(wkt: string) {
+  const matches = wkt.match(/\(\((.*)\)\)/);
+  if (!matches) return [];
+  return matches[1].split(',').map(pair => {
+    const [lon, lat] = pair.trim().split(' ').map(Number);
+    if (isNaN(lat) || isNaN(lon)) return undefined;
+    return [lat, lon] as [number, number];
+  }).filter((x): x is [number, number] => Array.isArray(x) && x.length === 2);
 }
 
 export const Mapa: React.FC = () => {
@@ -132,6 +145,15 @@ export const Mapa: React.FC = () => {
     }
   }, [grupo]);
 
+  // Calcular o range de fluxo para normalizar o tamanho dos pontos
+  const minFluxo = hexagonos.length > 0 ? Math.min(...hexagonos.map(h => h.calculatedFluxoEstimado_vl)) : 0;
+  const maxFluxo = hexagonos.length > 0 ? Math.max(...hexagonos.map(h => h.calculatedFluxoEstimado_vl)) : 1;
+  function getRadius(fluxo: number) {
+    // Raio mínimo 6, máximo 20
+    if (maxFluxo === minFluxo) return 10;
+    return 6 + 14 * ((fluxo - minFluxo) / (maxFluxo - minFluxo));
+  }
+
   // Mensagem de aviso sobre o filtro
   {grupo && (
     <div className="mb-4 p-3 bg-yellow-100 border border-yellow-300 text-yellow-800 rounded">
@@ -143,7 +165,7 @@ export const Mapa: React.FC = () => {
   const MapaVisualizacao = () => {
     if (!hexagonos.length) {
       return (
-        <div className="w-full h-full bg-gray-100 flex items-center justify-center rounded border">
+        <div className="w-full h-full bg-white flex items-center justify-center rounded border">
           <p className="text-gray-500">
             {loadingHexagonos ? "Carregando hexágonos..." : "Selecione uma praça e semana para visualizar o mapa"}
           </p>
@@ -284,36 +306,30 @@ export const Mapa: React.FC = () => {
               
               {/* Informações dos hexágonos */}
               {hexagonos.length > 0 && (
-                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded">
-                  <h4 className="text-sm font-bold text-green-700 mb-1">Dados carregados</h4>
-                  <p className="text-xs text-green-600">{hexagonos.length} hexágonos encontrados</p>
-                  <p className="text-xs text-green-600">
-                    Fluxo total estimado: {hexagonos.reduce((sum, hex) => sum + hex.calculatedFluxoEstimado_vl, 0).toLocaleString()}
-                  </p>
-                </div>
+                (() => {
+                  const totalFluxo = hexagonos.reduce((sum, hex) => sum + hex.calculatedFluxoEstimado_vl, 0);
+                  const fluxoMedio = totalFluxo / hexagonos.length;
+                  const maxHex = hexagonos.reduce((a, b) => (a.calculatedFluxoEstimado_vl > b.calculatedFluxoEstimado_vl ? a : b));
+                  const minHex = hexagonos.reduce((a, b) => (a.calculatedFluxoEstimado_vl < b.calculatedFluxoEstimado_vl ? a : b));
+                  const grupos = Array.from(new Set(hexagonos.map(h => h.grupoDesc_st))).filter(Boolean);
+                  return (
+                    <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded">
+                      <h4 className="text-sm font-bold text-green-700 mb-1">Dados carregados</h4>
+                      <p className="text-xs text-green-600">{hexagonos.length} hexágonos encontrados</p>
+                      <p className="text-xs text-green-600">Fluxo total estimado: {totalFluxo.toLocaleString()}</p>
+                      <p className="text-xs text-green-600">Fluxo médio por hexágono: {fluxoMedio.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                      <p className="text-xs text-green-600">Maior fluxo: {maxHex.calculatedFluxoEstimado_vl.toLocaleString()} (Hexágono {maxHex.hexagon_pk})</p>
+                      <p className="text-xs text-green-600">Menor fluxo: {minHex.calculatedFluxoEstimado_vl.toLocaleString()} (Hexágono {minHex.hexagon_pk})</p>
+                      <p className="text-xs text-green-600">Grupos presentes: {grupos.join(', ')}</p>
+                    </div>
+                  );
+                })()
               )}
               
-              {/* Botão de teste da API */}
-              <button 
-                className="w-full bg-blue-500 text-white font-semibold py-2 rounded mt-4 text-base hover:bg-blue-600"
-                onClick={() => {
-                  console.log('Testando API...');
-                  api.get('debug')
-                    .then(res => {
-                      console.log('API funcionando:', res.data);
-                      alert('API funcionando! Verifique o console.');
-                    })
-                    .catch(err => {
-                      console.error('API falhou:', err);
-                      alert('API falhou! Verifique o console.');
-                    });
-                }}
-              >
-                Testar API
-              </button>
+              {/* Remover o botão de testar API */}
             </div>
             {/* Coluna do mapa */}
-            <div className="flex-1 h-full w-full">
+            <div className="flex-1 h-full w-full" style={{ minHeight: 450, background: '#fff', borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e5e5', marginBottom: 24 }}>
               <MapContainer center={[-23.55052, -46.633308]} zoom={12} style={{ height: '100%', width: '100%' }}>
                 <TileLayer
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -321,11 +337,31 @@ export const Mapa: React.FC = () => {
                 />
                 <AjustarMapa hexagonos={hexagonos} />
                 {hexagonos.map((hex, idx) => (
+                  <Polygon
+                    key={"poly-" + idx}
+                    positions={wktToLatLngs(hex.geometry_8)}
+                    pathOptions={{
+                      color: hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`,
+                      fillOpacity: 0.4
+                    }}
+                  >
+                    <Popup>
+                      <div>
+                        <strong>Hexágono:</strong> {hex.hexagon_pk}<br />
+                        <strong>Fluxo estimado:</strong> {hex.fluxoEstimado_vl}<br />
+                        <strong>Grupo:</strong> {hex.grupoDesc_st}<br />
+                        <strong>Cor:</strong> {hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`}<br />
+                        <strong>Centro:</strong> {hex.hex_centroid_lat}, {hex.hex_centroid_lon}
+                      </div>
+                    </Popup>
+                  </Polygon>
+                ))}
+                {hexagonos.map((hex, idx) => (
                   <CircleMarker
-                    key={idx}
+                    key={hex.hexagon_pk}
                     center={[hex.hex_centroid_lat, hex.hex_centroid_lon]}
                     pathOptions={{ color: hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`, fillOpacity: 0.7 }}
-                    radius={8}
+                    radius={getRadius(hex.calculatedFluxoEstimado_vl)}
                   >
                     <Popup>
                       <div>
@@ -336,6 +372,21 @@ export const Mapa: React.FC = () => {
                   </CircleMarker>
                 ))}
               </MapContainer>
+              <div style={{ position: 'absolute', bottom: 16, right: 16, background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', zIndex: 1000, minWidth: 120 }}>
+                <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>Legenda do tamanho</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <svg width={24} height={24} style={{ display: 'block' }}>
+                    <circle cx={12} cy={12} r={6} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
+                  </svg>
+                  <span style={{ fontSize: 11, color: '#444' }}>Menor fluxo<br/>{minFluxo.toLocaleString()}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <svg width={40} height={40} style={{ display: 'block' }}>
+                    <circle cx={20} cy={20} r={20} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
+                  </svg>
+                  <span style={{ fontSize: 11, color: '#444' }}>Maior fluxo<br/>{maxFluxo.toLocaleString()}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
