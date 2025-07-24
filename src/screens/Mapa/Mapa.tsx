@@ -4,6 +4,34 @@ import { Topbar } from "../../components/Topbar/Topbar";
 import { Pagination } from "../MeusRoteiros/sections/Pagination";
 import { useSearchParams } from "react-router-dom";
 import api from "../../config/axios";
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
+import L from 'leaflet';
+
+// Tipo para os dados dos hexágonos
+interface Hexagono {
+  hexagon_pk: number;
+  hex_centroid_lat: number;
+  hex_centroid_lon: number;
+  calculatedFluxoEstimado_vl: number;
+  fluxoEstimado_vl: number;
+  rgbColorR_vl: number;
+  rgbColorG_vl: number;
+  rgbColorB_vl: number;
+  hexColor_st: string;
+  planoMidiaDesc_st: string;
+}
+
+// Componente auxiliar para ajustar o centro e bounds do mapa
+function AjustarMapa({ hexagonos }: { hexagonos: Hexagono[] }) {
+  const map = useMap();
+  React.useEffect(() => {
+    if (hexagonos.length > 0) {
+      const bounds = L.latLngBounds(hexagonos.map(h => [h.hex_centroid_lat, h.hex_centroid_lon]));
+      map.fitBounds(bounds, { padding: [40, 40] });
+    }
+  }, [hexagonos, map]);
+  return null;
+}
 
 export const Mapa: React.FC = () => {
   const [menuReduzido, setMenuReduzido] = React.useState(false);
@@ -15,7 +43,9 @@ export const Mapa: React.FC = () => {
   const [semanas, setSemanas] = React.useState<{ semanaInicial_vl: number, semanaFinal_vl: number }[]>([]);
   const [semanaSelecionada, setSemanaSelecionada] = React.useState("");
   const [descPks, setDescPks] = React.useState<{ [cidade: string]: number }>({});
+  const [hexagonos, setHexagonos] = React.useState<Hexagono[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [loadingHexagonos, setLoadingHexagonos] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -82,6 +112,101 @@ export const Mapa: React.FC = () => {
       setSemanas([]);
     }
   }, [cidadeSelecionada, descPks]);
+
+  // Novo useEffect para buscar hexágonos
+  React.useEffect(() => {
+    if (cidadeSelecionada && descPks[cidadeSelecionada]) {
+      setLoadingHexagonos(true);
+      console.log("Mapa: fazendo requisição para hexágonos com desc_pk:", descPks[cidadeSelecionada]);
+      
+      api.get(`hexagonos?desc_pk=${descPks[cidadeSelecionada]}`)
+        .then(res => {
+          console.log("Mapa: resposta da API hexágonos:", res.data);
+          setHexagonos(res.data.hexagonos);
+        })
+        .catch(err => {
+          console.error("Mapa: erro na API hexágonos:", err);
+          setHexagonos([]);
+        })
+        .finally(() => {
+          setLoadingHexagonos(false);
+        });
+    } else {
+      setHexagonos([]);
+    }
+  }, [cidadeSelecionada, descPks]);
+
+  // Componente do Mapa simples (usando um mapa básico)
+  const MapaVisualizacao = () => {
+    if (!hexagonos.length) {
+      return (
+        <div className="w-full h-full bg-gray-100 flex items-center justify-center rounded border">
+          <p className="text-gray-500">
+            {loadingHexagonos ? "Carregando hexágonos..." : "Selecione uma praça e semana para visualizar o mapa"}
+          </p>
+        </div>
+      );
+    }
+
+    // Calcular limites do mapa
+    const lats = hexagonos.map(h => h.hex_centroid_lat);
+    const lons = hexagonos.map(h => h.hex_centroid_lon);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLon = Math.min(...lons);
+    const maxLon = Math.max(...lons);
+
+    return (
+      <div className="w-full h-full bg-white rounded border relative overflow-hidden">
+        <div className="absolute top-2 left-2 bg-white p-2 rounded shadow z-10">
+          <h3 className="text-sm font-bold text-gray-700">Hexágonos Plotados</h3>
+          <p className="text-xs text-gray-600">{hexagonos.length} pontos</p>
+          <p className="text-xs text-gray-600">Área: {minLat.toFixed(4)}, {minLon.toFixed(4)} → {maxLat.toFixed(4)}, {maxLon.toFixed(4)}</p>
+        </div>
+        
+        {/* Área do mapa com pontos plotados */}
+        <div className="w-full h-full relative bg-gradient-to-br from-blue-50 to-green-50">
+          {hexagonos.map((hex, index) => {
+            // Normalizar coordenadas para o container
+            const x = ((hex.hex_centroid_lon - minLon) / (maxLon - minLon)) * 100;
+            const y = ((maxLat - hex.hex_centroid_lat) / (maxLat - minLat)) * 100;
+            
+            return (
+              <div
+                key={hex.hexagon_pk}
+                className="absolute w-2 h-2 rounded-full transform -translate-x-1 -translate-y-1"
+                style={{
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  backgroundColor: hex.hexColor_st || `rgb(${hex.rgbColorR_vl}, ${hex.rgbColorG_vl}, ${hex.rgbColorB_vl})`,
+                }}
+                title={`Hex ${hex.hexagon_pk}: Fluxo ${hex.calculatedFluxoEstimado_vl} | Lat: ${hex.hex_centroid_lat}, Lon: ${hex.hex_centroid_lon}`}
+              />
+            );
+          })}
+        </div>
+        
+        {/* Legenda */}
+        <div className="absolute bottom-2 right-2 bg-white p-2 rounded shadow">
+          <h4 className="text-xs font-bold text-gray-700 mb-1">Legenda</h4>
+          <div className="text-xs text-gray-600">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+              <span>Alto fluxo</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+              <span>Médio fluxo</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span>Baixo fluxo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-white flex font-sans">
@@ -152,7 +277,17 @@ export const Mapa: React.FC = () => {
                   ))}
                 </select>
               </div>
-              <button className="w-full bg-[#b0b0b0] text-white font-semibold py-2 rounded cursor-not-allowed text-base" disabled>Gerar mapa</button>
+              
+              {/* Informações dos hexágonos */}
+              {hexagonos.length > 0 && (
+                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded">
+                  <h4 className="text-sm font-bold text-green-700 mb-1">Dados carregados</h4>
+                  <p className="text-xs text-green-600">{hexagonos.length} hexágonos encontrados</p>
+                  <p className="text-xs text-green-600">
+                    Fluxo total estimado: {hexagonos.reduce((sum, hex) => sum + hex.calculatedFluxoEstimado_vl, 0).toLocaleString()}
+                  </p>
+                </div>
+              )}
               
               {/* Botão de teste da API */}
               <button 
@@ -174,11 +309,29 @@ export const Mapa: React.FC = () => {
               </button>
             </div>
             {/* Coluna do mapa */}
-            <div className="flex-1 flex items-stretch justify-end">
-              <div className="w-full h-full bg-[#ececec] rounded-lg flex items-end justify-end relative overflow-hidden" style={{minHeight: 0}}>
-                {/* Placeholder do mapa */}
-                <button className="absolute bottom-4 right-4 bg-[#b0b0b0] text-white font-semibold py-2 px-4 rounded cursor-not-allowed opacity-80 text-base" disabled>Download mapa html</button>
-              </div>
+            <div className="flex-1 h-full w-full">
+              <MapContainer center={[-23.55052, -46.633308]} zoom={12} style={{ height: '100%', width: '100%' }}>
+                <TileLayer
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution="&copy; OpenStreetMap contributors"
+                />
+                <AjustarMapa hexagonos={hexagonos} />
+                {hexagonos.map((hex, idx) => (
+                  <CircleMarker
+                    key={idx}
+                    center={[hex.hex_centroid_lat, hex.hex_centroid_lon]}
+                    pathOptions={{ color: `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`, fillOpacity: 0.7 }}
+                    radius={8}
+                  >
+                    <Popup>
+                      <div>
+                        <strong>Hexágono:</strong> {hex.hexagon_pk}<br />
+                        <strong>Fluxo:</strong> {hex.fluxoEstimado_vl}
+                      </div>
+                    </Popup>
+                  </CircleMarker>
+                ))}
+              </MapContainer>
             </div>
           </div>
         </div>
