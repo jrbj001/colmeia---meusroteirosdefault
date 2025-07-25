@@ -145,6 +145,38 @@ export const Mapa: React.FC = () => {
     }
   }, [grupo]);
 
+  // Novo useEffect para buscar hexágonos ao selecionar semana
+  React.useEffect(() => {
+    // Só busca se houver cidadeSelecionada e descPks[cidadeSelecionada]
+    if (cidadeSelecionada && descPks[cidadeSelecionada]) {
+      setLoadingHexagonos(true);
+      if (semanaSelecionada) {
+        api.get(`hexagonos?desc_pk=${descPks[cidadeSelecionada]}&semana=${semanaSelecionada}`)
+          .then(res => {
+            setHexagonos(res.data.hexagonos);
+          })
+          .catch(err => {
+            setHexagonos([]);
+          })
+          .finally(() => {
+            setLoadingHexagonos(false);
+          });
+      } else {
+        // Se não houver semana selecionada, busca todos os hexágonos da praça
+        api.get(`hexagonos?desc_pk=${descPks[cidadeSelecionada]}`)
+          .then(res => {
+            setHexagonos(res.data.hexagonos);
+          })
+          .catch(err => {
+            setHexagonos([]);
+          })
+          .finally(() => {
+            setLoadingHexagonos(false);
+          });
+      }
+    }
+  }, [cidadeSelecionada, descPks, semanaSelecionada]);
+
   // Calcular o range de fluxo para normalizar o tamanho dos pontos
   const minFluxo = hexagonos.length > 0 ? Math.min(...hexagonos.map(h => h.calculatedFluxoEstimado_vl)) : 0;
   const maxFluxo = hexagonos.length > 0 ? Math.max(...hexagonos.map(h => h.calculatedFluxoEstimado_vl)) : 1;
@@ -167,7 +199,13 @@ export const Mapa: React.FC = () => {
       return (
         <div className="w-full h-full bg-white flex items-center justify-center rounded border">
           <p className="text-gray-500">
-            {loadingHexagonos ? "Carregando hexágonos..." : "Selecione uma praça e semana para visualizar o mapa"}
+            {loadingHexagonos
+              ? "Carregando hexágonos..."
+              : semanaSelecionada
+                ? "Nenhum ponto encontrado para a praça e semana selecionadas."
+                : cidadeSelecionada
+                  ? "Nenhum ponto encontrado para a praça selecionada."
+                  : "Selecione uma praça e semana para visualizar o mapa"}
           </p>
         </div>
       );

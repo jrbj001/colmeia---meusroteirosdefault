@@ -15,12 +15,33 @@ module.exports = async (req, res) => {
       });
     }
 
+    const pool = await getPool();
+    let planoMidiaPks = [];
+
     if (semana) {
-      console.warn('Filtro de semana recebido, mas ainda não implementado na view. Ignorando filtro.');
+      // Busca o pk da semana específica
+      const semanaResult = await pool.request().query(`
+        SELECT pk FROM serv_product_be180.planoMidia_dm_vw
+        WHERE planoMidiaDesc_vl = ${desc_pk} AND semanaInicial_vl = ${semana}
+      `);
+      planoMidiaPks = semanaResult.recordset.map(r => r.pk);
+      if (planoMidiaPks.length === 0) {
+        return res.status(404).json({ error: 'Semana não encontrada para o desc_pk informado.' });
+      }
+    } else {
+      // Busca todos os pks para o desc_pk
+      const allSemanasResult = await pool.request().query(`
+        SELECT pk FROM serv_product_be180.planoMidia_dm_vw
+        WHERE planoMidiaDesc_vl = ${desc_pk}
+      `);
+      planoMidiaPks = allSemanasResult.recordset.map(r => r.pk);
+      if (planoMidiaPks.length === 0) {
+        return res.status(404).json({ error: 'Nenhuma semana encontrada para o desc_pk informado.' });
+      }
     }
 
-    // Consulta simples, apenas por planoMidia_pk
-    const pool = await getPool();
+    // Monta a query para buscar os hexágonos dos pks encontrados
+    const pkList = planoMidiaPks.join(',');
     const result = await pool.request().query(`
       SELECT 
         hexagon_pk,
@@ -40,7 +61,7 @@ module.exports = async (req, res) => {
         grupoDesc_st,
         hexColor_st
       FROM serv_product_be180.baseCalculadoraHexagonosJoin_dm_vw
-      WHERE planoMidia_pk = '${desc_pk}'
+      WHERE planoMidia_pk IN (${pkList})
     `);
     
     res.status(200).json({ hexagonos: Array.isArray(result.recordset) ? result.recordset : [] });
