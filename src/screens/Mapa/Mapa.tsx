@@ -233,6 +233,9 @@ export const Mapa: React.FC = () => {
     );
   };
 
+  // Adicionar overlay/modal quando não houver seleção de praça
+  const showOverlay = !cidadeSelecionada;
+
   return (
     <div className="min-h-screen bg-white flex font-sans">
       <Sidebar menuReduzido={menuReduzido} setMenuReduzido={setMenuReduzido} />
@@ -241,7 +244,7 @@ export const Mapa: React.FC = () => {
         <Topbar menuReduzido={menuReduzido} />
         <div className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`} />
         <div className="w-full overflow-x-auto pt-20 flex-1 overflow-auto">
-          <h1 className="text-lg font-bold text-[#222] tracking-wide mb-4 uppercase font-sans mt-12 pl-6">
+          <h1 className="text-lg font-bold text-[#222] tracking-wide mb-4 uppercase font-sans mt-4 pl-6">
             Meus roteiros
           </h1>
           <div className="w-full flex flex-row gap-8 mt-8 px-8 flex-1 min-h-[500px]" style={{height: 'calc(100vh - 220px)'}}>
@@ -329,8 +332,52 @@ export const Mapa: React.FC = () => {
               {/* Remover o botão de testar API */}
             </div>
             {/* Coluna do mapa */}
-            <div className="flex-1 h-full w-full" style={{ minHeight: 450, background: '#fff', borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e5e5', marginBottom: 24 }}>
-              <MapContainer center={[-23.55052, -46.633308]} zoom={12} style={{ height: '100%', width: '100%' }}>
+            <div className="flex-1 h-full w-full" style={{ minHeight: 320, background: '#fff', borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e5e5', marginBottom: 48, position: 'relative' }}>
+              {/* Overlay/modal para seleção de praça e semana */}
+              {showOverlay && (
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  background: 'rgba(255,255,255,0.92)',
+                  zIndex: 2000,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 18,
+                  color: '#222',
+                  fontWeight: 500
+                }}>
+                  <div style={{ marginBottom: 12 }}>Selecione a praça e a semana para visualizar o mapa</div>
+                  {/* Futuramente pode adicionar botão ou instrução extra aqui */}
+                </div>
+              )}
+              {/* Loading overlay após seleção da praça */}
+              {loadingHexagonos && cidadeSelecionada && (
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  background: 'rgba(255,255,255,0.7)',
+                  zIndex: 1500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-blue-500 border-solid"></div>
+                  <span style={{ marginLeft: 16, color: '#2563eb', fontWeight: 500 }}>Carregando mapa...</span>
+                </div>
+              )}
+              <MapContainer
+                center={hexagonos.length > 0 ? [hexagonos[0].hex_centroid_lat, hexagonos[0].hex_centroid_lon] : [-15.7801, -47.9292]}
+                zoom={12}
+                style={{ height: '100%', width: '100%' }}
+              >
                 <TileLayer
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   attribution="&copy; OpenStreetMap contributors"
@@ -372,28 +419,44 @@ export const Mapa: React.FC = () => {
                   </CircleMarker>
                 ))}
               </MapContainer>
-              <div style={{ position: 'absolute', bottom: 16, right: 16, background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', zIndex: 1000, minWidth: 120 }}>
-                <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>Legenda do tamanho</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <svg width={24} height={24} style={{ display: 'block' }}>
-                    <circle cx={12} cy={12} r={6} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
-                  </svg>
-                  <span style={{ fontSize: 11, color: '#444' }}>Menor fluxo<br/>{minFluxo.toLocaleString()}</span>
+            </div>
+            {/* Legendas agrupadas no canto inferior direito */}
+            {hexagonos.length > 0 && (
+              <div style={{ position: 'absolute', bottom: 96, right: 64, display: 'flex', gap: 24, flexWrap: 'wrap', zIndex: 1000 }}>
+                {/* Legenda do tamanho */}
+                <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 120 }}>
+                  <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>Legenda do tamanho</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <svg width={24} height={24} style={{ display: 'block' }}>
+                      <circle cx={12} cy={12} r={6} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
+                    </svg>
+                    <span style={{ fontSize: 11, color: '#444' }}>Menor fluxo<br/>{minFluxo.toLocaleString()}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <svg width={40} height={40} style={{ display: 'block' }}>
+                      <circle cx={20} cy={20} r={20} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
+                    </svg>
+                    <span style={{ fontSize: 11, color: '#444' }}>Maior fluxo<br/>{maxFluxo.toLocaleString()}</span>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <svg width={40} height={40} style={{ display: 'block' }}>
-                    <circle cx={20} cy={20} r={20} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
-                  </svg>
-                  <span style={{ fontSize: 11, color: '#444' }}>Maior fluxo<br/>{maxFluxo.toLocaleString()}</span>
+                {/* Legenda de grupos */}
+                <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 120 }}>
+                  <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>Legenda de grupos</div>
+                  {Array.from(new Map(hexagonos.map(h => [h.grupoDesc_st, h]))).map(([grupo, hex]) => (
+                    <div key={grupo} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <span style={{ display: 'inline-block', width: 18, height: 18, borderRadius: '50%', background: hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`, border: '2px solid #888' }}></span>
+                      <span style={{ fontSize: 12, color: '#444' }}>{grupo || 'Sem grupo'}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
         <div className={`fixed bottom-0 z-30 flex flex-col items-center pointer-events-none transition-all duration-300 ${menuReduzido ? 'left-20 w-[calc(100%-5rem)]' : 'left-64 w-[calc(100%-16rem)]'}`}>
           <div className="absolute left-0 top-0 h-full w-px bg-[#c1c1c1]" />
           <div className="w-full bg-white py-4 border-t border-[#e5e5e5] flex justify-center pointer-events-auto">
-            <Pagination currentPage={1} totalPages={1} onPageChange={() => {}} />
+            {/* Remover qualquer renderização do componente Pagination e divs relacionadas */}
           </div>
           <footer className="w-full border-t border-[#c1c1c1] p-4 text-center text-[10px] italic text-[#b0b0b0] tracking-wide bg-white z-10 font-sans pointer-events-auto relative">
             <div className="absolute left-0 top-0 h-full w-px bg-[#c1c1c1]" />
