@@ -1,7 +1,8 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { Avatar } from "../Avatar";
 import { ExitToApp } from "../../icons/ExitToApp";
-import { Link } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
 
 interface TopbarProps {
   menuReduzido: boolean;
@@ -14,12 +15,18 @@ interface TopbarProps {
 }
 
 export const Topbar: React.FC<TopbarProps> = ({ menuReduzido, breadcrumb }) => {
+  const { logout, user } = useAuth();
+  
   const defaultBreadcrumb = [
     { label: "Home", path: "/" },
     { label: "Meus roteiros", path: "/" }
   ];
 
   const breadcrumbItems = breadcrumb?.items || defaultBreadcrumb;
+
+  const handleLogout = () => {
+    logout();
+  };
 
   return (
     <div
@@ -48,14 +55,23 @@ export const Topbar: React.FC<TopbarProps> = ({ menuReduzido, breadcrumb }) => {
           ))}
         </div>
         <div className="flex items-center gap-[30px]">
+          {user && (
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <span>Olá, {user.name}</span>
+            </div>
+          )}
           <Avatar
             className="!relative"
             shape="circle"
             size="large"
-            type="image"
-            initials="U"
           />
-          <ExitToApp className="w-6 h-6" color="#3A3A3A" />
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 text-[#3A3A3A] hover:text-red-600 transition-colors duration-200"
+            title="Sair"
+          >
+            <ExitToApp className="w-6 h-6" color="currentColor" />
+          </button>
         </div>
       </div>
       <div

@@ -87,6 +87,18 @@ export const MeusRoteiros: React.FC = () => {
     carregarDados(novaPagina);
   };
 
+  const handleActionRestricted = (action: string) => {
+    const message = `🚧 Funcionalidade em Desenvolvimento
+
+A ação "${action}" ainda não está disponível.
+
+Para solicitar acesso ou reportar problemas, entre em contato com o administrador do sistema.
+
+Email: suporte@be180.com.br`;
+
+    alert(message);
+  };
+
   return (
     <>
       <div className="min-h-screen bg-white flex font-sans">
@@ -108,7 +120,7 @@ export const MeusRoteiros: React.FC = () => {
             className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`}
           />
           <div className="w-full overflow-x-auto pt-20 flex-1 overflow-auto">
-            <h1 className="text-lg font-bold text-[#222] tracking-wide mb-4 uppercase font-sans mt-12 pl-6">
+            <h1 className="text-lg font-bold text-[#222] tracking-wide mb-4 uppercase font-sans mt-4 pl-6">
               Meus roteiros
             </h1>
 
@@ -178,8 +190,18 @@ export const MeusRoteiros: React.FC = () => {
                               className="w-6 h-6 transition-transform duration-200 hover:scale-110 cursor-pointer text-[#3A3A3A] hover:text-[#FF9800]"
                             />
                           </Link>
-                          <Difference4 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
-                          <Delete4 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
+                          <button
+                            onClick={() => handleActionRestricted("Editar roteiro")}
+                            className="transition-transform duration-200 hover:scale-110"
+                          >
+                            <Difference4 className="w-6 h-6 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
+                          </button>
+                          <button
+                            onClick={() => handleActionRestricted("Excluir roteiro")}
+                            className="transition-transform duration-200 hover:scale-110"
+                          >
+                            <Delete4 className="w-6 h-6 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
+                          </button>
                         </td>
                       </tr>
                     ))
