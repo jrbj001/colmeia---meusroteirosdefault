@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { Logo } from "../Logo";
 import { AddBox } from "../../icons/AddBox";
 import { ArrowForwardIos } from "../../icons/ArrowForwardIos";
@@ -21,14 +22,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
     </div>
 
     <nav className={`space-y-4 w-full ${menuReduzido ? "flex flex-col items-center" : ""}`}>
-      <div className="flex items-center gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer">
-        <PinDrop className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" color="#757575" />
-        {!menuReduzido && (
-          <span className="font-medium text-sm text-[#757575] tracking-[0.50px] group-hover:text-[#222] transition-colors duration-200 underline">
-            Meus roteiros
-          </span>
-        )}
-      </div>
+      <Link to="/" className="block">
+        <div className="flex items-center gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer">
+          <PinDrop className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" />
+          {!menuReduzido && (
+            <span className="font-medium text-sm text-[#757575] tracking-[0.50px] group-hover:text-[#222] transition-colors duration-200 underline">
+              Meus roteiros
+            </span>
+          )}
+        </div>
+      </Link>
       <div className="flex items-center gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer">
         <AddBox className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" color="#757575" />
         {!menuReduzido && (

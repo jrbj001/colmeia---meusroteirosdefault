@@ -46,6 +46,8 @@ function wktToLatLngs(wkt: string) {
   }).filter((x): x is [number, number] => Array.isArray(x) && x.length === 2);
 }
 
+
+
 export const Mapa: React.FC = () => {
   const [menuReduzido, setMenuReduzido] = React.useState(false);
   const [searchParams] = useSearchParams();
@@ -60,22 +62,64 @@ export const Mapa: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [loadingHexagonos, setLoadingHexagonos] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
+  
+  // Novos estados para feedback do usuário
+  const [statusMessage, setStatusMessage] = React.useState<string>("");
+  const [statusType, setStatusType] = React.useState<"info" | "success" | "warning" | "error">("info");
+  const [lastSearchInfo, setLastSearchInfo] = React.useState<{
+    cidade: string;
+    semana: string;
+    totalHexagonos: number;
+    timestamp: Date;
+  } | null>(null);
+
+  // Funções auxiliares para feedback do usuário
+  const showStatus = (message: string, type: "info" | "success" | "warning" | "error" = "info") => {
+    setStatusMessage(message);
+    setStatusType(type);
+    // Auto-limpar mensagens de sucesso após 5 segundos
+    if (type === "success") {
+      setTimeout(() => setStatusMessage(""), 5000);
+    }
+  };
+
+  const clearStatus = () => {
+    setStatusMessage("");
+  };
+
+  const formatNumber = (num: number) => {
+    return new Intl.NumberFormat('pt-BR').format(num);
+  };
+
+  const getTimeAgo = (date: Date) => {
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (diffInSeconds < 60) return `${diffInSeconds} segundos atrás`;
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutos atrás`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} horas atrás`;
+    return `${Math.floor(diffInSeconds / 86400)} dias atrás`;
+  };
 
   React.useEffect(() => {
     console.log("Mapa: grupo recebido:", grupo);
     
-    // Teste inicial da API
-    api.get('debug')
-      .then(res => {
-        console.log("Mapa: API debug funcionando:", res.data);
-      })
-      .catch(err => {
-        console.error("Mapa: API debug falhou:", err);
-      });
-    
     if (grupo) {
+      showStatus(`Carregando dados do grupo "${grupo}"...`, "info");
       setLoading(true);
       setErro(null);
+      clearStatus();
+      
+      // Teste inicial da API
+      api.get('debug')
+        .then(res => {
+          console.log("Mapa: API debug funcionando:", res.data);
+        })
+        .catch(err => {
+          console.error("Mapa: API debug falhou:", err);
+          showStatus("⚠️ Problemas de conectividade detectados", "warning");
+        });
+      
       console.log("Mapa: fazendo requisição para cidades com grupo:", grupo);
       
       api.get(`cidades?grupo=${grupo}`)
@@ -83,8 +127,11 @@ export const Mapa: React.FC = () => {
           console.log("Mapa: resposta da API cidades:", res.data);
           setCidades(res.data.cidades);
           if (res.data.nomeGrupo) setNomeGrupo(res.data.nomeGrupo);
-          // Buscar os planoMidiaDesc_pk para cada cidade
+          
           if (res.data.cidades && res.data.cidades.length) {
+            showStatus(`✅ ${res.data.cidades.length} praça(s) encontrada(s) para o grupo "${res.data.nomeGrupo || grupo}"`, "success");
+            
+            // Buscar os planoMidiaDesc_pk para cada cidade
             console.log("Mapa: fazendo requisição para pivot-descpks com grupo:", grupo);
             api.get(`pivot-descpks?grupo=${grupo}`)
               .then(r => {
@@ -94,48 +141,76 @@ export const Mapa: React.FC = () => {
               .catch(err => {
                 console.error("Mapa: erro na API pivot-descpks:", err);
                 setDescPks({});
+                showStatus("⚠️ Erro ao carregar dados das praças", "warning");
               });
+          } else {
+            showStatus(`❌ Nenhuma praça encontrada para o grupo "${res.data.nomeGrupo || grupo}". Verifique se o grupo possui dados cadastrados.`, "error");
           }
         })
         .catch(err => {
           console.error("Mapa: erro na API cidades:", err);
-          setErro(err.response?.data?.error || 'Erro ao carregar cidades');
+          const errorMsg = err.response?.data?.error || 'Erro ao carregar cidades';
+          setErro(errorMsg);
           setCidades([]);
+          showStatus(`❌ Erro ao carregar dados: ${errorMsg}`, "error");
         })
         .finally(() => {
           setLoading(false);
         });
+    } else {
+      showStatus("👋 Bem-vindo ao Mapa de Roteiros! Selecione um grupo para começar.", "info");
     }
   }, [grupo]);
 
   React.useEffect(() => {
     console.log("Mapa: cidadeSelecionada:", cidadeSelecionada, "descPks:", descPks);
     if (cidadeSelecionada && descPks[cidadeSelecionada]) {
+      showStatus(`📅 Carregando semanas disponíveis para ${cidadeSelecionada}...`, "info");
       console.log("Mapa: fazendo requisição para semanas com desc_pk:", descPks[cidadeSelecionada]);
       api.get(`semanas?desc_pk=${descPks[cidadeSelecionada]}`)
         .then(res => {
           console.log("Mapa: resposta da API semanas:", res.data);
           setSemanas(res.data.semanas);
+          if (res.data.semanas && res.data.semanas.length > 0) {
+            showStatus(`✅ ${res.data.semanas.length} semana(s) encontrada(s) para ${cidadeSelecionada}`, "success");
+          } else {
+            showStatus(`⚠️ Nenhuma semana encontrada para ${cidadeSelecionada}. Esta praça pode não ter dados de planejamento.`, "warning");
+          }
         })
         .catch(err => {
           console.error("Mapa: erro na API semanas:", err);
           setSemanas([]);
+          showStatus(`❌ Erro ao carregar semanas para ${cidadeSelecionada}`, "error");
         });
     } else {
       setSemanas([]);
+      if (cidadeSelecionada && !descPks[cidadeSelecionada]) {
+        showStatus(`⚠️ Dados da praça ${cidadeSelecionada} não encontrados`, "warning");
+      }
     }
   }, [cidadeSelecionada, descPks]);
 
   // Novo useEffect para buscar hexágonos assim que o grupo for selecionado
   React.useEffect(() => {
     if (grupo) {
+      showStatus("🗺️ Carregando mapa do grupo...", "info");
       setLoadingHexagonos(true);
       api.get(`hexagonos?desc_pk=${grupo}`)
         .then(res => {
-          setHexagonos(res.data.hexagonos);
+          const hexagonosData = res.data.hexagonos || [];
+          setHexagonos(hexagonosData);
+          
+          if (hexagonosData.length > 0) {
+            const totalFluxo = hexagonosData.reduce((sum: number, hex: Hexagono) => sum + hex.calculatedFluxoEstimado_vl, 0);
+            showStatus(`🗺️ Mapa carregado: ${formatNumber(hexagonosData.length)} pontos com fluxo total de ${formatNumber(totalFluxo)}`, "success");
+          } else {
+            showStatus(`⚠️ Nenhum ponto encontrado para este grupo. Verifique se há dados de planejamento cadastrados.`, "warning");
+          }
         })
         .catch(err => {
+          console.error("Erro ao carregar hexágonos do grupo:", err);
           setHexagonos([]);
+          showStatus("❌ Erro ao carregar mapa do grupo", "error");
         })
         .finally(() => {
           setLoadingHexagonos(false);
@@ -149,14 +224,37 @@ export const Mapa: React.FC = () => {
   React.useEffect(() => {
     // Só busca se houver cidadeSelecionada e descPks[cidadeSelecionada]
     if (cidadeSelecionada && descPks[cidadeSelecionada]) {
+      const searchTerm = semanaSelecionada ? `semana ${semanaSelecionada}` : "todas as semanas";
+      showStatus(`🗺️ Carregando mapa para ${cidadeSelecionada} (${searchTerm})...`, "info");
       setLoadingHexagonos(true);
+      
       if (semanaSelecionada) {
         api.get(`hexagonos?desc_pk=${descPks[cidadeSelecionada]}&semana=${semanaSelecionada}`)
           .then(res => {
-            setHexagonos(res.data.hexagonos);
+            const hexagonosData = res.data.hexagonos || [];
+            setHexagonos(hexagonosData);
+            
+            if (hexagonosData.length > 0) {
+              const totalFluxo = hexagonosData.reduce((sum: number, hex: Hexagono) => sum + hex.calculatedFluxoEstimado_vl, 0);
+              const fluxoMedio = totalFluxo / hexagonosData.length;
+              
+              showStatus(`✅ Mapa carregado: ${formatNumber(hexagonosData.length)} pontos para ${cidadeSelecionada} (semana ${semanaSelecionada}) - Fluxo médio: ${formatNumber(fluxoMedio)}`, "success");
+              
+              // Salvar informações da última busca
+              setLastSearchInfo({
+                cidade: cidadeSelecionada,
+                semana: semanaSelecionada,
+                totalHexagonos: hexagonosData.length,
+                timestamp: new Date()
+              });
+            } else {
+              showStatus(`⚠️ Nenhum ponto encontrado para ${cidadeSelecionada} na semana ${semanaSelecionada}. Esta combinação pode não ter dados de planejamento.`, "warning");
+            }
           })
           .catch(err => {
+            console.error("Erro ao carregar hexágonos por semana:", err);
             setHexagonos([]);
+            showStatus(`❌ Erro ao carregar mapa para ${cidadeSelecionada} (semana ${semanaSelecionada})`, "error");
           })
           .finally(() => {
             setLoadingHexagonos(false);
@@ -165,10 +263,30 @@ export const Mapa: React.FC = () => {
         // Se não houver semana selecionada, busca todos os hexágonos da praça
         api.get(`hexagonos?desc_pk=${descPks[cidadeSelecionada]}`)
           .then(res => {
-            setHexagonos(res.data.hexagonos);
+            const hexagonosData = res.data.hexagonos || [];
+            setHexagonos(hexagonosData);
+            
+            if (hexagonosData.length > 0) {
+              const totalFluxo = hexagonosData.reduce((sum: number, hex: Hexagono) => sum + hex.calculatedFluxoEstimado_vl, 0);
+              const fluxoMedio = totalFluxo / hexagonosData.length;
+              
+              showStatus(`✅ Mapa carregado: ${formatNumber(hexagonosData.length)} pontos para ${cidadeSelecionada} (todas as semanas) - Fluxo médio: ${formatNumber(fluxoMedio)}`, "success");
+              
+              // Salvar informações da última busca
+              setLastSearchInfo({
+                cidade: cidadeSelecionada,
+                semana: "Todas",
+                totalHexagonos: hexagonosData.length,
+                timestamp: new Date()
+              });
+            } else {
+              showStatus(`⚠️ Nenhum ponto encontrado para ${cidadeSelecionada}. Esta praça pode não ter dados de planejamento.`, "warning");
+            }
           })
           .catch(err => {
+            console.error("Erro ao carregar hexágonos da praça:", err);
             setHexagonos([]);
+            showStatus(`❌ Erro ao carregar mapa para ${cidadeSelecionada}`, "error");
           })
           .finally(() => {
             setLoadingHexagonos(false);
@@ -186,27 +304,104 @@ export const Mapa: React.FC = () => {
     return 6 + 14 * ((fluxo - minFluxo) / (maxFluxo - minFluxo));
   }
 
-  // Mensagem de aviso sobre o filtro
-  {grupo && (
-    <div className="mb-4 p-3 bg-yellow-100 border border-yellow-300 text-yellow-800 rounded">
-      No momento, todos os pontos do roteiro estão sendo exibidos. O filtro por praça e semana estará disponível em breve.
-    </div>
-  )}
+  // Componente de Status para feedback do usuário
+  const StatusMessage = () => {
+    if (!statusMessage) return null;
+    
+    const bgColor = {
+      info: "bg-blue-50 border-blue-200 text-blue-800",
+      success: "bg-green-50 border-green-200 text-green-800",
+      warning: "bg-yellow-50 border-yellow-200 text-yellow-800",
+      error: "bg-red-50 border-red-200 text-red-800"
+    }[statusType];
+    
+    const icon = {
+      info: "ℹ️",
+      success: "✅",
+      warning: "⚠️",
+      error: "❌"
+    }[statusType];
+    
+    return (
+      <div className={`mb-4 p-3 border rounded-lg flex items-start gap-2 ${bgColor}`}>
+        <span className="text-lg">{icon}</span>
+        <div className="flex-1">
+          <p className="text-sm font-medium">{statusMessage}</p>
+          {statusType === "info" && (
+            <button 
+              onClick={clearStatus}
+              className="text-xs underline mt-1 hover:no-underline"
+            >
+              Fechar
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   // Componente do Mapa simples (usando um mapa básico)
   const MapaVisualizacao = () => {
     if (!hexagonos.length) {
       return (
         <div className="w-full h-full bg-white flex items-center justify-center rounded border">
-          <p className="text-gray-500">
-            {loadingHexagonos
-              ? "Carregando hexágonos..."
-              : semanaSelecionada
-                ? "Nenhum ponto encontrado para a praça e semana selecionadas."
-                : cidadeSelecionada
-                  ? "Nenhum ponto encontrado para a praça selecionada."
-                  : "Selecione uma praça e semana para visualizar o mapa"}
-          </p>
+          <div className="text-center p-8">
+            {loadingHexagonos ? (
+              <div className="flex flex-col items-center gap-4">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-blue-500 border-solid"></div>
+                <p className="text-blue-600 font-medium">Carregando mapa...</p>
+                <p className="text-sm text-gray-500">Aguarde enquanto processamos os dados</p>
+              </div>
+            ) : semanaSelecionada ? (
+              <div className="flex flex-col items-center gap-3">
+                <div className="text-6xl">🗺️</div>
+                <h3 className="text-lg font-semibold text-gray-700">Nenhum ponto encontrado</h3>
+                <p className="text-gray-500 text-center max-w-md">
+                  Não foram encontrados pontos para <strong>{cidadeSelecionada}</strong> na <strong>semana {semanaSelecionada}</strong>.
+                </p>
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    💡 <strong>Possíveis motivos:</strong><br/>
+                    • Esta combinação de praça e semana não possui dados de planejamento<br/>
+                    • Os dados podem estar em processamento<br/>
+                    • Tente selecionar outra semana ou praça
+                  </p>
+                </div>
+              </div>
+            ) : cidadeSelecionada ? (
+              <div className="flex flex-col items-center gap-3">
+                <div className="text-6xl">🏙️</div>
+                <h3 className="text-lg font-semibold text-gray-700">Nenhum ponto encontrado</h3>
+                <p className="text-gray-500 text-center max-w-md">
+                  Não foram encontrados pontos para <strong>{cidadeSelecionada}</strong>.
+                </p>
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    💡 <strong>Possíveis motivos:</strong><br/>
+                    • Esta praça não possui dados de planejamento cadastrados<br/>
+                    • Os dados podem estar em processamento<br/>
+                    • Tente selecionar outra praça
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-3">
+                <div className="text-6xl">📍</div>
+                <h3 className="text-lg font-semibold text-gray-700">Selecione uma praça</h3>
+                <p className="text-gray-500 text-center max-w-md">
+                  Para visualizar o mapa, selecione uma praça e opcionalmente uma semana específica.
+                </p>
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    💡 <strong>Como usar:</strong><br/>
+                    1. Selecione uma praça no filtro à esquerda<br/>
+                    2. Opcionalmente, escolha uma semana específica<br/>
+                    3. O mapa será carregado automaticamente
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       );
     }
@@ -279,7 +474,22 @@ export const Mapa: React.FC = () => {
       <Sidebar menuReduzido={menuReduzido} setMenuReduzido={setMenuReduzido} />
       <div className={`fixed top-0 z-20 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? "left-20" : "left-64"}`} />
       <div className={`flex-1 transition-all duration-300 min-h-screen w-full ${menuReduzido ? "ml-20" : "ml-64"} flex flex-col`}>
-        <Topbar menuReduzido={menuReduzido} />
+        <Topbar 
+          menuReduzido={menuReduzido} 
+          breadcrumb={{
+            items: [
+              { label: "Home", path: "/" },
+              { label: "Meus roteiros", path: "/" },
+              { 
+                label: nomeGrupo 
+                  ? cidadeSelecionada 
+                    ? `Mapa - ${nomeGrupo} > ${cidadeSelecionada}${semanaSelecionada ? ` (Semana ${semanaSelecionada})` : ''}`
+                    : `Mapa - ${nomeGrupo}`
+                  : "Mapa" 
+              }
+            ]
+          }}
+        />
         <div className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`} />
         <div className="w-full overflow-x-auto pt-20 flex-1 overflow-auto">
           <h1 className="text-lg font-bold text-[#222] tracking-wide mb-4 uppercase font-sans mt-4 pl-6">
@@ -303,6 +513,9 @@ export const Mapa: React.FC = () => {
                 </tbody>
               </table>
               <p className="mb-6 text-[#222] text-base">Selecione a praça e a semana do roteiro para visualizar o mapa em html.</p>
+              
+              {/* Componente de Status */}
+              <StatusMessage />
               
               {erro && (
                 <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded">
@@ -338,7 +551,7 @@ export const Mapa: React.FC = () => {
                   onChange={e => setSemanaSelecionada(e.target.value)}
                   disabled={!semanas.length}
                 >
-                  <option value="">Ex.: São Paulo</option>
+                  <option value="">Ex.: Semana 1 - 1</option>
                   {semanas.map((semana, idx) => (
                     <option key={idx} value={semana.semanaInicial_vl}>{`Semana ${semana.semanaInicial_vl} - ${semana.semanaFinal_vl}`}</option>
                   ))}
@@ -353,21 +566,90 @@ export const Mapa: React.FC = () => {
                   const maxHex = hexagonos.reduce((a, b) => (a.calculatedFluxoEstimado_vl > b.calculatedFluxoEstimado_vl ? a : b));
                   const minHex = hexagonos.reduce((a, b) => (a.calculatedFluxoEstimado_vl < b.calculatedFluxoEstimado_vl ? a : b));
                   const grupos = Array.from(new Set(hexagonos.map(h => h.grupoDesc_st))).filter(Boolean);
+                  const areaCoberta = hexagonos.length * 0.36; // Aproximação: cada hexágono ~0.36 km²
+                  
                   return (
-                    <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded">
-                      <h4 className="text-sm font-bold text-green-700 mb-1">Dados carregados</h4>
-                      <p className="text-xs text-green-600">{hexagonos.length} hexágonos encontrados</p>
-                      <p className="text-xs text-green-600">Fluxo total estimado: {totalFluxo.toLocaleString()}</p>
-                      <p className="text-xs text-green-600">Fluxo médio por hexágono: {fluxoMedio.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
-                      <p className="text-xs text-green-600">Maior fluxo: {maxHex.calculatedFluxoEstimado_vl.toLocaleString()} (Hexágono {maxHex.hexagon_pk})</p>
-                      <p className="text-xs text-green-600">Menor fluxo: {minHex.calculatedFluxoEstimado_vl.toLocaleString()} (Hexágono {minHex.hexagon_pk})</p>
-                      <p className="text-xs text-green-600">Grupos presentes: {grupos.join(', ')}</p>
+                    <div className="mb-4 p-4 bg-gradient-to-br from-green-50 to-blue-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-lg">📊</span>
+                        <h4 className="text-sm font-bold text-green-700">Resumo dos Dados</h4>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div className="bg-white p-2 rounded border">
+                          <div className="font-semibold text-gray-700">Pontos no mapa</div>
+                          <div className="text-green-600 font-bold">{formatNumber(hexagonos.length)}</div>
+                        </div>
+                        <div className="bg-white p-2 rounded border">
+                          <div className="font-semibold text-gray-700">Área coberta</div>
+                          <div className="text-blue-600 font-bold">~{formatNumber(areaCoberta)} km²</div>
+                        </div>
+                        <div className="bg-white p-2 rounded border">
+                          <div className="font-semibold text-gray-700">Fluxo total</div>
+                          <div className="text-purple-600 font-bold">{formatNumber(totalFluxo)}</div>
+                        </div>
+                        <div className="bg-white p-2 rounded border">
+                          <div className="font-semibold text-gray-700">Fluxo médio</div>
+                          <div className="text-orange-600 font-bold">{formatNumber(fluxoMedio)}</div>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-3 p-2 bg-white rounded border">
+                        <div className="text-xs text-gray-600 mb-1">
+                          <strong>Extremos:</strong> {formatNumber(minHex.calculatedFluxoEstimado_vl)} (mín) → {formatNumber(maxHex.calculatedFluxoEstimado_vl)} (máx)
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          <strong>Grupos:</strong> {grupos.length > 0 ? grupos.join(', ') : 'Nenhum grupo definido'}
+                        </div>
+                      </div>
+                      
+                      {lastSearchInfo && (
+                        <div className="mt-2 text-xs text-gray-500 italic">
+                          Última atualização: {getTimeAgo(lastSearchInfo.timestamp)}
+                        </div>
+                      )}
                     </div>
                   );
                 })()
               )}
               
-              {/* Remover o botão de testar API */}
+              {/* Seção de Dicas e Ajuda */}
+              <div className="mt-6 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">💡</span>
+                  <h4 className="text-sm font-bold text-blue-700">Dicas de Uso</h4>
+                </div>
+                
+                <div className="space-y-2 text-xs text-blue-800">
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-600">•</span>
+                    <span>Clique nos pontos do mapa para ver detalhes</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-600">•</span>
+                    <span>Use o zoom para explorar áreas específicas</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-600">•</span>
+                    <span>Selecione uma semana para filtrar dados específicos</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-600">•</span>
+                    <span>As cores indicam diferentes grupos de planejamento</span>
+                  </div>
+                </div>
+                
+                {hexagonos.length === 0 && (
+                  <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded">
+                    <p className="text-xs text-yellow-800">
+                      <strong>Não encontrou dados?</strong><br/>
+                      • Verifique se a praça possui planejamento cadastrado<br/>
+                      • Tente selecionar outra semana<br/>
+                      • Entre em contato com o suporte se o problema persistir
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
             {/* Coluna do mapa */}
             <div className="flex-1 h-full w-full" style={{ minHeight: 320, background: '#fff', borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e5e5', marginBottom: 48, position: 'relative' }}>
@@ -379,18 +661,33 @@ export const Mapa: React.FC = () => {
                   left: 0,
                   width: '100%',
                   height: '100%',
-                  background: 'rgba(255,255,255,0.92)',
+                  background: 'rgba(255,255,255,0.95)',
                   zIndex: 2000,
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: 18,
-                  color: '#222',
-                  fontWeight: 500
+                  padding: 20
                 }}>
-                  <div style={{ marginBottom: 12 }}>Selecione a praça e a semana para visualizar o mapa</div>
-                  {/* Futuramente pode adicionar botão ou instrução extra aqui */}
+                  <div style={{ textAlign: 'center', maxWidth: 400 }}>
+                    <div style={{ fontSize: 48, marginBottom: 16 }}>🗺️</div>
+                    <h3 style={{ fontSize: 24, fontWeight: 600, color: '#222', marginBottom: 12 }}>
+                      Mapa de Roteiros
+                    </h3>
+                    <p style={{ fontSize: 16, color: '#666', marginBottom: 20, lineHeight: 1.5 }}>
+                      Para visualizar o mapa, selecione uma praça no painel à esquerda e opcionalmente uma semana específica.
+                    </p>
+                    <div style={{ 
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+                      color: 'white', 
+                      padding: '12px 24px', 
+                      borderRadius: 8,
+                      fontSize: 14,
+                      fontWeight: 500
+                    }}>
+                      💡 Dica: Comece selecionando uma praça para ver os dados disponíveis
+                    </div>
+                  </div>
                 </div>
               )}
               {/* Loading overlay após seleção da praça */}
@@ -401,14 +698,23 @@ export const Mapa: React.FC = () => {
                   left: 0,
                   width: '100%',
                   height: '100%',
-                  background: 'rgba(255,255,255,0.7)',
+                  background: 'rgba(255,255,255,0.8)',
                   zIndex: 1500,
                   display: 'flex',
+                  flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center'
                 }}>
-                  <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-blue-500 border-solid"></div>
-                  <span style={{ marginLeft: 16, color: '#2563eb', fontWeight: 500 }}>Carregando mapa...</span>
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-blue-500 border-solid mb-4"></div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ color: '#2563eb', fontWeight: 600, fontSize: 16, marginBottom: 4 }}>
+                      🗺️ Carregando mapa...
+                    </div>
+                    <div style={{ color: '#666', fontSize: 14 }}>
+                      Processando dados para {cidadeSelecionada}
+                      {semanaSelecionada && ` (semana ${semanaSelecionada})`}
+                    </div>
+                  </div>
                 </div>
               )}
               <MapContainer
@@ -431,12 +737,21 @@ export const Mapa: React.FC = () => {
                     }}
                   >
                     <Popup>
-                      <div>
-                        <strong>Hexágono:</strong> {hex.hexagon_pk}<br />
-                        <strong>Fluxo estimado:</strong> {hex.fluxoEstimado_vl}<br />
-                        <strong>Grupo:</strong> {hex.grupoDesc_st}<br />
-                        <strong>Cor:</strong> {hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`}<br />
-                        <strong>Centro:</strong> {hex.hex_centroid_lat}, {hex.hex_centroid_lon}
+                      <div style={{ minWidth: 200 }}>
+                        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8, color: '#2563eb' }}>
+                          📍 Hexágono #{hex.hexagon_pk}
+                        </div>
+                        <div style={{ fontSize: 12, lineHeight: 1.4 }}>
+                          <div><strong>Fluxo estimado:</strong> {formatNumber(hex.fluxoEstimado_vl)}</div>
+                          <div><strong>Fluxo calculado:</strong> {formatNumber(hex.calculatedFluxoEstimado_vl)}</div>
+                          <div><strong>Grupo:</strong> {hex.grupoDesc_st || 'Não definido'}</div>
+                          <div><strong>Plano:</strong> {hex.planoMidiaDesc_st || 'Não definido'}</div>
+                          <div style={{ marginTop: 6, fontSize: 11, color: '#666' }}>
+                            <strong>Coordenadas:</strong><br/>
+                            Lat: {hex.hex_centroid_lat.toFixed(6)}<br/>
+                            Lon: {hex.hex_centroid_lon.toFixed(6)}
+                          </div>
+                        </div>
                       </div>
                     </Popup>
                   </Polygon>
@@ -449,9 +764,14 @@ export const Mapa: React.FC = () => {
                     radius={getRadius(hex.calculatedFluxoEstimado_vl)}
                   >
                     <Popup>
-                      <div>
-                        <strong>Hexágono:</strong> {hex.hexagon_pk}<br />
-                        <strong>Fluxo:</strong> {hex.fluxoEstimado_vl}
+                      <div style={{ minWidth: 180 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#2563eb' }}>
+                          📍 Hexágono #{hex.hexagon_pk}
+                        </div>
+                        <div style={{ fontSize: 12, lineHeight: 1.3 }}>
+                          <div><strong>Fluxo:</strong> {formatNumber(hex.fluxoEstimado_vl)}</div>
+                          <div><strong>Calculado:</strong> {formatNumber(hex.calculatedFluxoEstimado_vl)}</div>
+                        </div>
                       </div>
                     </Popup>
                   </CircleMarker>
@@ -462,30 +782,44 @@ export const Mapa: React.FC = () => {
             {hexagonos.length > 0 && (
               <div style={{ position: 'absolute', bottom: 96, right: 64, display: 'flex', gap: 24, flexWrap: 'wrap', zIndex: 1000 }}>
                 {/* Legenda do tamanho */}
-                <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 120 }}>
-                  <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>Legenda do tamanho</div>
+                <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
+                  <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>📏 Tamanho dos Pontos</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <svg width={24} height={24} style={{ display: 'block' }}>
                       <circle cx={12} cy={12} r={6} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
                     </svg>
-                    <span style={{ fontSize: 11, color: '#444' }}>Menor fluxo<br/>{minFluxo.toLocaleString()}</span>
+                    <span style={{ fontSize: 11, color: '#444' }}>Menor fluxo<br/><strong>{formatNumber(minFluxo)}</strong></span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <svg width={40} height={40} style={{ display: 'block' }}>
                       <circle cx={20} cy={20} r={20} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
                     </svg>
-                    <span style={{ fontSize: 11, color: '#444' }}>Maior fluxo<br/>{maxFluxo.toLocaleString()}</span>
+                    <span style={{ fontSize: 11, color: '#444' }}>Maior fluxo<br/><strong>{formatNumber(maxFluxo)}</strong></span>
                   </div>
                 </div>
+                
                 {/* Legenda de grupos */}
-                <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 120 }}>
-                  <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>Legenda de grupos</div>
+                <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
+                  <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>🎨 Grupos de Planejamento</div>
                   {Array.from(new Map(hexagonos.map(h => [h.grupoDesc_st, h]))).map(([grupo, hex]) => (
                     <div key={grupo} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                       <span style={{ display: 'inline-block', width: 18, height: 18, borderRadius: '50%', background: hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`, border: '2px solid #888' }}></span>
-                      <span style={{ fontSize: 12, color: '#444' }}>{grupo || 'Sem grupo'}</span>
+                      <span style={{ fontSize: 11, color: '#444' }}>{grupo || 'Sem grupo'}</span>
                     </div>
                   ))}
+                </div>
+                
+                {/* Informações rápidas */}
+                <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
+                  <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>ℹ️ Informações</div>
+                  <div style={{ fontSize: 11, color: '#444', lineHeight: 1.4 }}>
+                    <div><strong>Total:</strong> {formatNumber(hexagonos.length)} pontos</div>
+                    <div><strong>Área:</strong> ~{formatNumber(hexagonos.length * 0.36)} km²</div>
+                    <div><strong>Última atualização:</strong></div>
+                    <div style={{ fontSize: 10, color: '#666' }}>
+                      {lastSearchInfo ? getTimeAgo(lastSearchInfo.timestamp) : 'Agora'}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
