@@ -1,0 +1,1 @@
+export { Mapa } from './Mapa'; 

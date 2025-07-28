@@ -9,6 +9,8 @@ import { Delete4 } from "../../icons/Delete4";
 import { Pagination } from "./sections/Pagination";
 import api from "../../config/axios";
 import { LoadingColmeia } from "./components/LoadingColmeia";
+import { PinDrop } from "../../icons/PinDrop/PinDrop";
+import { Link } from "react-router-dom";
 
 // Definir a interface dos dados da view
 interface Roteiro {
@@ -93,7 +95,15 @@ export const MeusRoteiros: React.FC = () => {
           className={`fixed top-0 z-20 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? "left-20" : "left-64"}`}
         />
         <div className={`flex-1 transition-all duration-300 min-h-screen w-full ${menuReduzido ? "ml-20" : "ml-64"} flex flex-col`}>
-          <Topbar menuReduzido={menuReduzido} />
+          <Topbar 
+            menuReduzido={menuReduzido} 
+            breadcrumb={{
+              items: [
+                { label: "Home", path: "/" },
+                { label: "Meus roteiros", path: "/" }
+              ]
+            }}
+          />
           <div
             className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`}
           />
@@ -158,12 +168,16 @@ export const MeusRoteiros: React.FC = () => {
                         key={idx}
                         className={`${idx % 2 === 0 ? "bg-[#f7f7f7]" : "bg-white"} hover:bg-[#ececec] transition-colors duration-200`}
                       >
-                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans max-w-xs truncate">{item.planoMidiaDesc_st_concat}</td>
+                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans max-w-xs truncate">{item.planoMidiaGrupo_st}</td>
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{formatarData(item.date_dh)}</td>
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.planoMidiaType_st}</td>
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.semanasMax_vl} {item.semanasMax_vl === 1 ? 'semana' : 'semanas'}</td>
                         <td className="text-[#222] text-xs px-6 py-4 whitespace-nowrap text-right flex items-center gap-4 justify-end font-sans">
-                          <StyleOutlined7 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
+                          <Link to={`/mapa?grupo=${item.planoMidiaGrupo_pk}`}>
+                            <PinDrop
+                              className="w-6 h-6 transition-transform duration-200 hover:scale-110 cursor-pointer text-[#3A3A3A] hover:text-[#FF9800]"
+                            />
+                          </Link>
                           <Difference4 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
                           <Delete4 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
                         </td>

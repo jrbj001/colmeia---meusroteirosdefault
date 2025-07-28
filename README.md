@@ -1,126 +1,212 @@
-# Colmeia Meus Roteiros - Guia Completo
+# 🍯 Colmeia - Meus Roteiros
 
-## Pré-requisitos
+**Aplicação 100% Serverless na Vercel** - Frontend React + API Serverless Functions
 
-- [NodeJS](https://nodejs.org/en/) instalado na máquina.
-- Conta na [Vercel](https://vercel.com/) para deploy.
+## 📋 Visão Geral
 
----
+Sistema de gestão de roteiros de mídia desenvolvido com React (Vite + TypeScript) no frontend e Node.js serverless functions no backend, totalmente hospedado na Vercel.
 
-## 1. Instalação
+### 🏗️ Arquitetura
 
-```bash
-npm install
+```
+├── api/                    # 🚀 Serverless Functions (Vercel)
+│   ├── debug.js           # Endpoint de debug/health check
+│   ├── roteiros.js        # Listagem de roteiros paginada
+│   ├── cidades.js         # Busca cidades por grupo
+│   ├── semanas.js         # Busca semanas por desc_pk
+│   ├── pivot-descpks.js   # Pivot de descrições
+│   └── db.js              # Configuração do SQL Server
+├── src/                   # 🎨 Frontend React
+│   ├── components/        # Componentes reutilizáveis
+│   ├── screens/           # Páginas principais
+│   ├── icons/             # Ícones SVG
+│   └── config/            # Configuração Axios
+├── vercel.json            # ⚙️ Configuração Vercel (vazio = convenções padrão)
+└── package.json           # 📦 Dependências e scripts
 ```
 
----
+## 🚀 Deploy Rápido
 
-## 2. Configuração de Ambiente
+**1 comando para publicar na Vercel:**
 
-### Backend (.env)
+```bash
+vercel --prod
+```
 
-Crie um arquivo `.env` na raiz com:
+## 🛠️ Desenvolvimento Local
 
+### **Pré-requisitos**
+- Node.js 18+
+- Acesso ao SQL Server (variáveis de ambiente)
+
+### **1. Configurar Variáveis de Ambiente**
+Crie `.env.local` na raiz:
 ```env
-DB_USER=seu_usuario
-DB_PASSWORD=sua_senha
-DB_SERVER=seu_servidor
+DB_SERVER=seu_servidor_sql
 DB_DATABASE=seu_banco
-NODE_ENV=development
+DB_USER=seu_usuario  
+DB_PASSWORD=sua_senha
 ```
 
-### Frontend (.env.local)
-
-Para desenvolvimento local, crie `.env.local` na raiz com:
-
-```
-VITE_API_URL=/api
-```
-
-> **Em produção (Vercel), defina `VITE_API_URL=https://seu-projeto.vercel.app/api` nas variáveis de ambiente do painel da Vercel.**
-
----
-
-## 3. Modos de Execução
-
-### **A) Desenvolvimento Local (Frontend + Backend separados, hot reload)**
-
-1. **Terminal 1:**  
-   ```bash
-   vercel dev
-   ```
-   (roda o backend serverless e simula o ambiente Vercel em http://localhost:3000)
-
-2. **Terminal 2:**  
-   ```bash
-   npm run dev
-   ```
-   (roda o frontend Vite em http://localhost:5173)
-
-- O proxy do Vite já está configurado para redirecionar `/api` para o backend.
-
----
-
-### **B) Testar o Build de Produção Localmente**
-
-1. Gere o build:
-   ```bash
-   npm run build
-   ```
-2. Rode o preview:
-   ```bash
-   npm run preview
-   ```
-3. Acesse: [http://localhost:4173](http://localhost:4173)
-
-> **Obs:** O backend serverless não é simulado nesse modo, apenas o frontend estático.
-
----
-
-### **C) Simular Ambiente Vercel Localmente**
-
+### **2. Instalar e Rodar**
 ```bash
+# Instalar dependências
+npm install
+
+# Rodar em modo desenvolvimento
 vercel dev
 ```
-- Tudo disponível em [http://localhost:3000](http://localhost:3000)
-- Frontend e backend (API) juntos, igual produção.
+
+✅ **Acesse:** http://localhost:3000  
+✅ **APIs:** http://localhost:3000/api/*
+
+## 📡 API Endpoints
+
+### **GET /api/debug**
+```json
+{
+  "ok": true,
+  "msg": "Debug endpoint funcionando!",
+  "timestamp": "2025-07-10T12:17:52.052Z"
+}
+```
+
+### **GET /api/roteiros?page=1**
+```json
+{
+  "data": [...],
+  "pagination": {
+    "currentPage": 1,
+    "totalPages": 25,
+    "totalItems": 1234,
+    "pageSize": 50
+  }
+}
+```
+
+### **GET /api/cidades?grupo=GRUPO_ID**
+```json
+{
+  "cidades": ["CIDADE1", "CIDADE2"],
+  "nomeGrupo": "Nome do Grupo"
+}
+```
+
+### **GET /api/semanas?desc_pk=123**
+```json
+{
+  "semanas": [
+    {"semanaInicial_vl": 1, "semanaFinal_vl": 4}
+  ]
+}
+```
+
+## 🗄️ Banco de Dados
+
+**SQL Server** - Views utilizadas:
+- `serv_product_be180.planoMidiaGrupo_dm_vw`
+- Outras views relacionadas para cidades e semanas
+
+## 📱 Frontend
+
+**Tecnologias:**
+- ⚛️ React 18 + TypeScript  
+- 🏗️ Vite (build ultra-rápido)
+- 🎨 Tailwind CSS
+- 🧭 React Router
+- 📡 Axios (requisições API)
+
+**Páginas:**
+- `/` - Lista de roteiros (tabela paginada)
+- `/mapa?grupo=ID` - Visualização em mapa
+
+## 🚀 Vercel Deploy
+
+### **Configuração Automática**
+```bash
+# Deploy de produção
+vercel --prod
+
+# Deploy de preview
+vercel
+```
+
+### **Variáveis de Ambiente na Vercel**
+Configure no dashboard da Vercel:
+- `DB_SERVER`
+- `DB_DATABASE` 
+- `DB_USER`
+- `DB_PASSWORD`
+
+### **URLs de Deploy**
+- **Produção:** `https://colmeia-meusroteirosdefault.vercel.app`
+- **Preview:** `https://colmeia-meusroteirosdefault-*.vercel.app`
+
+## 🔧 Scripts Disponíveis
+
+```bash
+npm run dev      # Vite dev (apenas frontend)
+npm run build    # Build para produção
+npm run preview  # Preview do build local
+vercel dev       # Desenvolvimento full-stack (recomendado)
+```
+
+## 📦 Dependências
+
+**Frontend:**
+- `react`, `react-dom`, `react-router-dom`
+- `axios` (HTTP client)
+- `tailwindcss` (CSS framework)
+
+**Backend:**
+- `mssql` (SQL Server driver)
+
+**Dev:**
+- `vite`, `typescript`
+- `@types/*` (tipos TypeScript)
+
+## 🎯 Funcionalidades
+
+✅ **Listagem de roteiros paginada**  
+✅ **Busca de cidades por grupo**  
+✅ **Visualização de semanas**  
+✅ **Interface responsiva**  
+✅ **100% Serverless (Vercel)**  
+✅ **TypeScript**  
+✅ **Hot reload em desenvolvimento**
+
+## 🔄 Fluxo de Desenvolvimento
+
+1. **Desenvolvimento:** `vercel dev` (frontend + API local)
+2. **Test:** Deploy preview com `vercel`  
+3. **Produção:** Deploy com `vercel --prod`
+
+## 🆘 Troubleshooting
+
+### **API não funciona localmente**
+```bash
+# Verificar se vercel dev está rodando
+vercel dev
+
+# Testar endpoint
+curl http://localhost:3000/api/debug
+```
+
+### **Erro de banco**
+- Verificar variáveis de ambiente em `.env.local`
+- Confirmar acesso ao SQL Server
+- Verificar firewall/VPN
+
+### **Build falha**
+```bash
+# Limpar cache
+rm -rf node_modules package-lock.json
+npm install
+
+# Rebuild
+npm run build
+```
 
 ---
 
-## 4. Deploy na Vercel
-
-1. Suba o código para o GitHub/GitLab.
-2. Importe o projeto na Vercel.
-3. Configure as variáveis de ambiente:
-   - `DB_USER`
-   - `DB_PASSWORD`
-   - `DB_SERVER`
-   - `DB_DATABASE`
-   - `NODE_ENV=production`
-   - `VITE_API_URL=https://seu-projeto.vercel.app/api`
-4. Build Command: `npm run build`
-5. Output Directory: `dist`
-6. Deploy!
-
----
-
-## 5. Dicas e Restrições
-
-- **Nunca coloque segredos no frontend** (qualquer variável começando com `VITE_` vai para o browser).
-- Sempre use `/api` como base para chamadas no frontend.
-- O backend só funciona como serverless na Vercel ou com `vercel dev` localmente.
-- Para rodar tudo igual produção, sempre use `vercel dev`.
-
----
-
-## 6. Testando a API
-
-- Teste endpoints com:
-  ```bash
-  curl http://localhost:3000/api/roteiros
-  ```
-- O frontend deve consumir a API via `/api/roteiros`.
-
----
-
-Se seguir este guia, seu projeto funcionará igual localmente e em produção na Vercel!
+**💡 Dica:** Este projeto usa as convenções padrão da Vercel, mantendo a configuração mínima para máxima compatibilidade.
