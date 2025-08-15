@@ -6,6 +6,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute/ProtectedRoute";
 import { Login } from "./screens/Login";
 import { MeusRoteiros } from "./screens/MeusRoteiros";
 import { Mapa } from "./screens/Mapa";
+import { CriarRoteiro } from "./screens/CriarRoteiro";
 import '../tailwind.css';
 import 'leaflet/dist/leaflet.css';
 
@@ -28,6 +29,14 @@ createRoot(document.getElementById("app") as HTMLElement).render(
             element={
               <ProtectedRoute>
                 <Mapa />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/criar-roteiro" 
+            element={
+              <ProtectedRoute>
+                <CriarRoteiro />
               </ProtectedRoute>
             } 
           />
