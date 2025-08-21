@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { Topbar } from "../../components/Topbar/Topbar";
+import { useAuth } from "../../contexts/AuthContext";
 import axios from "../../config/axios";
 
 interface Agencia {
@@ -22,6 +23,7 @@ interface Cidade {
   id_cidade: number;
   nome_cidade: string;
   nome_estado: string;
+  codigo_ibge?: string;
 }
 
 interface TargetGenero {
@@ -37,6 +39,7 @@ interface TargetFaixaEtaria {
 }
 
 export const CriarRoteiro: React.FC = () => {
+  const { user } = useAuth();
   const [menuReduzido, setMenuReduzido] = useState(false);
   const [tipoRoteiro, setTipoRoteiro] = useState("");
   const [nomeRoteiro, setNomeRoteiro] = useState("");
@@ -79,6 +82,15 @@ export const CriarRoteiro: React.FC = () => {
   const [showDropdownCidades, setShowDropdownCidades] = useState(false);
   const [cidadesSelecionadas, setCidadesSelecionadas] = useState<Cidade[]>([]);
   const [inventarioCidades, setInventarioCidades] = useState<{[key: string]: any}>({});
+  
+  // Estados para controle de salvamento
+  const [planoMidiaGrupo_pk, setPlanoMidiaGrupo_pk] = useState<number | null>(null);
+  const [planoMidiaDesc_pks, setPlanoMidiaDesc_pks] = useState<number[]>([]);
+  const [planoMidia_pks, setPlanoMidia_pks] = useState<number[]>([]);
+  const [salvandoAba1, setSalvandoAba1] = useState(false);
+  const [salvandoAba2, setSalvandoAba2] = useState(false);
+  const [salvandoAba3, setSalvandoAba3] = useState(false);
+  const [cidadesSalvas, setCidadesSalvas] = useState<Cidade[]>([]);
 
   // Carregar dados dos combos
   useEffect(() => {
@@ -217,17 +229,169 @@ export const CriarRoteiro: React.FC = () => {
     setCidadesSelecionadas(cidadesSelecionadas.filter(c => c.id_cidade !== id_cidade));
   };
 
+  // Função para verificar se as cidades mudaram desde o último salvamento
+  const cidadesMudaram = () => {
+    if (cidadesSelecionadas.length !== cidadesSalvas.length) return true;
+    
+    return cidadesSelecionadas.some(cidade => 
+      !cidadesSalvas.find(salva => salva.id_cidade === cidade.id_cidade)
+    );
+  };
+
+  // Função para gerar o string do plano mídia grupo
+  const gerarPlanoMidiaGrupoString = () => {
+    const hoje = new Date();
+    const ano = hoje.getFullYear();
+    const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+    const dia = String(hoje.getDate()).padStart(2, '0');
+    const dataFormatada = `${ano}${mes}${dia}`;
+    
+    // Remover caracteres especiais e espaços do nome do roteiro
+    const nomeFormatado = nomeRoteiro.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
+    
+    return `${dataFormatada}_${nomeFormatado}`;
+  };
+
+  // Função para salvar Aba 1 - Criar Plano Mídia Grupo
+  const salvarAba1 = async () => {
+    if (!nomeRoteiro.trim()) {
+      alert('Nome do roteiro é obrigatório');
+      return;
+    }
+
+    setSalvandoAba1(true);
+    try {
+      const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
+      
+      const response = await axios.post('/plano-midia-grupo', {
+        planoMidiaGrupo_st
+      });
+
+      if (response.data && response.data[0]?.new_pk) {
+        const newPk = response.data[0].new_pk;
+        setPlanoMidiaGrupo_pk(newPk);
+        alert(`Roteiro criado com sucesso! PK: ${newPk}`);
+      } else {
+        throw new Error('Resposta inválida do servidor');
+      }
+    } catch (error) {
+      console.error('Erro ao salvar Aba 1:', error);
+      alert('Erro ao salvar roteiro. Tente novamente.');
+    } finally {
+      setSalvandoAba1(false);
+    }
+  };
+
+  // Função para salvar Aba 2 - Salvar apenas configurações de target
+  const salvarAba2 = async () => {
+    if (!planoMidiaGrupo_pk) {
+      alert('É necessário salvar a Aba 1 primeiro');
+      return;
+    }
+
+    if (!genero || !classe || !faixaEtaria) {
+      alert('Todos os campos de target são obrigatórios');
+      return;
+    }
+
+    if (!user) {
+      alert('Usuário não está logado');
+      return;
+    }
+
+    setSalvandoAba2(true);
+    try {
+      // Por enquanto, apenas salvamos a configuração de target
+      // As cidades serão associadas quando a aba 3 for salva
+      alert(`Target configurado com sucesso!\nGênero: ${genero}\nClasse: ${classe}\nFaixa Etária: ${faixaEtaria}`);
+      
+      // Marcar como configurado (você pode adicionar um estado específico se necessário)
+      setPlanoMidiaDesc_pks([1]); // Valor temporário para indicar que foi configurado
+    } catch (error) {
+      console.error('Erro ao salvar Aba 2:', error);
+      alert('Erro ao salvar configuração de target. Tente novamente.');
+    } finally {
+      setSalvandoAba2(false);
+    }
+  };
+
+  // Função para salvar Aba 3 - Criar Plano Mídia Desc e Plano Mídia com cidades
+  const salvarAba3 = async () => {
+    if (planoMidiaDesc_pks.length === 0) {
+      alert('É necessário salvar a Aba 2 primeiro');
+      return;
+    }
+
+    if (cidadesSelecionadas.length === 0) {
+      alert('É necessário selecionar pelo menos uma cidade');
+      return;
+    }
+
+    if (!user) {
+      alert('Usuário não está logado');
+      return;
+    }
+
+    setSalvandoAba3(true);
+    try {
+      const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
+      
+      // 1. Criar plano mídia desc para cada cidade
+      const recordsJson = cidadesSelecionadas.map(cidade => ({
+        planoMidiaDesc_st: `${planoMidiaGrupo_st}_${cidade.nome_cidade.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`,
+        usuarioId_st: user.id,
+        usuarioName_st: user.name,
+        gender_st: genero,
+        class_st: classe,
+        age_st: faixaEtaria,
+        ibgeCode_vl: cidade.codigo_ibge || cidade.id_cidade.toString()
+      }));
+
+      const descResponse = await axios.post('/plano-midia-desc', {
+        planoMidiaGrupo_pk,
+        recordsJson
+      });
+
+      if (descResponse.data && Array.isArray(descResponse.data)) {
+        const descPks = descResponse.data.map(item => item.new_pk);
+        
+        // 2. Criar plano mídia para cada desc criado
+        const periodsJson = descPks.map(pk => ({
+          planoMidiaDesc_pk: pk.toString(),
+          semanaInicial_vl: "1",
+          semanaFinal_vl: "12",
+          versao_vl: "1"
+        }));
+
+        const midiaResponse = await axios.post('/plano-midia', {
+          periodsJson
+        });
+
+        if (midiaResponse.data && Array.isArray(midiaResponse.data)) {
+          const midiaPks = midiaResponse.data.map(item => item.new_pk);
+          
+          // Salvar os dados para controlar o estado do botão
+          setPlanoMidia_pks(midiaPks);
+          setCidadesSalvas([...cidadesSelecionadas]);
+          
+          alert(`Roteiro criado com sucesso!\n\nCidades: ${cidadesSelecionadas.map(c => c.nome_cidade).join(', ')}\nPlano Mídia Desc PKs: ${descPks.join(', ')}\nPlano Mídia PKs: ${midiaPks.join(', ')}`);
+        } else {
+          throw new Error('Erro na criação do plano mídia');
+        }
+      } else {
+        throw new Error('Erro na criação do plano mídia desc');
+      }
+    } catch (error) {
+      console.error('Erro ao salvar Aba 3:', error);
+      alert('Erro ao criar roteiro com cidades. Tente novamente.');
+    } finally {
+      setSalvandoAba3(false);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Dados do roteiro:", {
-      tipoRoteiro,
-      nomeRoteiro,
-      agencia,
-      valorCampanha,
-      marca,
-      categoria
-    });
-    // Aqui virá a lógica de insert
+    // Esta função não será mais utilizada, cada aba tem seu próprio botão salvar
   };
 
 
@@ -555,10 +719,18 @@ export const CriarRoteiro: React.FC = () => {
                     {/* Botão Salvar */}
                     <div className="mt-16 flex justify-start">
                       <button
-                        type="submit"
-                        className="w-[200px] h-[50px] bg-[#d9d9d9] text-[#b3b3b3] rounded-lg border border-[#b3b3b3] hover:bg-[#b3b3b3] hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base"
+                        type="button"
+                        onClick={salvarAba1}
+                        disabled={salvandoAba1 || !nomeRoteiro.trim()}
+                        className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base ${
+                          salvandoAba1 || !nomeRoteiro.trim()
+                            ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
+                            : planoMidiaGrupo_pk
+                            ? 'bg-green-500 text-white border-green-500 hover:bg-green-600'
+                            : 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600'
+                        }`}
                       >
-                        Salvar
+                        {salvandoAba1 ? 'Salvando...' : planoMidiaGrupo_pk ? '✓ Salvo' : 'Salvar'}
                       </button>
                     </div>
                   </form>
@@ -678,10 +850,18 @@ export const CriarRoteiro: React.FC = () => {
                     {/* Botão Salvar */}
                     <div className="mt-16 flex justify-start">
                       <button
-                        type="submit"
-                        className="w-[200px] h-[50px] bg-[#d9d9d9] text-[#b3b3b3] rounded-lg border border-[#b3b3b3] hover:bg-[#b3b3b3] hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base"
+                        type="button"
+                        onClick={salvarAba2}
+                        disabled={salvandoAba2 || !planoMidiaGrupo_pk || !genero || !classe || !faixaEtaria}
+                        className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base ${
+                          salvandoAba2 || !planoMidiaGrupo_pk || !genero || !classe || !faixaEtaria
+                            ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
+                            : planoMidiaDesc_pks.length > 0
+                            ? 'bg-green-500 text-white border-green-500 hover:bg-green-600'
+                            : 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600'
+                        }`}
                       >
-                        Salvar
+                        {salvandoAba2 ? 'Salvando...' : planoMidiaDesc_pks.length > 0 ? '✓ Salvo' : 'Salvar'}
                       </button>
                     </div>
                   </form>
@@ -863,10 +1043,18 @@ export const CriarRoteiro: React.FC = () => {
                     {/* Botão Salvar */}
                     <div className="mt-16 flex justify-start">
                       <button
-                        type="submit"
-                        className="w-[200px] h-[50px] bg-[#ff4600] text-white rounded-lg hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 text-base font-medium"
+                        type="button"
+                        onClick={salvarAba3}
+                        disabled={salvandoAba3 || planoMidiaDesc_pks.length === 0 || cidadesSelecionadas.length === 0}
+                        className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base font-medium ${
+                          salvandoAba3 || planoMidiaDesc_pks.length === 0 || cidadesSelecionadas.length === 0
+                            ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
+                            : planoMidia_pks.length > 0 && !cidadesMudaram()
+                            ? 'bg-green-500 text-white border-green-500 hover:bg-green-600'
+                            : 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600'
+                        }`}
                       >
-                        Salvar
+                        {salvandoAba3 ? 'Salvando...' : planoMidia_pks.length > 0 && !cidadesMudaram() ? '✓ Salvo' : 'Salvar'}
                       </button>
                     </div>
                   </form>
