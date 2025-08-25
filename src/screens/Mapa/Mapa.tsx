@@ -125,6 +125,9 @@ export const Mapa: React.FC = () => {
       api.get(`cidades?grupo=${grupo}`)
         .then(res => {
           console.log("Mapa: resposta da API cidades:", res.data);
+          console.log("Mapa: cidades recebidas:", res.data.cidades);
+          console.log("Mapa: tipo de cidades:", typeof res.data.cidades);
+          console.log("Mapa: cidades é array?", Array.isArray(res.data.cidades));
           setCidades(res.data.cidades);
           if (res.data.nomeGrupo) setNomeGrupo(res.data.nomeGrupo);
           
