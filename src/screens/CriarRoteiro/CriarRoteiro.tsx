@@ -411,12 +411,31 @@ export const CriarRoteiro: React.FC = () => {
 
     setSalvandoAba2(true);
     try {
-      // Por enquanto, apenas salvamos a configuração de target
-      // As cidades serão associadas quando a aba 3 for salva
-      alert(`Target configurado com sucesso!\nGênero: ${genero}\nClasse: ${classe}\nFaixa Etária: ${faixaEtaria}`);
+      // Criar um registro temporário de target (sem cidade ainda)
+      const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
       
-      // Marcar como configurado (você pode adicionar um estado específico se necessário)
-      setPlanoMidiaDesc_pks([1]); // Valor temporário para indicar que foi configurado
+      const recordsJson = [{
+        planoMidiaDesc_st: `${planoMidiaGrupo_st}_TARGET_TEMP`,
+        usuarioId_st: user.id,
+        usuarioName_st: user.name,
+        gender_st: genero,
+        class_st: classe,
+        age_st: faixaEtaria,
+        ibgeCode_vl: "0000000" // Código temporário
+      }];
+
+      const response = await axios.post('/plano-midia-desc', {
+        planoMidiaGrupo_pk,
+        recordsJson
+      });
+
+      if (response.data && Array.isArray(response.data)) {
+        const descPks = response.data.map(item => item.new_pk);
+        setPlanoMidiaDesc_pks(descPks);
+        alert(`Target configurado com sucesso!\nGênero: ${genero}\nClasse: ${classe}\nFaixa Etária: ${faixaEtaria}\nPKs: ${descPks.join(', ')}`);
+      } else {
+        throw new Error('Resposta inválida do servidor');
+      }
     } catch (error) {
       console.error('Erro ao salvar Aba 2:', error);
       alert('Erro ao salvar configuração de target. Tente novamente.');

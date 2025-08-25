@@ -1,5 +1,4 @@
-const sql = require('mssql');
-const config = require('./db');
+const { sql, getPool } = require('./db');
 
 async function uploadRoteiros(req, res) {
   try {
@@ -9,7 +8,7 @@ async function uploadRoteiros(req, res) {
       return res.status(400).json({ error: 'Dados dos roteiros são obrigatórios' });
     }
 
-    const pool = await sql.connect(config);
+    const pool = await getPool();
     
     // Preparar os dados para inserção
     const roteirosParaInserir = roteiros.map(roteiro => ({
@@ -92,6 +91,4 @@ async function uploadRoteiros(req, res) {
   }
 }
 
-module.exports = {
-  uploadRoteiros
-};
+module.exports = uploadRoteiros;
