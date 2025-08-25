@@ -90,7 +90,14 @@ export const CriarRoteiro: React.FC = () => {
   const [salvandoAba1, setSalvandoAba1] = useState(false);
   const [salvandoAba2, setSalvandoAba2] = useState(false);
   const [salvandoAba3, setSalvandoAba3] = useState(false);
+  const [salvandoAba4, setSalvandoAba4] = useState(false);
   const [cidadesSalvas, setCidadesSalvas] = useState<Cidade[]>([]);
+  
+  // Estados para Aba 4 - Definir vias públicas
+  const [arquivoExcel, setArquivoExcel] = useState<File | null>(null);
+  const [roteirosCarregados, setRoteirosCarregados] = useState<any[]>([]);
+  const [roteirosSalvos, setRoteirosSalvos] = useState<any[]>([]);
+  const [uploadRoteiros_pks, setUploadRoteiros_pks] = useState<number[]>([]);
 
   // Carregar dados dos combos
   useEffect(() => {
@@ -236,6 +243,109 @@ export const CriarRoteiro: React.FC = () => {
     return cidadesSelecionadas.some(cidade => 
       !cidadesSalvas.find(salva => salva.id_cidade === cidade.id_cidade)
     );
+  };
+
+  // Função para verificar se os roteiros mudaram desde o último salvamento
+  const roteirosMudaram = () => {
+    if (roteirosCarregados.length !== roteirosSalvos.length) return true;
+    
+    return roteirosCarregados.some(roteiro => 
+      !roteirosSalvos.find(salvo => salvo.pk === roteiro.pk)
+    );
+  };
+
+  // Função para processar arquivo Excel
+  const processarArquivoExcel = (file: File) => {
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        // Aqui você pode usar uma biblioteca como xlsx para processar o Excel
+        // Por enquanto, vamos simular o processamento
+        const roteirosProcessados = [
+          {
+            pk2: 0,
+            praca_st: "São Paulo",
+            uf_st: "SP",
+            ambiente_st: "Urbano",
+            grupoFormatosMidia_st: "Outdoor",
+            formato_st: "Painel 6x3",
+            tipoMidia_st: "Estático",
+            latitude_vl: -23.5505,
+            longitude_vl: -46.6333,
+            seDigitalInsercoes_vl: 0,
+            seDigitalMaximoInsercoes_vl: 0,
+            seEstaticoVisibilidade_vl: 100,
+            semana_st: "1-12"
+          }
+        ];
+        
+        setRoteirosCarregados(roteirosProcessados);
+        setArquivoExcel(file);
+      } catch (error) {
+        console.error('Erro ao processar arquivo Excel:', error);
+        alert('Erro ao processar arquivo Excel. Verifique o formato.');
+      }
+    };
+    
+    reader.readAsArrayBuffer(file);
+  };
+
+  // Função para salvar Aba 4 - Upload de roteiros
+  const salvarAba4 = async () => {
+    if (!planoMidiaGrupo_pk) {
+      alert('É necessário salvar a Aba 1 primeiro');
+      return;
+    }
+
+    if (planoMidiaDesc_pks.length === 0) {
+      alert('É necessário salvar a Aba 2 primeiro');
+      return;
+    }
+
+    if (planoMidia_pks.length === 0) {
+      alert('É necessário salvar a Aba 3 primeiro');
+      return;
+    }
+
+    if (roteirosCarregados.length === 0) {
+      alert('É necessário carregar um arquivo Excel com roteiros');
+      return;
+    }
+
+    if (!user) {
+      alert('Usuário não está logado');
+      return;
+    }
+
+    setSalvandoAba4(true);
+    try {
+      // Associar os roteiros ao plano mídia grupo
+      const roteirosComPk2 = roteirosCarregados.map(roteiro => ({
+        ...roteiro,
+        pk2: planoMidiaGrupo_pk
+      }));
+
+      const response = await axios.post('/upload-roteiros', {
+        roteiros: roteirosComPk2
+      });
+
+      if (response.data && response.data.roteiros) {
+        const pks = response.data.roteiros.map((r: any) => r.pk);
+        setUploadRoteiros_pks(pks);
+        setRoteirosSalvos([...roteirosCarregados]);
+        
+        alert(`Roteiros salvos com sucesso!\n\nTotal de roteiros: ${roteirosCarregados.length}\nPKs: ${pks.join(', ')}`);
+      } else {
+        throw new Error('Resposta inválida do servidor');
+      }
+    } catch (error) {
+      console.error('Erro ao salvar Aba 4:', error);
+      alert('Erro ao salvar roteiros. Tente novamente.');
+    } finally {
+      setSalvandoAba4(false);
+    }
   };
 
   // Função para gerar o string do plano mídia grupo
@@ -500,9 +610,17 @@ export const CriarRoteiro: React.FC = () => {
                   {abaAtiva === 3 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>}
                 </div>
                 
-                <div className="flex items-center text-[#3a3a3a] mr-8">
-                  <span className="font-bold text-sm mr-2">04</span>
-                  <span>Definir vias públicas</span>
+                <div 
+                  className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
+                    abaAtiva === 4 
+                      ? 'bg-white border-2 border-blue-500 rounded-lg' 
+                      : 'hover:bg-gray-50 rounded-lg'
+                  }`}
+                  onClick={() => setAbaAtiva(4)}
+                >
+                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 4 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>04</span>
+                  <span className={`font-medium ${abaAtiva === 4 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Definir vias públicas</span>
+                  {abaAtiva === 4 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>}
                 </div>
                 
                 <div className="flex items-center text-[#3a3a3a] mr-8">
@@ -1048,6 +1166,133 @@ export const CriarRoteiro: React.FC = () => {
                         }`}
                       >
                         {salvandoAba3 ? 'Salvando...' : planoMidia_pks.length > 0 && !cidadesMudaram() ? '✓ Salvo' : 'Salvar'}
+                      </button>
+                    </div>
+                  </form>
+                </>
+              )}
+
+              {/* Aba 4 - Definir vias públicas */}
+              {abaAtiva === 4 && (
+                <>
+                  <div className="mb-8">
+                    <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
+                      Faça o upload do seu plano.
+                    </h3>
+                  </div>
+                  
+                  <form onSubmit={handleSubmit}>
+                    {/* Download do template */}
+                    <div className="mb-8">
+                      <div className="flex items-center gap-4">
+                        <a
+                          href="#"
+                          className="text-[#ff4600] hover:text-orange-600 underline font-medium"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            // Aqui você pode implementar o download do template Excel
+                            alert('Download do template Excel iniciado');
+                          }}
+                        >
+                          Download template Excel
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* Upload do arquivo */}
+                    <div className="mb-8">
+                      <label className="block text-base text-[#3a3a3a] mb-2">
+                        Upload do arquivo Excel
+                      </label>
+                      <div className="flex items-center gap-4">
+                        <input
+                          type="file"
+                          accept=".xlsx,.xls"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              processarArquivoExcel(file);
+                            }
+                          }}
+                          className="hidden"
+                          id="excel-upload"
+                        />
+                        <label
+                          htmlFor="excel-upload"
+                          className="px-6 py-3 bg-[#ff4600] text-white rounded-lg hover:bg-orange-600 cursor-pointer transition-colors"
+                        >
+                          Upload Excel
+                        </label>
+                        {arquivoExcel && (
+                          <span className="text-sm text-green-600">
+                            ✓ {arquivoExcel.name}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Preview dos roteiros carregados */}
+                    {roteirosCarregados.length > 0 && (
+                      <div className="mb-8">
+                        <h4 className="text-sm font-medium text-[#3a3a3a] mb-4">
+                          Roteiros carregados ({roteirosCarregados.length}):
+                        </h4>
+                        <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="bg-gray-600 text-white">
+                                <th className="px-4 py-2 text-left font-bold">Praça</th>
+                                <th className="px-4 py-2 text-left font-bold">UF</th>
+                                <th className="px-4 py-2 text-left font-bold">Ambiente</th>
+                                <th className="px-4 py-2 text-left font-bold">Formato</th>
+                                <th className="px-4 py-2 text-left font-bold">Tipo</th>
+                                <th className="px-4 py-2 text-left font-bold">Semana</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {roteirosCarregados.map((roteiro, index) => (
+                                <tr key={index} className="border-b border-gray-200 hover:bg-gray-50">
+                                  <td className="px-4 py-2 text-[#3a3a3a]">
+                                    {roteiro.praca_st}
+                                  </td>
+                                  <td className="px-4 py-2 text-[#3a3a3a]">
+                                    {roteiro.uf_st}
+                                  </td>
+                                  <td className="px-4 py-2 text-[#3a3a3a]">
+                                    {roteiro.ambiente_st}
+                                  </td>
+                                  <td className="px-4 py-2 text-[#3a3a3a]">
+                                    {roteiro.formato_st}
+                                  </td>
+                                  <td className="px-4 py-2 text-[#3a3a3a]">
+                                    {roteiro.tipoMidia_st}
+                                  </td>
+                                  <td className="px-4 py-2 text-[#3a3a3a]">
+                                    {roteiro.semana_st}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Botão Salvar */}
+                    <div className="mt-16 flex justify-start">
+                      <button
+                        type="button"
+                        onClick={salvarAba4}
+                        disabled={salvandoAba4 || !planoMidiaGrupo_pk || planoMidiaDesc_pks.length === 0 || planoMidia_pks.length === 0 || roteirosCarregados.length === 0}
+                        className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base font-medium ${
+                          salvandoAba4 || !planoMidiaGrupo_pk || planoMidiaDesc_pks.length === 0 || planoMidia_pks.length === 0 || roteirosCarregados.length === 0
+                            ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
+                            : uploadRoteiros_pks.length > 0 && !roteirosMudaram()
+                            ? 'bg-green-500 text-white border-green-500 hover:bg-green-600'
+                            : 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600'
+                        }`}
+                      >
+                        {salvandoAba4 ? 'Salvando...' : uploadRoteiros_pks.length > 0 && !roteirosMudaram() ? '✓ Salvo' : 'Salvar'}
                       </button>
                     </div>
                   </form>
