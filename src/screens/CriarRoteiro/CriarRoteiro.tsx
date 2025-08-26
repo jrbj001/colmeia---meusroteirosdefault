@@ -380,8 +380,7 @@ export const CriarRoteiro: React.FC = () => {
       if (response.data && response.data[0]?.new_pk) {
         const newPk = response.data[0].new_pk;
         setPlanoMidiaGrupo_pk(newPk);
-        alert(`Roteiro criado com sucesso! PK: ${newPk}\n\nNavegando para a Aba 2...`);
-        setAbaAtiva(2); // Navega automaticamente para Aba 2
+        alert(`Roteiro criado com sucesso! PK: ${newPk}`);
       } else {
         throw new Error('Resposta inválida do servidor');
       }
@@ -433,8 +432,7 @@ export const CriarRoteiro: React.FC = () => {
       if (response.data && Array.isArray(response.data)) {
         const descPks = response.data.map(item => item.new_pk);
         setPlanoMidiaDesc_pks(descPks);
-        alert(`Target configurado com sucesso!\nGênero: ${genero}\nClasse: ${classe}\nFaixa Etária: ${faixaEtaria}\nPKs: ${descPks.join(', ')}\n\nNavegando para a Aba 3...`);
-        setAbaAtiva(3); // Navega automaticamente para Aba 3
+        alert(`Target configurado com sucesso!\nGênero: ${genero}\nClasse: ${classe}\nFaixa Etária: ${faixaEtaria}\nPKs: ${descPks.join(', ')}`);
       } else {
         throw new Error('Resposta inválida do servidor');
       }
@@ -446,7 +444,7 @@ export const CriarRoteiro: React.FC = () => {
     }
   };
 
-  // Função para salvar Aba 3 - Criar novos registros com cidades (igual ao backend)
+  // Função para salvar Aba 3 - Criar Plano Mídia Desc e Plano Mídia com cidades
   const salvarAba3 = async () => {
     if (planoMidiaDesc_pks.length === 0) {
       alert('É necessário salvar a Aba 2 primeiro');
@@ -467,7 +465,7 @@ export const CriarRoteiro: React.FC = () => {
     try {
       const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
       
-      // 1. Criar plano mídia desc para cada cidade (igual ao backend)
+      // 1. Criar plano mídia desc para cada cidade
       const recordsJson = cidadesSelecionadas.map(cidade => ({
         planoMidiaDesc_st: `${planoMidiaGrupo_st}_${cidade.nome_cidade.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`,
         usuarioId_st: user.id,
@@ -505,8 +503,7 @@ export const CriarRoteiro: React.FC = () => {
           setPlanoMidia_pks(midiaPks);
           setCidadesSalvas([...cidadesSelecionadas]);
           
-          alert(`Roteiro criado com sucesso!\n\nCidades: ${cidadesSelecionadas.map(c => c.nome_cidade).join(', ')}\nPlano Mídia Desc PKs: ${descPks.join(', ')}\nPlano Mídia PKs: ${midiaPks.join(', ')}\n\nNavegando para a Aba 4...`);
-          setAbaAtiva(4); // Navega automaticamente para Aba 4
+          alert(`Roteiro criado com sucesso!\n\nCidades: ${cidadesSelecionadas.map(c => c.nome_cidade).join(', ')}\nPlano Mídia Desc PKs: ${descPks.join(', ')}\nPlano Mídia PKs: ${midiaPks.join(', ')}`);
         } else {
           throw new Error('Erro na criação do plano mídia');
         }
@@ -601,7 +598,6 @@ export const CriarRoteiro: React.FC = () => {
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 1 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>01</span>
                   <span className={`font-medium ${abaAtiva === 1 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Nomear roteiro</span>
-                  {planoMidiaGrupo_pk && <span className="ml-2 text-green-500">✅</span>}
                   {abaAtiva === 1 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>}
                 </div>
                 
@@ -610,15 +606,12 @@ export const CriarRoteiro: React.FC = () => {
                   className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
                     abaAtiva === 2 
                       ? 'bg-white border-2 border-blue-500 rounded-lg' 
-                      : !planoMidiaGrupo_pk 
-                        ? 'opacity-50 cursor-not-allowed bg-gray-100' 
-                        : 'hover:bg-gray-50 rounded-lg'
+                      : 'hover:bg-gray-50 rounded-lg'
                   }`}
-                  onClick={() => planoMidiaGrupo_pk && setAbaAtiva(2)}
+                  onClick={() => setAbaAtiva(2)}
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 2 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>02</span>
                   <span className={`font-medium ${abaAtiva === 2 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Configurar target</span>
-                  {planoMidiaDesc_pks.length > 0 && <span className="ml-2 text-green-500">✅</span>}
                   {abaAtiva === 2 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>}
                 </div>
                 
@@ -627,15 +620,12 @@ export const CriarRoteiro: React.FC = () => {
                   className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
                     abaAtiva === 3 
                       ? 'bg-white border-2 border-blue-500 rounded-lg' 
-                      : !planoMidiaGrupo_pk || planoMidiaDesc_pks.length === 0
-                        ? 'opacity-50 cursor-not-allowed bg-gray-100' 
-                        : 'hover:bg-gray-50 rounded-lg'
+                      : 'hover:bg-gray-50 rounded-lg'
                   }`}
-                  onClick={() => (planoMidiaGrupo_pk && planoMidiaDesc_pks.length > 0) && setAbaAtiva(3)}
+                  onClick={() => setAbaAtiva(3)}
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 3 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>03</span>
                   <span className={`font-medium ${abaAtiva === 3 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Configurar praça</span>
-                  {planoMidia_pks.length > 0 && <span className="ml-2 text-green-500">✅</span>}
                   {abaAtiva === 3 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>}
                 </div>
                 
@@ -643,15 +633,12 @@ export const CriarRoteiro: React.FC = () => {
                   className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
                     abaAtiva === 4 
                       ? 'bg-white border-2 border-blue-500 rounded-lg' 
-                      : !planoMidiaGrupo_pk || planoMidiaDesc_pks.length === 0 || planoMidia_pks.length === 0
-                        ? 'opacity-50 cursor-not-allowed bg-gray-100' 
-                        : 'hover:bg-gray-50 rounded-lg'
+                      : 'hover:bg-gray-50 rounded-lg'
                   }`}
-                  onClick={() => (planoMidiaGrupo_pk && planoMidiaDesc_pks.length > 0 && planoMidia_pks.length > 0) && setAbaAtiva(4)}
+                  onClick={() => setAbaAtiva(4)}
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 4 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>04</span>
                   <span className={`font-medium ${abaAtiva === 4 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Definir vias públicas</span>
-                  {uploadRoteiros_pks.length > 0 && <span className="ml-2 text-green-500">✅</span>}
                   {abaAtiva === 4 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>}
                 </div>
                 
