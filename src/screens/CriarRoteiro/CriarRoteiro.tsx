@@ -362,6 +362,26 @@ export const CriarRoteiro: React.FC = () => {
     return `${dataFormatada}_${nomeFormatado}`;
   };
 
+  // Função para mapear IDs de cidades para códigos IBGE corretos
+  const getIbgeCodeFromCidade = (cidade: Cidade) => {
+    const cidadeNome = cidade.nome_cidade?.toUpperCase().trim();
+    
+    // Mapeamento manual dos principais municípios para códigos IBGE corretos
+    const ibgeMap: {[key: string]: string} = {
+      'SÃO PAULO': '3550308',
+      'SAO PAULO': '3550308',
+      'RIO DE JANEIRO': '3304557',
+      'BELO HORIZONTE': '3106200',
+      'SOROCABA': '3552205',
+      'CAMPINAS': '3509502',
+      'SANTOS': '3548500',
+      'RIBEIRÃO PRETO': '3543402',
+      'RIBEIRAO PRETO': '3543402'
+    };
+    
+    return ibgeMap[cidadeNome] || cidade.id_cidade.toString();
+  };
+
   // Função para salvar Aba 1 - Criar Plano Mídia Grupo
   const salvarAba1 = async () => {
     if (!nomeRoteiro.trim()) {
@@ -473,7 +493,7 @@ export const CriarRoteiro: React.FC = () => {
         gender_st: genero,
         class_st: classe,
         age_st: faixaEtaria,
-        ibgeCode_vl: cidade.codigo_ibge || cidade.id_cidade.toString()
+        ibgeCode_vl: cidade.codigo_ibge || getIbgeCodeFromCidade(cidade)
       }));
 
       const descResponse = await axios.post('/plano-midia-desc', {
