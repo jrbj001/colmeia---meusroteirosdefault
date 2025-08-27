@@ -3,6 +3,7 @@ import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { Topbar } from "../../components/Topbar/Topbar";
 import { useAuth } from "../../contexts/AuthContext";
 import axios from "../../config/axios";
+import * as XLSX from 'xlsx';
 
 interface Agencia {
   id_agencia: number;
@@ -98,6 +99,8 @@ export const CriarRoteiro: React.FC = () => {
   const [roteirosCarregados, setRoteirosCarregados] = useState<any[]>([]);
   const [roteirosSalvos, setRoteirosSalvos] = useState<any[]>([]);
   const [uploadRoteiros_pks, setUploadRoteiros_pks] = useState<number[]>([]);
+  const [processandoExcel, setProcessandoExcel] = useState(false);
+  const [mensagemProcessamento, setMensagemProcessamento] = useState<string>('');
 
   // Carregar dados dos combos
   useEffect(() => {
@@ -254,38 +257,310 @@ export const CriarRoteiro: React.FC = () => {
     );
   };
 
-  // Função para processar arquivo Excel
+  // Função para validar consistência entre cidades da Aba 3 e praças do Excel na Aba 4
+  const validarConsistenciaCidades = () => {
+    if (cidadesSelecionadas.length === 0 || roteirosCarregados.length === 0) {
+      return { valido: true, detalhes: null };
+    }
+
+    // Extrair praças únicas do Excel (normalizar texto)
+    const pracasExcel = [...new Set(
+      roteirosCarregados.map(roteiro => 
+        roteiro.praca_st?.toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      ).filter(Boolean)
+    )].sort();
+
+    // Extrair cidades selecionadas na Aba 3 (normalizar texto)
+    const cidadesAba3 = cidadesSelecionadas.map(cidade => 
+      cidade.nome_cidade?.toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    ).sort();
+
+    // Comparar arrays
+    const cidadesFaltandoNoExcel = cidadesAba3.filter(cidade => !pracasExcel.includes(cidade));
+    const pracasSobrandoNoExcel = pracasExcel.filter(praca => !cidadesAba3.includes(praca));
+
+    const valido = cidadesFaltandoNoExcel.length === 0 && pracasSobrandoNoExcel.length === 0;
+
+    return {
+      valido,
+      detalhes: {
+        cidadesAba3,
+        pracasExcel,
+        cidadesFaltandoNoExcel,
+        pracasSobrandoNoExcel,
+        totalCidadesAba3: cidadesAba3.length,
+        totalPracasExcel: pracasExcel.length
+      }
+    };
+  };
+
+  // Função para processar arquivo Excel com múltiplas abas
   const processarArquivoExcel = (file: File) => {
+    setProcessandoExcel(true);
+    setMensagemProcessamento('Lendo arquivo Excel...');
+    setRoteirosCarregados([]);
+    
     const reader = new FileReader();
     
     reader.onload = (e) => {
       try {
+        setMensagemProcessamento('Analisando estrutura do arquivo...');
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        // Aqui você pode usar uma biblioteca como xlsx para processar o Excel
-        // Por enquanto, vamos simular o processamento
-        const roteirosProcessados = [
-          {
-            pk2: 0,
-            praca_st: "São Paulo",
-            uf_st: "SP",
-            ambiente_st: "Urbano",
-            grupoFormatosMidia_st: "Outdoor",
-            formato_st: "Painel 6x3",
-            tipoMidia_st: "Estático",
-            latitude_vl: -23.5505,
-            longitude_vl: -46.6333,
-            seDigitalInsercoes_vl: 0,
-            seDigitalMaximoInsercoes_vl: 0,
-            seEstaticoVisibilidade_vl: 100,
-            semana_st: "1-12"
-          }
-        ];
         
-        setRoteirosCarregados(roteirosProcessados);
-        setArquivoExcel(file);
+        // Processar o arquivo Excel usando a biblioteca xlsx
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        // Verificar se as abas obrigatórias existem
+        setMensagemProcessamento('Verificando abas obrigatórias...');
+        const requiredSheets = ['Template', 'Param', 'IPV_vias públicas'];
+        const missingSheets = requiredSheets.filter(sheet => !workbook.SheetNames.includes(sheet));
+        
+        if (missingSheets.length > 0) {
+          setMensagemProcessamento(`❌ Erro: Abas faltando - ${missingSheets.join(', ')}`);
+          setProcessandoExcel(false);
+          setTimeout(() => setMensagemProcessamento(''), 5000);
+          alert(`Excel deve conter as seguintes abas: ${requiredSheets.join(', ')}\n\nAbas faltando: ${missingSheets.join(', ')}`);
+          return;
+        }
+        
+        // Ler dados das abas
+        setMensagemProcessamento('Lendo dados das abas...');
+        const templateSheet = workbook.Sheets['Template'];
+        const paramSheet = workbook.Sheets['Param'];
+        const ipvSheet = workbook.Sheets['IPV_vias públicas'];
+        
+        // Converter para JSON com cabeçalhos - forçar leitura de todas as colunas
+        setMensagemProcessamento('Convertendo dados para processamento...');
+        const templateData = XLSX.utils.sheet_to_json(templateSheet, { 
+          header: 1, 
+          defval: '', 
+          blankrows: false,
+          range: 0 
+        });
+        const paramData = XLSX.utils.sheet_to_json(paramSheet, { 
+          header: 1, 
+          defval: '', 
+          blankrows: false,
+          range: 0 
+        });
+        const ipvData = XLSX.utils.sheet_to_json(ipvSheet, { 
+          header: 1, 
+          defval: '', 
+          blankrows: false,
+          range: 0 
+        });
+        
+        // Função para encontrar linha de cabeçalhos
+        const findHeaderRow = (data: any[], expectedHeaders: string[]): number => {
+          for (let i = 0; i < Math.min(data.length, 5); i++) {
+            const row = data[i] as string[];
+            if (row && Array.isArray(row)) {
+              const foundHeaders = expectedHeaders.filter(header => 
+                row.some(cell => cell && cell.toString().toLowerCase().includes(header.toLowerCase()))
+              );
+              if (foundHeaders.length >= 3) { // Pelo menos 3 cabeçalhos esperados
+                return i;
+              }
+            }
+          }
+          return 0; // Default para primeira linha
+        };
+        
+        // Encontrar linhas de cabeçalhos
+        const templateHeaderRow = findHeaderRow(templateData, ['Praça', 'UF', 'Ambiente']);
+        const paramHeaderRow = findHeaderRow(paramData, ['Ambiente', 'Descrição']);
+        const ipvHeaderRow = findHeaderRow(ipvData, ['Formato', 'GRUPO', 'IPV']);
+        
+        // Processar cabeçalhos e dados
+        const templateHeaders = (templateData[templateHeaderRow] || []) as string[];
+        const paramHeaders = (paramData[paramHeaderRow] || []) as string[];
+        const ipvHeaders = (ipvData[ipvHeaderRow] || []) as string[];
+        
+        // Debug: mostrar cabeçalhos detectados
+        console.log('Template - Linha de cabeçalho:', templateHeaderRow, 'Cabeçalhos:', templateHeaders);
+        console.log('Param - Linha de cabeçalho:', paramHeaderRow, 'Cabeçalhos:', paramHeaders);
+        console.log('IPV - Linha de cabeçalho:', ipvHeaderRow, 'Cabeçalhos:', ipvHeaders);
+        
+        // Função para normalizar texto (remover acentos, maiúsculas)
+        const normalizeText = (text: string): string => {
+          if (!text) return '';
+          return text.toString()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+            .toUpperCase()
+            .trim();
+        };
+        
+        // Verificar cabeçalhos obrigatórios do Template
+        setMensagemProcessamento('Verificando cabeçalhos obrigatórios...');
+        const requiredTemplateHeaders = ['Praça', 'UF', 'Ambiente', 'Grupo formatos de mídia', 'Tipo de mídia'];
+        const missingTemplateHeaders = requiredTemplateHeaders.filter(header => 
+          !templateHeaders.some(h => {
+            if (!h) return false;
+            const headerNormalized = normalizeText(h.toString());
+            const searchNormalized = normalizeText(header);
+            return headerNormalized.includes(searchNormalized) || headerNormalized === searchNormalized;
+          })
+        );
+        
+        if (missingTemplateHeaders.length > 0) {
+          setMensagemProcessamento(`❌ Erro: Cabeçalhos faltando - ${missingTemplateHeaders.join(', ')}`);
+          setProcessandoExcel(false);
+          setTimeout(() => setMensagemProcessamento(''), 5000);
+          alert(`Template deve conter os seguintes cabeçalhos: ${requiredTemplateHeaders.join(', ')}\n\nCabeçalhos faltando: ${missingTemplateHeaders.join(', ')}\n\nCabeçalhos encontrados: ${templateHeaders.filter(h => h).join(', ')}`);
+          return;
+        }
+        
+        // Função para encontrar índice da coluna
+        const findColumnIndex = (headers: string[], searchTerms: string[]): number => {
+          for (let i = 0; i < headers.length; i++) {
+            const header = normalizeText(headers[i]?.toString() || '');
+            if (searchTerms.some(term => {
+              const searchTerm = normalizeText(term);
+              return header.includes(searchTerm) || header === searchTerm;
+            })) {
+              return i;
+            }
+          }
+          return -1;
+        };
+        
+        // Mapear índices das colunas do Template
+        const templateIndices = {
+          cidade: findColumnIndex(templateHeaders, ['Praça']),
+          uf: findColumnIndex(templateHeaders, ['UF']),
+          ambiente: findColumnIndex(templateHeaders, ['Ambiente']),
+          grupo_midia: findColumnIndex(templateHeaders, ['Grupo formatos de mídia']),
+          formato_categoria: findColumnIndex(templateHeaders, ['Formato']),
+          tipo_midia: findColumnIndex(templateHeaders, ['Tipo de mídia']),
+          latitude: findColumnIndex(templateHeaders, ['Latitude']),
+          longitude: findColumnIndex(templateHeaders, ['Longitude']),
+          insercoes_compradas: findColumnIndex(templateHeaders, ['Inserções compradas', 'Se digital: Inserções compradas']),
+          max_insercoes: findColumnIndex(templateHeaders, ['Máximo de inserções', 'Se digital: Máximo de inserções']),
+          visibilidade_estatico: findColumnIndex(templateHeaders, ['Visibilidade', 'Se estático: visibilidade']),
+          semana: findColumnIndex(templateHeaders, ['Semana'])
+        };
+        
+        // Mapear índices das colunas do Param
+        const paramIndices = {
+          ambiente: findColumnIndex(paramHeaders, ['Ambiente']),
+          descricao: findColumnIndex(paramHeaders, ['Descrição']),
+          grupo_midia: findColumnIndex(paramHeaders, ['Grupo formatos de mídia']),
+          semana: findColumnIndex(paramHeaders, ['Semana']),
+          deflator_visibilidade: findColumnIndex(paramHeaders, ['Deflator de visibilidade'])
+        };
+        
+        // Mapear índices das colunas do IPV
+        const ipvIndices = {
+          formato_colmeia: findColumnIndex(ipvHeaders, ['Formato Colmeia']),
+          grupo_midia: findColumnIndex(ipvHeaders, ['GRUPO']),
+          ipv: findColumnIndex(ipvHeaders, ['IPV'])
+        };
+        
+        // Criar lookup tables para Param e IPV
+        const paramLookup = new Map<string, any>();
+        const ipvLookup = new Map<string, any>();
+        
+        // Processar dados do Param
+        for (let i = paramHeaderRow + 1; i < paramData.length; i++) {
+          const row = paramData[i] as any[];
+          if (row[paramIndices.ambiente] && row[paramIndices.grupo_midia]) {
+            const key = `${normalizeText(row[paramIndices.ambiente])}_${normalizeText(row[paramIndices.grupo_midia])}`;
+            paramLookup.set(key, {
+              descricao: row[paramIndices.descricao] || null,
+              deflator_visibilidade: row[paramIndices.deflator_visibilidade] || null
+            });
+          }
+        }
+        
+        // Processar dados do IPV
+        for (let i = ipvHeaderRow + 1; i < ipvData.length; i++) {
+          const row = ipvData[i] as any[];
+          if (row[ipvIndices.formato_colmeia] && row[ipvIndices.grupo_midia]) {
+            const key = `${normalizeText(row[ipvIndices.formato_colmeia])}_${normalizeText(row[ipvIndices.grupo_midia])}`;
+            ipvLookup.set(key, {
+              ipv: parseFloat(row[ipvIndices.ipv]) || 0
+            });
+          }
+        }
+        
+        // Processar dados do Template com joins
+        const roteirosProcessados = [];
+        
+        for (let i = templateHeaderRow + 1; i < templateData.length; i++) {
+          const row = templateData[i] as any[];
+          
+          // Verificar campos obrigatórios
+          if (!row[templateIndices.cidade] || !row[templateIndices.uf] || 
+              !row[templateIndices.ambiente] || !row[templateIndices.grupo_midia] || 
+              !row[templateIndices.formato_categoria] || !row[templateIndices.tipo_midia]) {
+            console.warn(`Linha ${i + 1} ignorada - campos obrigatórios faltando`);
+            continue;
+          }
+          
+          // Normalizar chaves para lookup
+          const paramKey = `${normalizeText(row[templateIndices.ambiente])}_${normalizeText(row[templateIndices.grupo_midia])}`;
+          const ipvKey = `${normalizeText(row[templateIndices.tipo_midia])}_${normalizeText(row[templateIndices.grupo_midia])}`;
+          
+          // Buscar dados enriquecidos
+          const paramData = paramLookup.get(paramKey) || { descricao: null, deflator_visibilidade: null };
+          const ipvData = ipvLookup.get(ipvKey) || { ipv: null };
+          
+          // Criar objeto enriquecido
+          const roteiro = {
+            pk2: 0, // Será preenchido ao salvar
+            praca_st: row[templateIndices.cidade]?.toString().trim() || '',
+            uf_st: row[templateIndices.uf]?.toString().toUpperCase().trim() || '',
+            ambiente_st: row[templateIndices.ambiente]?.toString().trim() || '',
+            grupoFormatosMidia_st: row[templateIndices.grupo_midia]?.toString().trim() || '',
+            formato_st: row[templateIndices.formato_categoria]?.toString().trim() || '',
+            tipoMidia_st: row[templateIndices.tipo_midia]?.toString().trim() || '',
+            latitude_vl: templateIndices.latitude >= 0 ? parseFloat(row[templateIndices.latitude]) || null : null,
+            longitude_vl: templateIndices.longitude >= 0 ? parseFloat(row[templateIndices.longitude]) || null : null,
+            seDigitalInsercoes_vl: templateIndices.insercoes_compradas >= 0 ? 
+              (row[templateIndices.insercoes_compradas] ? parseInt(row[templateIndices.insercoes_compradas]) : null) : null,
+            seDigitalMaximoInsercoes_vl: templateIndices.max_insercoes >= 0 ? 
+              (row[templateIndices.max_insercoes] ? parseInt(row[templateIndices.max_insercoes]) : null) : null,
+            seEstaticoVisibilidade_vl: templateIndices.visibilidade_estatico >= 0 ? 
+              (row[templateIndices.visibilidade_estatico] ? parseFloat(row[templateIndices.visibilidade_estatico]) : 100) : 100,
+            semana_st: templateIndices.semana >= 0 ? (row[templateIndices.semana]?.toString().trim() || '1-12') : '1-12',
+            // Dados enriquecidos
+            param_descricao: paramData.descricao,
+            param_deflator_visibilidade: paramData.deflator_visibilidade,
+            ipv_valor: ipvData.ipv
+          };
+          
+          roteirosProcessados.push(roteiro);
+        }
+        
+        console.log(`Excel processado: ${roteirosProcessados.length} roteiros encontrados`);
+        console.log('Primeiros roteiros:', roteirosProcessados.slice(0, 3));
+        console.log('Lookup Param:', paramLookup.size, 'entradas');
+        console.log('Lookup IPV:', ipvLookup.size, 'entradas');
+        
+        setMensagemProcessamento('Finalizando processamento...');
+        
+        if (roteirosProcessados.length === 0) {
+          setMensagemProcessamento('❌ Nenhum roteiro válido encontrado');
+          setProcessandoExcel(false);
+          setTimeout(() => setMensagemProcessamento(''), 5000);
+          alert('Nenhum roteiro válido encontrado no arquivo Excel. Verifique se as colunas estão preenchidas corretamente.');
+        } else {
+          setRoteirosCarregados(roteirosProcessados);
+          setArquivoExcel(file);
+          setMensagemProcessamento(`✅ Excel processado com sucesso! ${roteirosProcessados.length} roteiros carregados`);
+          setProcessandoExcel(false);
+          setTimeout(() => setMensagemProcessamento(''), 5000);
+          
+          alert(`Excel processado com sucesso!\n\nTotal de roteiros encontrados: ${roteirosProcessados.length}\n\nAbas processadas:\n✅ Template: ${templateData.length - templateHeaderRow - 1} linhas\n✅ Param: ${paramData.length - paramHeaderRow - 1} linhas\n✅ IPV_vias públicas: ${ipvData.length - ipvHeaderRow - 1} linhas\n\nJoins realizados:\n✅ Template × Param: ${paramLookup.size} matches\n✅ Template × IPV: ${ipvLookup.size} matches`);
+        }
+        
       } catch (error) {
         console.error('Erro ao processar arquivo Excel:', error);
-        alert('Erro ao processar arquivo Excel. Verifique o formato.');
+        setMensagemProcessamento(`❌ Erro: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+        setProcessandoExcel(false);
+        setTimeout(() => setMensagemProcessamento(''), 8000);
+        alert(`Erro ao processar arquivo Excel:\n\n${error instanceof Error ? error.message : 'Erro desconhecido'}\n\nVerifique o formato e tente novamente.`);
       }
     };
     
@@ -294,55 +569,126 @@ export const CriarRoteiro: React.FC = () => {
 
   // Função para salvar Aba 4 - Upload de roteiros
   const salvarAba4 = async () => {
+    console.log('🚀 Iniciando salvamento Aba 4...');
+    console.log('📊 Estados atuais:', {
+      planoMidiaGrupo_pk,
+      planoMidiaDesc_pks,
+      planoMidia_pks,
+      roteirosCarregados: roteirosCarregados.length,
+      user: user ? { id: user.id, name: user.name } : null
+    });
+
     if (!planoMidiaGrupo_pk) {
+      console.log('❌ Erro: planoMidiaGrupo_pk não está definido');
       alert('É necessário salvar a Aba 1 primeiro');
       return;
     }
 
     if (planoMidiaDesc_pks.length === 0) {
+      console.log('❌ Erro: planoMidiaDesc_pks está vazio');
       alert('É necessário salvar a Aba 2 primeiro');
       return;
     }
 
     if (planoMidia_pks.length === 0) {
+      console.log('❌ Erro: planoMidia_pks está vazio');
       alert('É necessário salvar a Aba 3 primeiro');
       return;
     }
 
     if (roteirosCarregados.length === 0) {
+      console.log('❌ Erro: roteirosCarregados está vazio');
       alert('É necessário carregar um arquivo Excel com roteiros');
       return;
     }
 
     if (!user) {
+      console.log('❌ Erro: usuário não está logado');
       alert('Usuário não está logado');
       return;
     }
 
+    // 🎯 VALIDAÇÃO DE CONSISTÊNCIA ENTRE ABAS 3 E 4
+    console.log('🔍 Validando consistência entre cidades...');
+    const validacao = validarConsistenciaCidades();
+    
+    if (!validacao.valido && validacao.detalhes) {
+      console.log('❌ Inconsistência detectada:', validacao.detalhes);
+      
+      let mensagemErro = '🚨 INCONSISTÊNCIA DETECTADA ENTRE ABAS 3 E 4\n\n';
+      
+      if (validacao.detalhes.cidadesFaltandoNoExcel.length > 0) {
+        mensagemErro += `❌ Cidades selecionadas na Aba 3 que NÃO estão no Excel:\n`;
+        mensagemErro += validacao.detalhes.cidadesFaltandoNoExcel.map(c => `• ${c}`).join('\n');
+        mensagemErro += '\n\n';
+      }
+      
+      if (validacao.detalhes.pracasSobrandoNoExcel.length > 0) {
+        mensagemErro += `❌ Praças no Excel que NÃO foram selecionadas na Aba 3:\n`;
+        mensagemErro += validacao.detalhes.pracasSobrandoNoExcel.map(p => `• ${p}`).join('\n');
+        mensagemErro += '\n\n';
+      }
+      
+      mensagemErro += `📊 RESUMO:\n`;
+      mensagemErro += `• Cidades na Aba 3: ${validacao.detalhes.totalCidadesAba3}\n`;
+      mensagemErro += `• Praças no Excel: ${validacao.detalhes.totalPracasExcel}\n\n`;
+      mensagemErro += `🔧 SOLUÇÃO:\n`;
+      mensagemErro += `1. Volte para a Aba 3 e ajuste as cidades selecionadas\n`;
+      mensagemErro += `2. OU corrija o arquivo Excel para incluir apenas as praças selecionadas\n`;
+      mensagemErro += `3. As praças devem ser EXATAMENTE as mesmas entre as abas`;
+      
+      alert(mensagemErro);
+      return;
+    }
+    
+    console.log('✅ Consistência validada - prosseguindo com salvamento...');
+
     setSalvandoAba4(true);
     try {
+      console.log('🔄 Preparando dados para envio...');
+      
       // Associar os roteiros ao plano mídia grupo
       const roteirosComPk2 = roteirosCarregados.map(roteiro => ({
         ...roteiro,
         pk2: planoMidiaGrupo_pk
       }));
 
+      console.log('📤 Dados a serem enviados:', {
+        totalRoteiros: roteirosComPk2.length,
+        primeiroRoteiro: roteirosComPk2[0],
+        ultimoRoteiro: roteirosComPk2[roteirosComPk2.length - 1]
+      });
+
+      console.log('🌐 Fazendo chamada para /upload-roteiros...');
       const response = await axios.post('/upload-roteiros', {
         roteiros: roteirosComPk2
       });
+
+      console.log('📥 Resposta recebida:', response.data);
 
       if (response.data && response.data.roteiros) {
         const pks = response.data.roteiros.map((r: any) => r.pk);
         setUploadRoteiros_pks(pks);
         setRoteirosSalvos([...roteirosCarregados]);
         
+        console.log('✅ Salvamento concluído com sucesso!', {
+          totalRoteiros: roteirosCarregados.length,
+          pks
+        });
+        
         alert(`Roteiros salvos com sucesso!\n\nTotal de roteiros: ${roteirosCarregados.length}\nPKs: ${pks.join(', ')}`);
       } else {
+        console.log('❌ Resposta inválida do servidor:', response.data);
         throw new Error('Resposta inválida do servidor');
       }
     } catch (error) {
-      console.error('Erro ao salvar Aba 4:', error);
-      alert('Erro ao salvar roteiros. Tente novamente.');
+      console.error('💥 Erro detalhado ao salvar Aba 4:', error);
+      console.error('📊 Dados do erro:', {
+        message: error instanceof Error ? error.message : 'Erro desconhecido',
+        response: error instanceof Error && 'response' in error ? (error as any).response?.data : null,
+        status: error instanceof Error && 'response' in error ? (error as any).response?.status : null
+      });
+      alert(`Erro ao salvar roteiros.\n\nDetalhes: ${error instanceof Error ? error.message : 'Erro desconhecido'}\n\nTente novamente.`);
     } finally {
       setSalvandoAba4(false);
     }
@@ -1249,26 +1595,121 @@ export const CriarRoteiro: React.FC = () => {
                           accept=".xlsx,.xls"
                           onChange={(e) => {
                             const file = e.target.files?.[0];
-                            if (file) {
+                            if (file && !processandoExcel) {
                               processarArquivoExcel(file);
                             }
                           }}
                           className="hidden"
                           id="excel-upload"
+                          disabled={processandoExcel}
                         />
                         <label
                           htmlFor="excel-upload"
-                          className="px-6 py-3 bg-[#ff4600] text-white rounded-lg hover:bg-orange-600 cursor-pointer transition-colors"
+                          className={`px-6 py-3 rounded-lg transition-colors ${
+                            processandoExcel 
+                              ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
+                              : 'bg-[#ff4600] text-white hover:bg-orange-600 cursor-pointer'
+                          }`}
                         >
-                          Upload Excel
+                          {processandoExcel ? 'Processando...' : 'Upload Excel'}
                         </label>
-                        {arquivoExcel && (
+                        {arquivoExcel && !processandoExcel && (
                           <span className="text-sm text-green-600">
                             ✓ {arquivoExcel.name}
                           </span>
                         )}
+                        {processandoExcel && (
+                          <div className="flex items-center gap-2">
+                            <div className="animate-spin h-4 w-4 border-2 border-[#ff4600] border-t-transparent rounded-full"></div>
+                            <span className="text-sm text-[#ff4600] font-medium">Processando arquivo...</span>
+                          </div>
+                        )}
                       </div>
+                      
+                      {/* Mensagem de status */}
+                      {mensagemProcessamento && (
+                        <div className={`mt-3 p-3 rounded-lg text-sm font-medium ${
+                          mensagemProcessamento.includes('❌') 
+                            ? 'bg-red-100 text-red-700 border border-red-200' 
+                            : mensagemProcessamento.includes('✅')
+                            ? 'bg-green-100 text-green-700 border border-green-200'
+                            : 'bg-blue-100 text-blue-700 border border-blue-200'
+                        }`}>
+                          {mensagemProcessamento}
+                        </div>
+                      )}
                     </div>
+
+                    {/* Validação de consistência de cidades */}
+                    {roteirosCarregados.length > 0 && cidadesSelecionadas.length > 0 && (
+                      <div className="mb-8">
+                        {(() => {
+                          const validacao = validarConsistenciaCidades();
+                          
+                          if (validacao.valido) {
+                            return (
+                              <div className="p-4 bg-green-100 border border-green-400 rounded-lg">
+                                <div className="flex items-center">
+                                  <div className="mr-3">
+                                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  </div>
+                                  <div>
+                                    <h4 className="font-medium text-green-800">✅ Consistência validada!</h4>
+                                    <p className="text-sm text-green-700">
+                                      As {validacao.detalhes?.totalCidadesAba3} cidades da Aba 3 correspondem exatamente às {validacao.detalhes?.totalPracasExcel} praças do Excel.
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          } else if (validacao.detalhes) {
+                            return (
+                              <div className="p-4 bg-red-100 border border-red-400 rounded-lg">
+                                <div className="flex items-start">
+                                  <div className="mr-3">
+                                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  </div>
+                                  <div className="flex-1">
+                                    <h4 className="font-medium text-red-800">❌ Inconsistência detectada!</h4>
+                                    <p className="text-sm text-red-700 mb-3">
+                                      As cidades da Aba 3 não correspondem às praças do Excel.
+                                    </p>
+                                    
+                                    {validacao.detalhes.cidadesFaltandoNoExcel.length > 0 && (
+                                      <div className="mb-2">
+                                        <p className="text-xs font-medium text-red-800">Cidades da Aba 3 ausentes no Excel:</p>
+                                        <p className="text-xs text-red-700">
+                                          {validacao.detalhes.cidadesFaltandoNoExcel.join(', ')}
+                                        </p>
+                                      </div>
+                                    )}
+                                    
+                                    {validacao.detalhes.pracasSobrandoNoExcel.length > 0 && (
+                                      <div className="mb-2">
+                                        <p className="text-xs font-medium text-red-800">Praças do Excel não selecionadas na Aba 3:</p>
+                                        <p className="text-xs text-red-700">
+                                          {validacao.detalhes.pracasSobrandoNoExcel.join(', ')}
+                                        </p>
+                                      </div>
+                                    )}
+                                    
+                                    <p className="text-xs text-red-700 font-medium">
+                                      📊 Aba 3: {validacao.detalhes.totalCidadesAba3} cidades | Excel: {validacao.detalhes.totalPracasExcel} praças
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                          
+                          return null;
+                        })()}
+                      </div>
+                    )}
 
                     {/* Preview dos roteiros carregados */}
                     {roteirosCarregados.length > 0 && (
@@ -1286,6 +1727,8 @@ export const CriarRoteiro: React.FC = () => {
                                 <th className="px-4 py-2 text-left font-bold">Formato</th>
                                 <th className="px-4 py-2 text-left font-bold">Tipo</th>
                                 <th className="px-4 py-2 text-left font-bold">Semana</th>
+                                <th className="px-4 py-2 text-left font-bold">IPV</th>
+                                <th className="px-4 py-2 text-left font-bold">Descrição</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1309,10 +1752,36 @@ export const CriarRoteiro: React.FC = () => {
                                   <td className="px-4 py-2 text-[#3a3a3a]">
                                     {roteiro.semana_st}
                                   </td>
+                                  <td className="px-4 py-2 text-[#3a3a3a]">
+                                    {roteiro.ipv_valor ? roteiro.ipv_valor.toFixed(2) : '-'}
+                                  </td>
+                                  <td className="px-4 py-2 text-[#3a3a3a]">
+                                    {roteiro.param_descricao || '-'}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
                           </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Aviso para arquivos grandes */}
+                    {roteirosCarregados.length > 100 && (
+                      <div className="mt-8 p-4 bg-yellow-100 border border-yellow-400 rounded-lg">
+                        <div className="flex items-center">
+                          <div className="mr-3">
+                            <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-yellow-800">Arquivo grande detectado</h4>
+                            <p className="text-sm text-yellow-700">
+                              Seu arquivo contém {roteirosCarregados.length} roteiros. O processo de salvamento pode levar até 2 minutos. 
+                              Por favor, aguarde sem fechar a aba.
+                            </p>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1322,16 +1791,41 @@ export const CriarRoteiro: React.FC = () => {
                       <button
                         type="button"
                         onClick={salvarAba4}
-                        disabled={salvandoAba4 || !planoMidiaGrupo_pk || planoMidiaDesc_pks.length === 0 || planoMidia_pks.length === 0 || roteirosCarregados.length === 0}
+                        disabled={(() => {
+                          const validacao = validarConsistenciaCidades();
+                          return salvandoAba4 || 
+                                 !planoMidiaGrupo_pk || 
+                                 planoMidiaDesc_pks.length === 0 || 
+                                 planoMidia_pks.length === 0 || 
+                                 roteirosCarregados.length === 0 ||
+                                 !validacao.valido;
+                        })()}
                         className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base font-medium ${
-                          salvandoAba4 || !planoMidiaGrupo_pk || planoMidiaDesc_pks.length === 0 || planoMidia_pks.length === 0 || roteirosCarregados.length === 0
-                            ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
-                            : uploadRoteiros_pks.length > 0 && !roteirosMudaram()
-                            ? 'bg-green-500 text-white border-green-500 hover:bg-green-600'
-                            : 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600'
+                          (() => {
+                            const validacao = validarConsistenciaCidades();
+                            const isDisabled = salvandoAba4 || 
+                                             !planoMidiaGrupo_pk || 
+                                             planoMidiaDesc_pks.length === 0 || 
+                                             planoMidia_pks.length === 0 || 
+                                             roteirosCarregados.length === 0 ||
+                                             !validacao.valido;
+                            
+                            if (isDisabled) {
+                              return 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed';
+                            } else if (uploadRoteiros_pks.length > 0 && !roteirosMudaram()) {
+                              return 'bg-green-500 text-white border-green-500 hover:bg-green-600';
+                            } else {
+                              return 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600';
+                            }
+                          })()
                         }`}
                       >
-                        {salvandoAba4 ? 'Salvando...' : uploadRoteiros_pks.length > 0 && !roteirosMudaram() ? '✓ Salvo' : 'Salvar'}
+                        {salvandoAba4 ? (
+                          <div className="flex items-center justify-center">
+                            <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                            Salvando {roteirosCarregados.length} roteiros...
+                          </div>
+                        ) : uploadRoteiros_pks.length > 0 && !roteirosMudaram() ? '✓ Salvo' : 'Salvar'}
                       </button>
                     </div>
                   </form>

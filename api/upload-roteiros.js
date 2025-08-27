@@ -27,26 +27,44 @@ async function uploadRoteiros(req, res) {
       semana_st: roteiro.semana_st || null
     }));
 
-    // Inserir os roteiros
+    // Inserir os roteiros em lotes para melhor performance
     const resultados = [];
+    const batchSize = 50; // Processar em lotes de 50
     
-    for (const roteiro of roteirosParaInserir) {
+    console.log(`📊 Processando ${roteirosParaInserir.length} roteiros em lotes de ${batchSize}...`);
+    
+    for (let i = 0; i < roteirosParaInserir.length; i += batchSize) {
+      const batch = roteirosParaInserir.slice(i, i + batchSize);
+      console.log(`🔄 Processando lote ${Math.floor(i/batchSize) + 1}/${Math.ceil(roteirosParaInserir.length/batchSize)} (${batch.length} itens)...`);
+      
+      // Construir query de inserção em lote
+      const values = [];
       const request = pool.request();
       
-      // Adicionar parâmetros
-      request.input('pk2', sql.Int, roteiro.pk2);
-      request.input('praca_st', sql.VarChar(255), roteiro.praca_st);
-      request.input('uf_st', sql.VarChar(2), roteiro.uf_st);
-      request.input('ambiente_st', sql.VarChar(255), roteiro.ambiente_st);
-      request.input('grupoFormatosMidia_st', sql.VarChar(255), roteiro.grupoFormatosMidia_st);
-      request.input('formato_st', sql.VarChar(255), roteiro.formato_st);
-      request.input('tipoMidia_st', sql.VarChar(255), roteiro.tipoMidia_st);
-      request.input('latitude_vl', sql.Float, roteiro.latitude_vl);
-      request.input('longitude_vl', sql.Float, roteiro.longitude_vl);
-      request.input('seDigitalInsercoes_vl', sql.Int, roteiro.seDigitalInsercoes_vl);
-      request.input('seDigitalMaximoInsercoes_vl', sql.Int, roteiro.seDigitalMaximoInsercoes_vl);
-      request.input('seEstaticoVisibilidade_vl', sql.Int, roteiro.seEstaticoVisibilidade_vl);
-      request.input('semana_st', sql.VarChar(255), roteiro.semana_st);
+      batch.forEach((roteiro, index) => {
+        const paramPrefix = `p${i + index}`;
+        
+        request.input(`${paramPrefix}_pk2`, sql.Int, roteiro.pk2);
+        request.input(`${paramPrefix}_praca_st`, sql.VarChar(255), roteiro.praca_st);
+        request.input(`${paramPrefix}_uf_st`, sql.VarChar(2), roteiro.uf_st);
+        request.input(`${paramPrefix}_ambiente_st`, sql.VarChar(255), roteiro.ambiente_st);
+        request.input(`${paramPrefix}_grupoFormatosMidia_st`, sql.VarChar(255), roteiro.grupoFormatosMidia_st);
+        request.input(`${paramPrefix}_formato_st`, sql.VarChar(255), roteiro.formato_st);
+        request.input(`${paramPrefix}_tipoMidia_st`, sql.VarChar(255), roteiro.tipoMidia_st);
+        request.input(`${paramPrefix}_latitude_vl`, sql.Float, roteiro.latitude_vl);
+        request.input(`${paramPrefix}_longitude_vl`, sql.Float, roteiro.longitude_vl);
+        request.input(`${paramPrefix}_seDigitalInsercoes_vl`, sql.Int, roteiro.seDigitalInsercoes_vl);
+        request.input(`${paramPrefix}_seDigitalMaximoInsercoes_vl`, sql.Int, roteiro.seDigitalMaximoInsercoes_vl);
+        request.input(`${paramPrefix}_seEstaticoVisibilidade_vl`, sql.Int, roteiro.seEstaticoVisibilidade_vl);
+        request.input(`${paramPrefix}_semana_st`, sql.VarChar(255), roteiro.semana_st);
+        
+        values.push(`(
+          @${paramPrefix}_pk2, @${paramPrefix}_praca_st, @${paramPrefix}_uf_st, @${paramPrefix}_ambiente_st, @${paramPrefix}_grupoFormatosMidia_st,
+          @${paramPrefix}_formato_st, @${paramPrefix}_tipoMidia_st, @${paramPrefix}_latitude_vl, @${paramPrefix}_longitude_vl,
+          @${paramPrefix}_seDigitalInsercoes_vl, @${paramPrefix}_seDigitalMaximoInsercoes_vl,
+          @${paramPrefix}_seEstaticoVisibilidade_vl, @${paramPrefix}_semana_st
+        )`);
+      });
 
       const query = `
         INSERT INTO [serv_product_be180].[uploadRoteiros_ft] (
@@ -55,24 +73,22 @@ async function uploadRoteiros(req, res) {
           seDigitalInsercoes_vl, seDigitalMaximoInsercoes_vl, 
           seEstaticoVisibilidade_vl, semana_st
         ) 
-        VALUES (
-          @pk2, @praca_st, @uf_st, @ambiente_st, @grupoFormatosMidia_st,
-          @formato_st, @tipoMidia_st, @latitude_vl, @longitude_vl,
-          @seDigitalInsercoes_vl, @seDigitalMaximoInsercoes_vl,
-          @seEstaticoVisibilidade_vl, @semana_st
-        );
-        
-        SELECT SCOPE_IDENTITY() as new_pk;
+        OUTPUT INSERTED.pk, INSERTED.pk2, INSERTED.praca_st, INSERTED.uf_st
+        VALUES ${values.join(', ')};
       `;
 
       const result = await request.query(query);
-      const newPk = result.recordset[0].new_pk;
       
-      resultados.push({
-        ...roteiro,
-        pk: newPk,
-        success: true
+      // Mapear resultados do lote
+      result.recordset.forEach((row, index) => {
+        resultados.push({
+          ...batch[index],
+          pk: row.pk,
+          success: true
+        });
       });
+      
+      console.log(`✅ Lote ${Math.floor(i/batchSize) + 1} processado: ${result.recordset.length} roteiros inseridos`);
     }
 
     await pool.close();
