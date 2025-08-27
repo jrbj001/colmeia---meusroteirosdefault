@@ -10,8 +10,20 @@ async function uploadRoteiros(req, res) {
 
     // ⏰ Definir data/hora fixa para todo o lote (Brasília/Brasil)
     const agora = new Date();
-    const brasilia = new Date(agora.toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
-    const dateLote = brasilia.toISOString().slice(0, 19).replace('T', ' '); // YYYY-MM-DD HH:mm:ss
+    // Converter para horário de Brasília corretamente
+    const brasiliaTime = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).formatToParts(agora);
+    
+    // Montar string no formato SQL Server: YYYY-MM-DD HH:mm:ss
+    const dateLote = `${brasiliaTime.find(p => p.type === 'year').value}-${brasiliaTime.find(p => p.type === 'month').value}-${brasiliaTime.find(p => p.type === 'day').value} ${brasiliaTime.find(p => p.type === 'hour').value}:${brasiliaTime.find(p => p.type === 'minute').value}:${brasiliaTime.find(p => p.type === 'second').value}`;
     
     console.log(`📅 Data/hora do lote (Brasília): ${dateLote}`);
 
