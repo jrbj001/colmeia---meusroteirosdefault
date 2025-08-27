@@ -486,6 +486,7 @@ export const CriarRoteiro: React.FC = () => {
         
         // Processar dados do Template com joins
         const roteirosProcessados = [];
+        const semanasEncontradas = new Set<string>(); // Para coletar semanas únicas
         
         for (let i = templateHeaderRow + 1; i < templateData.length; i++) {
           const row = templateData[i] as any[];
@@ -506,6 +507,13 @@ export const CriarRoteiro: React.FC = () => {
           const paramData = paramLookup.get(paramKey) || { descricao: null, deflator_visibilidade: null };
           const ipvData = ipvLookup.get(ipvKey) || { ipv: null };
           
+          // Extrair e processar semana do Excel
+          const semanaExcel = templateIndices.semana >= 0 ? 
+            (row[templateIndices.semana]?.toString().trim() || 'W1') : 'W1';
+          
+          // Coletar semana única para estatísticas
+          semanasEncontradas.add(semanaExcel);
+
           // Criar objeto enriquecido
           const roteiro = {
             pk2: 0, // Será preenchido ao salvar
@@ -523,7 +531,7 @@ export const CriarRoteiro: React.FC = () => {
               (row[templateIndices.max_insercoes] ? parseInt(row[templateIndices.max_insercoes]) : null) : null,
             seEstaticoVisibilidade_vl: templateIndices.visibilidade_estatico >= 0 ? 
               (row[templateIndices.visibilidade_estatico] ? parseFloat(row[templateIndices.visibilidade_estatico]) : 100) : 100,
-            semana_st: templateIndices.semana >= 0 ? (row[templateIndices.semana]?.toString().trim() || '1-12') : '1-12',
+            semana_st: semanaExcel, // ✅ Usar semana real do Excel
             // Dados enriquecidos
             param_descricao: paramData.descricao,
             param_deflator_visibilidade: paramData.deflator_visibilidade,
@@ -533,7 +541,11 @@ export const CriarRoteiro: React.FC = () => {
           roteirosProcessados.push(roteiro);
         }
         
+        // Converter semanas para array ordenado
+        const semanasUnicas = Array.from(semanasEncontradas).sort();
+        
         console.log(`Excel processado: ${roteirosProcessados.length} roteiros encontrados`);
+        console.log('Semanas encontradas no Excel:', semanasUnicas);
         console.log('Primeiros roteiros:', roteirosProcessados.slice(0, 3));
         console.log('Lookup Param:', paramLookup.size, 'entradas');
         console.log('Lookup IPV:', ipvLookup.size, 'entradas');
@@ -552,7 +564,7 @@ export const CriarRoteiro: React.FC = () => {
           setProcessandoExcel(false);
           setTimeout(() => setMensagemProcessamento(''), 5000);
           
-          alert(`Excel processado com sucesso!\n\nTotal de roteiros encontrados: ${roteirosProcessados.length}\n\nAbas processadas:\n✅ Template: ${templateData.length - templateHeaderRow - 1} linhas\n✅ Param: ${paramData.length - paramHeaderRow - 1} linhas\n✅ IPV_vias públicas: ${ipvData.length - ipvHeaderRow - 1} linhas\n\nJoins realizados:\n✅ Template × Param: ${paramLookup.size} matches\n✅ Template × IPV: ${ipvLookup.size} matches`);
+          alert(`Excel processado com sucesso!\n\nTotal de roteiros encontrados: ${roteirosProcessados.length}\nSemanas detectadas: ${semanasUnicas.join(', ')}\n\nAbas processadas:\n✅ Template: ${templateData.length - templateHeaderRow - 1} linhas\n✅ Param: ${paramData.length - paramHeaderRow - 1} linhas\n✅ IPV_vias públicas: ${ipvData.length - ipvHeaderRow - 1} linhas\n\nJoins realizados:\n✅ Template × Param: ${paramLookup.size} matches\n✅ Template × IPV: ${ipvLookup.size} matches`);
         }
         
       } catch (error) {
@@ -648,35 +660,50 @@ export const CriarRoteiro: React.FC = () => {
       console.log('🔄 Preparando dados para envio...');
       
       // Associar os roteiros ao plano mídia grupo
-      const roteirosComPk2 = roteirosCarregados.map(roteiro => ({
+      const roteirosComGrupo = roteirosCarregados.map(roteiro => ({
         ...roteiro,
-        pk2: planoMidiaGrupo_pk
+        planoMidiaGrupo_pk: planoMidiaGrupo_pk // ✅ Nova coluna
+        // pk2 será automaticamente 0 no backend
       }));
 
       console.log('📤 Dados a serem enviados:', {
-        totalRoteiros: roteirosComPk2.length,
-        primeiroRoteiro: roteirosComPk2[0],
-        ultimoRoteiro: roteirosComPk2[roteirosComPk2.length - 1]
+        totalRoteiros: roteirosComGrupo.length,
+        primeiroRoteiro: roteirosComGrupo[0],
+        ultimoRoteiro: roteirosComGrupo[roteirosComGrupo.length - 1]
       });
 
       console.log('🌐 Fazendo chamada para /upload-roteiros...');
       const response = await axios.post('/upload-roteiros', {
-        roteiros: roteirosComPk2
+        roteiros: roteirosComGrupo
       });
 
       console.log('📥 Resposta recebida:', response.data);
 
       if (response.data && response.data.roteiros) {
         const pks = response.data.roteiros.map((r: any) => r.pk);
+        const estatisticas = response.data.estatisticas;
+        
         setUploadRoteiros_pks(pks);
         setRoteirosSalvos([...roteirosCarregados]);
         
         console.log('✅ Salvamento concluído com sucesso!', {
           totalRoteiros: roteirosCarregados.length,
-          pks
+          pks,
+          estatisticas
         });
         
-        alert(`Roteiros salvos com sucesso!\n\nTotal de roteiros: ${roteirosCarregados.length}\nPKs: ${pks.join(', ')}`);
+        let mensagemSucesso = `Roteiros salvos com sucesso!\n\nTotal de roteiros: ${roteirosCarregados.length}`;
+        
+        if (estatisticas) {
+          mensagemSucesso += `\n📅 Data/hora do lote: ${estatisticas.dateLote}`;
+          if (estatisticas.semanasInseridas && estatisticas.semanasInseridas.length > 0) {
+            mensagemSucesso += `\n📊 Semanas inseridas: ${estatisticas.semanasInseridas.join(', ')}`;
+          }
+        }
+        
+        mensagemSucesso += `\n🔗 PKs: ${pks.slice(0, 5).join(', ')}${pks.length > 5 ? '...' : ''}`;
+        
+        alert(mensagemSucesso);
       } else {
         console.log('❌ Resposta inválida do servidor:', response.data);
         throw new Error('Resposta inválida do servidor');

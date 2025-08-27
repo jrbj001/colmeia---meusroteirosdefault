@@ -8,11 +8,19 @@ async function uploadRoteiros(req, res) {
       return res.status(400).json({ error: 'Dados dos roteiros são obrigatórios' });
     }
 
+    // ⏰ Definir data/hora fixa para todo o lote (Brasília/Brasil)
+    const agora = new Date();
+    const brasilia = new Date(agora.toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
+    const dateLote = brasilia.toISOString().slice(0, 19).replace('T', ' '); // YYYY-MM-DD HH:mm:ss
+    
+    console.log(`📅 Data/hora do lote (Brasília): ${dateLote}`);
+
     const pool = await getPool();
     
     // Preparar os dados para inserção
     const roteirosParaInserir = roteiros.map(roteiro => ({
-      pk2: roteiro.pk2 || 0,
+      pk2: 0, // ✅ Sempre zero como solicitado
+      planoMidiaGrupo_pk: roteiro.planoMidiaGrupo_pk || 0, // ✅ Nova coluna 
       praca_st: roteiro.praca_st || null,
       uf_st: roteiro.uf_st || null,
       ambiente_st: roteiro.ambiente_st || null,
@@ -24,7 +32,8 @@ async function uploadRoteiros(req, res) {
       seDigitalInsercoes_vl: roteiro.seDigitalInsercoes_vl || null,
       seDigitalMaximoInsercoes_vl: roteiro.seDigitalMaximoInsercoes_vl || null,
       seEstaticoVisibilidade_vl: roteiro.seEstaticoVisibilidade_vl || null,
-      semana_st: roteiro.semana_st || null
+      semana_st: roteiro.semana_st || null,
+      date_dh: dateLote // ✅ Data/hora fixa para todo o lote
     }));
 
     // Inserir os roteiros em lotes para melhor performance
@@ -45,6 +54,7 @@ async function uploadRoteiros(req, res) {
         const paramPrefix = `p${i + index}`;
         
         request.input(`${paramPrefix}_pk2`, sql.Int, roteiro.pk2);
+        request.input(`${paramPrefix}_planoMidiaGrupo_pk`, sql.Int, roteiro.planoMidiaGrupo_pk);
         request.input(`${paramPrefix}_praca_st`, sql.VarChar(255), roteiro.praca_st);
         request.input(`${paramPrefix}_uf_st`, sql.VarChar(2), roteiro.uf_st);
         request.input(`${paramPrefix}_ambiente_st`, sql.VarChar(255), roteiro.ambiente_st);
@@ -57,23 +67,24 @@ async function uploadRoteiros(req, res) {
         request.input(`${paramPrefix}_seDigitalMaximoInsercoes_vl`, sql.Int, roteiro.seDigitalMaximoInsercoes_vl);
         request.input(`${paramPrefix}_seEstaticoVisibilidade_vl`, sql.Int, roteiro.seEstaticoVisibilidade_vl);
         request.input(`${paramPrefix}_semana_st`, sql.VarChar(255), roteiro.semana_st);
+        request.input(`${paramPrefix}_date_dh`, sql.DateTime, roteiro.date_dh);
         
         values.push(`(
-          @${paramPrefix}_pk2, @${paramPrefix}_praca_st, @${paramPrefix}_uf_st, @${paramPrefix}_ambiente_st, @${paramPrefix}_grupoFormatosMidia_st,
+          @${paramPrefix}_pk2, @${paramPrefix}_planoMidiaGrupo_pk, @${paramPrefix}_praca_st, @${paramPrefix}_uf_st, @${paramPrefix}_ambiente_st, @${paramPrefix}_grupoFormatosMidia_st,
           @${paramPrefix}_formato_st, @${paramPrefix}_tipoMidia_st, @${paramPrefix}_latitude_vl, @${paramPrefix}_longitude_vl,
           @${paramPrefix}_seDigitalInsercoes_vl, @${paramPrefix}_seDigitalMaximoInsercoes_vl,
-          @${paramPrefix}_seEstaticoVisibilidade_vl, @${paramPrefix}_semana_st
+          @${paramPrefix}_seEstaticoVisibilidade_vl, @${paramPrefix}_semana_st, @${paramPrefix}_date_dh
         )`);
       });
 
       const query = `
         INSERT INTO [serv_product_be180].[uploadRoteiros_ft] (
-          pk2, praca_st, uf_st, ambiente_st, grupoFormatosMidia_st, 
+          pk2, planoMidiaGrupo_pk, praca_st, uf_st, ambiente_st, grupoFormatosMidia_st, 
           formato_st, tipoMidia_st, latitude_vl, longitude_vl, 
           seDigitalInsercoes_vl, seDigitalMaximoInsercoes_vl, 
-          seEstaticoVisibilidade_vl, semana_st
+          seEstaticoVisibilidade_vl, semana_st, date_dh
         ) 
-        OUTPUT INSERTED.pk, INSERTED.pk2, INSERTED.praca_st, INSERTED.uf_st
+        OUTPUT INSERTED.pk, INSERTED.pk2, INSERTED.planoMidiaGrupo_pk, INSERTED.praca_st, INSERTED.uf_st, INSERTED.semana_st, INSERTED.date_dh
         VALUES ${values.join(', ')};
       `;
 
@@ -91,11 +102,23 @@ async function uploadRoteiros(req, res) {
       console.log(`✅ Lote ${Math.floor(i/batchSize) + 1} processado: ${result.recordset.length} roteiros inseridos`);
     }
 
+    // Coletar estatísticas das semanas inseridas
+    const semanasInseridas = [...new Set(resultados.map(r => r.semana_st).filter(Boolean))].sort();
+    
+    console.log(`✅ Upload concluído: ${resultados.length} roteiros inseridos`);
+    console.log(`📅 Data/hora do lote: ${dateLote}`);
+    console.log(`📊 Semanas inseridas: ${semanasInseridas.join(', ')}`);
+
     await pool.close();
 
     res.json({
       message: `${resultados.length} roteiros inseridos com sucesso`,
-      roteiros: resultados
+      roteiros: resultados,
+      estatisticas: {
+        totalRoteiros: resultados.length,
+        dateLote: dateLote,
+        semanasInseridas: semanasInseridas
+      }
     });
 
   } catch (error) {
