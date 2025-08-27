@@ -11,16 +11,9 @@ async function uploadRoteiros(req, res) {
     // ⏰ Definir data/hora fixa para todo o lote (Brasília/Brasil)
     const agora = new Date();
     
-    // Usar horário local do servidor (que já está em Brasília)
-    const ano = agora.getFullYear();
-    const mes = String(agora.getMonth() + 1).padStart(2, '0');
-    const dia = String(agora.getDate()).padStart(2, '0');
-    const hora = String(agora.getHours()).padStart(2, '0');
-    const minuto = String(agora.getMinutes()).padStart(2, '0');
-    const segundo = String(agora.getSeconds()).padStart(2, '0');
-    
-    // Formato SQL Server: YYYY-MM-DD HH:mm:ss
-    const dateLote = `${ano}-${mes}-${dia} ${hora}:${minuto}:${segundo}`;
+    // CORREÇÃO: SQL Server interpreta como UTC e adiciona +3h
+    // Então subtraímos 3h para compensar essa conversão automática
+    const dateLote = new Date(agora.getTime() - (3 * 60 * 60 * 1000)); // -3 horas
     
     console.log(`📅 Data/hora do lote (Brasília): ${dateLote}`);
 
