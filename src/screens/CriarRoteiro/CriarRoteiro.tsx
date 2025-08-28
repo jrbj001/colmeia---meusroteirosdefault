@@ -101,6 +101,12 @@ export const CriarRoteiro: React.FC = () => {
   const [uploadRoteiros_pks, setUploadRoteiros_pks] = useState<number[]>([]);
   const [processandoExcel, setProcessandoExcel] = useState(false);
   const [mensagemProcessamento, setMensagemProcessamento] = useState<string>('');
+  
+  // Estados para o novo fluxo pós-upload
+  const [uploadCompleto, setUploadCompleto] = useState(false);
+  const [dadosUpload, setDadosUpload] = useState<{pk: number, date_dh: string} | null>(null);
+  const [dadosPlanoMidia, setDadosPlanoMidia] = useState<any[]>([]);
+  const [processandoFluxoCompleto, setProcessandoFluxoCompleto] = useState(false);
 
   // Carregar dados dos combos
   useEffect(() => {
@@ -581,143 +587,122 @@ export const CriarRoteiro: React.FC = () => {
 
   // Função para salvar Aba 4 - Upload de roteiros
   const salvarAba4 = async () => {
-    console.log('🚀 Iniciando salvamento Aba 4...');
-    console.log('📊 Estados atuais:', {
-      planoMidiaGrupo_pk,
-      planoMidiaDesc_pks,
-      planoMidia_pks,
-      roteirosCarregados: roteirosCarregados.length,
-      user: user ? { id: user.id, name: user.name } : null
-    });
+    console.log('🚀 Iniciando Aba 4 - Upload e processamento do Excel...');
 
+    // ✅ NOVO FLUXO: Aba 4 vem ANTES da Aba 3
     if (!planoMidiaGrupo_pk) {
-      console.log('❌ Erro: planoMidiaGrupo_pk não está definido');
       alert('É necessário salvar a Aba 1 primeiro');
       return;
     }
 
     if (planoMidiaDesc_pks.length === 0) {
-      console.log('❌ Erro: planoMidiaDesc_pks está vazio');
       alert('É necessário salvar a Aba 2 primeiro');
       return;
     }
 
-    if (planoMidia_pks.length === 0) {
-      console.log('❌ Erro: planoMidia_pks está vazio');
-      alert('É necessário salvar a Aba 3 primeiro');
-      return;
-    }
-
     if (roteirosCarregados.length === 0) {
-      console.log('❌ Erro: roteirosCarregados está vazio');
       alert('É necessário carregar um arquivo Excel com roteiros');
       return;
     }
 
     if (!user) {
-      console.log('❌ Erro: usuário não está logado');
       alert('Usuário não está logado');
       return;
     }
 
-    // 🎯 VALIDAÇÃO DE CONSISTÊNCIA ENTRE ABAS 3 E 4
-    console.log('🔍 Validando consistência entre cidades...');
-    const validacao = validarConsistenciaCidades();
-    
-    if (!validacao.valido && validacao.detalhes) {
-      console.log('❌ Inconsistência detectada:', validacao.detalhes);
-      
-      let mensagemErro = '🚨 INCONSISTÊNCIA DETECTADA ENTRE ABAS 3 E 4\n\n';
-      
-      if (validacao.detalhes.cidadesFaltandoNoExcel.length > 0) {
-        mensagemErro += `❌ Cidades selecionadas na Aba 3 que NÃO estão no Excel:\n`;
-        mensagemErro += validacao.detalhes.cidadesFaltandoNoExcel.map(c => `• ${c}`).join('\n');
-        mensagemErro += '\n\n';
-      }
-      
-      if (validacao.detalhes.pracasSobrandoNoExcel.length > 0) {
-        mensagemErro += `❌ Praças no Excel que NÃO foram selecionadas na Aba 3:\n`;
-        mensagemErro += validacao.detalhes.pracasSobrandoNoExcel.map(p => `• ${p}`).join('\n');
-        mensagemErro += '\n\n';
-      }
-      
-      mensagemErro += `📊 RESUMO:\n`;
-      mensagemErro += `• Cidades na Aba 3: ${validacao.detalhes.totalCidadesAba3}\n`;
-      mensagemErro += `• Praças no Excel: ${validacao.detalhes.totalPracasExcel}\n\n`;
-      mensagemErro += `🔧 SOLUÇÃO:\n`;
-      mensagemErro += `1. Volte para a Aba 3 e ajuste as cidades selecionadas\n`;
-      mensagemErro += `2. OU corrija o arquivo Excel para incluir apenas as praças selecionadas\n`;
-      mensagemErro += `3. As praças devem ser EXATAMENTE as mesmas entre as abas`;
-      
-      alert(mensagemErro);
-      return;
-    }
-    
-    console.log('✅ Consistência validada - prosseguindo com salvamento...');
-
     setSalvandoAba4(true);
+    setProcessandoFluxoCompleto(true);
+    
     try {
-      console.log('🔄 Preparando dados para envio...');
+      console.log('🔄 ETAPA 1: Salvando roteiros do Excel...');
       
-      // Associar os roteiros ao plano mídia grupo
+      // 1. Salvar roteiros do Excel
       const roteirosComGrupo = roteirosCarregados.map(roteiro => ({
         ...roteiro,
-        planoMidiaGrupo_pk: planoMidiaGrupo_pk // ✅ Nova coluna
-        // pk2 será automaticamente 0 no backend
+        planoMidiaGrupo_pk: planoMidiaGrupo_pk
       }));
 
-      console.log('📤 Dados a serem enviados:', {
-        totalRoteiros: roteirosComGrupo.length,
-        primeiroRoteiro: roteirosComGrupo[0],
-        ultimoRoteiro: roteirosComGrupo[roteirosComGrupo.length - 1]
-      });
-
-      console.log('🌐 Fazendo chamada para /upload-roteiros...');
-      const response = await axios.post('/upload-roteiros', {
+      const uploadResponse = await axios.post('/upload-roteiros', {
         roteiros: roteirosComGrupo
       });
 
-      console.log('📥 Resposta recebida:', response.data);
-
-      if (response.data && response.data.roteiros) {
-        const pks = response.data.roteiros.map((r: any) => r.pk);
-        const estatisticas = response.data.estatisticas;
-        
-        setUploadRoteiros_pks(pks);
-        setRoteirosSalvos([...roteirosCarregados]);
-        
-        console.log('✅ Salvamento concluído com sucesso!', {
-          totalRoteiros: roteirosCarregados.length,
-          pks,
-          estatisticas
-        });
-        
-        let mensagemSucesso = `Roteiros salvos com sucesso!\n\nTotal de roteiros: ${roteirosCarregados.length}`;
-        
-        if (estatisticas) {
-          mensagemSucesso += `\n📅 Data/hora do lote: ${estatisticas.dateLote}`;
-          if (estatisticas.semanasInseridas && estatisticas.semanasInseridas.length > 0) {
-            mensagemSucesso += `\n📊 Semanas inseridas: ${estatisticas.semanasInseridas.join(', ')}`;
-          }
-        }
-        
-        mensagemSucesso += `\n🔗 PKs: ${pks.slice(0, 5).join(', ')}${pks.length > 5 ? '...' : ''}`;
-        
-        alert(mensagemSucesso);
-      } else {
-        console.log('❌ Resposta inválida do servidor:', response.data);
-        throw new Error('Resposta inválida do servidor');
+      if (!uploadResponse.data || !uploadResponse.data.roteiros) {
+        throw new Error('Erro no upload dos roteiros');
       }
-    } catch (error) {
-      console.error('💥 Erro detalhado ao salvar Aba 4:', error);
-      console.error('📊 Dados do erro:', {
-        message: error instanceof Error ? error.message : 'Erro desconhecido',
-        response: error instanceof Error && 'response' in error ? (error as any).response?.data : null,
-        status: error instanceof Error && 'response' in error ? (error as any).response?.status : null
+
+      const uploadData = {
+        pk: planoMidiaGrupo_pk,
+        date_dh: uploadResponse.data.estatisticas?.dateLote || new Date().toISOString()
+      };
+
+      setDadosUpload(uploadData);
+      setUploadCompleto(true);
+      setUploadRoteiros_pks(uploadResponse.data.roteiros.map((r: any) => r.pk));
+      setRoteirosSalvos([...roteirosCarregados]);
+
+      console.log('✅ ETAPA 1 CONCLUÍDA - Roteiros salvos');
+      console.log('🔄 ETAPA 2: Consultando view uploadRoteirosPlanoMidia...');
+
+      // 2. Consultar a view para obter dados processados
+      const viewResponse = await axios.post('/upload-roteiros-plano-midia', {
+        planoMidiaGrupo_pk: uploadData.pk,
+        date_dh: uploadData.date_dh
       });
-      alert(`Erro ao salvar roteiros.\n\nDetalhes: ${error instanceof Error ? error.message : 'Erro desconhecido'}\n\nTente novamente.`);
+
+      if (!viewResponse.data || !viewResponse.data.data) {
+        throw new Error('Erro ao consultar dados da view');
+      }
+
+      const dadosView = viewResponse.data.data;
+      setDadosPlanoMidia(dadosView);
+
+      console.log('✅ ETAPA 2 CONCLUÍDA - View consultada');
+      console.log('🔄 ETAPA 3: Processando pontos únicos...');
+
+      // 3. Processar pontos únicos e inserir no inventário
+      const pontosResponse = await axios.post('/upload-pontos-unicos', {
+        planoMidiaGrupo_pk: uploadData.pk,
+        date_dh: uploadData.date_dh
+      });
+
+      console.log('✅ ETAPA 3 CONCLUÍDA - Pontos únicos processados');
+
+      // 4. Mostrar resultado final
+      const totalRoteiros = uploadResponse.data.roteiros.length;
+      const totalCidadesSemanas = dadosView.length;
+      const totalPontosUnicos = pontosResponse.data?.data?.pontosUnicos || 0;
+
+      let mensagemSucesso = `🎯 UPLOAD E PROCESSAMENTO CONCLUÍDO!\n\n`;
+      mensagemSucesso += `📊 RESUMO:\n`;
+      mensagemSucesso += `• ${totalRoteiros} roteiros salvos\n`;
+      mensagemSucesso += `• ${totalCidadesSemanas} combinações cidade+semana\n`;
+      mensagemSucesso += `• ${totalPontosUnicos} pontos únicos no inventário\n\n`;
+      mensagemSucesso += `📅 Data/hora: ${uploadData.date_dh}\n\n`;
+      mensagemSucesso += `✅ AGORA VOCÊ PODE PROSSEGUIR PARA ABA 3`;
+      
+      alert(mensagemSucesso);
+
+    } catch (error) {
+      console.error('💥 Erro no processamento Aba 4:', error);
+      
+      let mensagemErro = 'Erro no upload e processamento:\n\n';
+      
+      if (error instanceof Error && 'response' in error) {
+        const axiosError = error as any;
+        if (axiosError.response) {
+          mensagemErro += `Status: ${axiosError.response.status}\n`;
+          mensagemErro += `Dados: ${JSON.stringify(axiosError.response.data, null, 2)}`;
+        } else {
+          mensagemErro += axiosError.message;
+        }
+      } else if (error instanceof Error) {
+        mensagemErro += error.message;
+      }
+      
+      alert(mensagemErro);
     } finally {
       setSalvandoAba4(false);
+      setProcessandoFluxoCompleto(false);
     }
   };
 
@@ -837,15 +822,20 @@ export const CriarRoteiro: React.FC = () => {
     }
   };
 
-  // Função para salvar Aba 3 - Criar Plano Mídia Desc e Plano Mídia com cidades
+  // Função para salvar Aba 3 - Criar Plano Mídia com base no Excel processado
   const salvarAba3 = async () => {
     if (planoMidiaDesc_pks.length === 0) {
       alert('É necessário salvar a Aba 2 primeiro');
       return;
     }
 
-    if (cidadesSelecionadas.length === 0) {
-      alert('É necessário selecionar pelo menos uma cidade');
+    if (!uploadCompleto || !dadosUpload) {
+      alert('É necessário fazer o upload do Excel na Aba 4 primeiro');
+      return;
+    }
+
+    if (dadosPlanoMidia.length === 0) {
+      alert('Nenhum dado de cidade+semana encontrado no Excel processado');
       return;
     }
 
@@ -856,17 +846,22 @@ export const CriarRoteiro: React.FC = () => {
 
     setSalvandoAba3(true);
     try {
+      console.log('🔄 ETAPA 1: Criando Plano Mídia Desc para cada cidade do Excel...');
+      
       const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
       
-      // 1. Criar plano mídia desc para cada cidade
-      const recordsJson = cidadesSelecionadas.map(cidade => ({
-        planoMidiaDesc_st: `${planoMidiaGrupo_st}_${cidade.nome_cidade.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`,
+      // 1. Extrair cidades únicas dos dados do Excel processado
+      const cidadesExcel = [...new Set(dadosPlanoMidia.map(d => d.praca_st))];
+      
+      // 2. Criar plano mídia desc para cada cidade encontrada no Excel
+      const recordsJson = cidadesExcel.map(cidade => ({
+        planoMidiaDesc_st: `${planoMidiaGrupo_st}_${cidade.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`,
         usuarioId_st: user.id,
         usuarioName_st: user.name,
         gender_st: genero,
         class_st: classe,
         age_st: faixaEtaria,
-        ibgeCode_vl: cidade.codigo_ibge || getIbgeCodeFromCidade(cidade)
+        ibgeCode_vl: "0000000" // Temporário, será ajustado se necessário
       }));
 
       const descResponse = await axios.post('/plano-midia-desc', {
@@ -874,38 +869,80 @@ export const CriarRoteiro: React.FC = () => {
         recordsJson
       });
 
-      if (descResponse.data && Array.isArray(descResponse.data)) {
-        const descPks = descResponse.data.map(item => item.new_pk);
-        
-        // 2. Criar plano mídia para cada desc criado
-        const periodsJson = descPks.map(pk => ({
-          planoMidiaDesc_pk: pk.toString(),
-          semanaInicial_vl: "1",
-          semanaFinal_vl: "12",
-          versao_vl: "1"
-        }));
-
-        const midiaResponse = await axios.post('/plano-midia', {
-          periodsJson
-        });
-
-        if (midiaResponse.data && Array.isArray(midiaResponse.data)) {
-          const midiaPks = midiaResponse.data.map(item => item.new_pk);
-          
-          // Salvar os dados para controlar o estado do botão
-          setPlanoMidia_pks(midiaPks);
-          setCidadesSalvas([...cidadesSelecionadas]);
-          
-          alert(`Roteiro criado com sucesso!\n\nCidades: ${cidadesSelecionadas.map(c => c.nome_cidade).join(', ')}\nPlano Mídia Desc PKs: ${descPks.join(', ')}\nPlano Mídia PKs: ${midiaPks.join(', ')}`);
-        } else {
-          throw new Error('Erro na criação do plano mídia');
-        }
-      } else {
+      if (!descResponse.data || !Array.isArray(descResponse.data)) {
         throw new Error('Erro na criação do plano mídia desc');
       }
+
+      const descPks = descResponse.data.map(item => item.new_pk);
+      console.log('✅ ETAPA 1 CONCLUÍDA - Plano Mídia Desc criado para cada cidade');
+
+      console.log('🔄 ETAPA 2: Executando sp_planoMidiaInsert com dados reais do Excel...');
+
+      // 3. Criar períodos com base nos dados reais do Excel (cidade + semana)
+      const periodsJson = dadosPlanoMidia.map((dadoView, index) => {
+        // Mapear cidade para o PK correspondente
+        const cidadeIndex = cidadesExcel.indexOf(dadoView.praca_st);
+        const descPk = descPks[cidadeIndex];
+        
+        return {
+          planoMidiaDesc_pk: descPk.toString(),
+          semanaInicial_vl: dadoView.semanaInicial_vl.toString(),
+          semanaFinal_vl: dadoView.semanaFinal_vl.toString(),
+          versao_vl: "1"
+        };
+      });
+
+      console.log('📤 Enviando para sp_planoMidiaInsert:', periodsJson);
+
+      const spResponse = await axios.post('/sp-plano-midia-insert', {
+        periodsJson: JSON.stringify(periodsJson)
+      });
+
+      if (!spResponse.data || !spResponse.data.data) {
+        throw new Error('Erro na execução da stored procedure sp_planoMidiaInsert');
+      }
+
+      const spResults = spResponse.data.data;
+      const midiaPks = spResults.map((item: any) => item.new_pk);
+
+      console.log('✅ ETAPA 2 CONCLUÍDA - Stored procedure executada');
+
+      // 4. Salvar os dados para controlar o estado
+      setPlanoMidia_pks(midiaPks);
+      
+      // 5. Resultado final
+      const totalCidades = cidadesExcel.length;
+      const totalPeriodos = dadosPlanoMidia.length;
+
+      let mensagemSucesso = `🎯 PLANOS DE MÍDIA CRIADOS COM SUCESSO!\n\n`;
+      mensagemSucesso += `📊 RESUMO:\n`;
+      mensagemSucesso += `• ${totalCidades} cidades processadas\n`;
+      mensagemSucesso += `• ${totalPeriodos} períodos (cidade+semana) criados\n`;
+      mensagemSucesso += `• ${descPks.length} Plano Mídia Desc PKs: ${descPks.join(', ')}\n`;
+      mensagemSucesso += `• ${midiaPks.length} Plano Mídia PKs criados\n\n`;
+      mensagemSucesso += `🏙️ CIDADES: ${cidadesExcel.join(', ')}\n\n`;
+      mensagemSucesso += `✅ FLUXO COMPLETO FINALIZADO!`;
+      
+      alert(mensagemSucesso);
+
     } catch (error) {
-      console.error('Erro ao salvar Aba 3:', error);
-      alert('Erro ao criar roteiro com cidades. Tente novamente.');
+      console.error('💥 Erro ao salvar Aba 3:', error);
+      
+      let mensagemErro = 'Erro ao criar planos de mídia:\n\n';
+      
+      if (error instanceof Error && 'response' in error) {
+        const axiosError = error as any;
+        if (axiosError.response) {
+          mensagemErro += `Status: ${axiosError.response.status}\n`;
+          mensagemErro += `Dados: ${JSON.stringify(axiosError.response.data, null, 2)}`;
+        } else {
+          mensagemErro += axiosError.message;
+        }
+      } else if (error instanceof Error) {
+        mensagemErro += error.message;
+      }
+      
+      alert(mensagemErro);
     } finally {
       setSalvandoAba3(false);
     }

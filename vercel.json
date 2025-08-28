@@ -1,1 +1,93 @@
-{} 
+{
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 300
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/upload-roteiros-plano-midia",
+      "destination": "/api/upload-roteiros-plano-midia.js"
+    },
+    {
+      "source": "/sp-plano-midia-insert",
+      "destination": "/api/sp-plano-midia-insert.js"
+    },
+    {
+      "source": "/upload-pontos-unicos",
+      "destination": "/api/upload-pontos-unicos.js"
+    },
+    {
+      "source": "/upload-roteiros",
+      "destination": "/api/upload-roteiros.js"
+    },
+    {
+      "source": "/plano-midia-grupo",
+      "destination": "/api/plano-midia-grupo.js"
+    },
+    {
+      "source": "/plano-midia-desc",
+      "destination": "/api/plano-midia-desc.js"
+    },
+    {
+      "source": "/plano-midia",
+      "destination": "/api/plano-midia.js"
+    },
+    {
+      "source": "/cidades",
+      "destination": "/api/cidades.js"
+    },
+    {
+      "source": "/cidades-praca",
+      "destination": "/api/cidades-praca.js"
+    },
+    {
+      "source": "/semanas",
+      "destination": "/api/semanas.js"
+    },
+    {
+      "source": "/pivot-descpks",
+      "destination": "/api/pivot-descpks.js"
+    },
+    {
+      "source": "/inventario-cidade",
+      "destination": "/api/inventario-cidade.js"
+    },
+    {
+      "source": "/agencia",
+      "destination": "/api/agencia.js"
+    },
+    {
+      "source": "/marca",
+      "destination": "/api/marca.js"
+    },
+    {
+      "source": "/categoria",
+      "destination": "/api/categoria.js"
+    },
+    {
+      "source": "/target-genero",
+      "destination": "/api/target-genero.js"
+    },
+    {
+      "source": "/target-classe",
+      "destination": "/api/target-classe.js"
+    },
+    {
+      "source": "/target-faixa-etaria",
+      "destination": "/api/target-faixa-etaria.js"
+    },
+    {
+      "source": "/debug-grupo",
+      "destination": "/api/debug-grupo.js"
+    },
+    {
+      "source": "/hexagonos",
+      "destination": "/api/hexagonos.js"
+    },
+    {
+      "source": "/debug",
+      "destination": "/api/debug.js"
+    }
+  ]
+} 
