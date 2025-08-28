@@ -41,54 +41,46 @@ async function uploadPontosUnicos(req, res) {
             });
         }
 
-        // Simular fluxo de passantes (em produção viria do inventário real)
+        // TODO: Em produção, consultar tabela de inventário real
+        // Exemplo de como deveria ser:
+        /*
+        const inventarioQuery = `
+            SELECT 
+                i.latitude_vl,
+                i.longitude_vl,
+                i.ambiente_st,
+                i.tipoMidia_st,
+                i.fluxoPassante_vl,
+                i.visibilidade_vl,
+                i.deflatorVisibilidade_vl
+            FROM [serv_product_be180].[inventario_ft] i
+            WHERE i.latitude_vl IN (${pontos.map(p => p.latitude_vl).join(',')})
+              AND i.longitude_vl IN (${pontos.map(p => p.longitude_vl).join(',')})
+              AND i.ambiente_st = @ambiente_st
+              AND i.tipoMidia_st = @tipoMidia_st
+        `;
+        */
+        
+        // Por enquanto, simular fluxo de passantes (TEMPORÁRIO)
         const pontosEnriquecidos = pontos.map(ponto => ({
             ...ponto,
             fluxoPassante_vl: Math.floor(Math.random() * 10000) + 1000, // Simular fluxo entre 1000-11000
+            observacao: "SIMULADO - Substituir por consulta real ao inventário"
         }));
 
-        // Inserir na tabela uploadInventario_ft
-        const agora = new Date();
-        const dateLote = new Date(agora.getTime() - (3 * 60 * 60 * 1000)); // -3 horas para compensar SQL Server
-
-        const request = pool.request();
-        const values = [];
-        
-        pontosEnriquecidos.forEach((ponto, index) => {
-            const paramPrefix = `p${index}`;
-            request.input(`${paramPrefix}_pk2`, sql.Int, 0);
-            request.input(`${paramPrefix}_ambiente_st`, sql.VarChar(255), ponto.ambiente_st || '');
-            request.input(`${paramPrefix}_tipoMidia_st`, sql.VarChar(255), ponto.tipoMidia_st || '');
-            request.input(`${paramPrefix}_latitude_vl`, sql.Float, ponto.latitude_vl || 0);
-            request.input(`${paramPrefix}_longitude_vl`, sql.Float, ponto.longitude_vl || 0);
-            request.input(`${paramPrefix}_fluxoPassante_vl`, sql.Int, ponto.fluxoPassante_vl);
-            request.input(`${paramPrefix}_date_dh`, sql.DateTime, dateLote);
-
-            values.push(`(@${paramPrefix}_pk2, @${paramPrefix}_ambiente_st, @${paramPrefix}_tipoMidia_st, @${paramPrefix}_latitude_vl, @${paramPrefix}_longitude_vl, @${paramPrefix}_fluxoPassante_vl, @${paramPrefix}_date_dh, CAST(@${paramPrefix}_date_dh AS DATE))`);
-        });
-
-        const insertQuery = `
-            INSERT INTO [serv_product_be180].[uploadInventario_ft] (
-                pk2, ambiente_st, tipoMidia_st, latitude_vl, longitude_vl, 
-                fluxoPassante_vl, date_dh, date_dt
-            ) 
-            OUTPUT INSERTED.pk, INSERTED.ambiente_st, INSERTED.tipoMidia_st, INSERTED.fluxoPassante_vl
-            VALUES ${values.join(', ')};
-        `;
-
-        const insertResult = await request.query(insertQuery);
-
-        console.log(`📊 [uploadPontosUnicos] ${insertResult.recordset.length} pontos inseridos na uploadInventario_ft`);
-        console.log(`📅 [uploadPontosUnicos] Data/hora do lote: ${dateLote.toISOString()}`);
+        console.log(`📊 [uploadPontosUnicos] ${pontos.length} pontos únicos processados`);
+        console.log(`📍 [uploadPontosUnicos] Pontos:`, pontosEnriquecidos.map(p => 
+            `${p.ambiente_st}/${p.tipoMidia_st} (${p.latitude_vl}, ${p.longitude_vl})`
+        ));
 
         res.json({
             success: true,
             data: {
                 pontosUnicos: pontos.length,
-                pontosInseridos: insertResult.recordset.length,
-                insertedData: insertResult.recordset
+                pontosProcessados: pontosEnriquecidos.length,
+                pontos: pontosEnriquecidos
             },
-            message: `${insertResult.recordset.length} pontos únicos processados e inseridos`
+            message: `${pontos.length} pontos únicos processados com sucesso`
         });
 
     } catch (error) {
