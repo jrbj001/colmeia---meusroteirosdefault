@@ -667,18 +667,83 @@ export const CriarRoteiro: React.FC = () => {
 
       console.log('✅ ETAPA 3 CONCLUÍDA - Pontos únicos processados');
 
-      // 4. Mostrar resultado final
+      console.log('🔄 ETAPA 4: Criando planos de mídia com dados da Aba 3...');
+
+      // 4. Executar lógica da Aba 3 automaticamente com dados enriquecidos
+      const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
+      
+      // Extrair cidades únicas dos dados do Excel processado
+      const cidadesExcel = [...new Set(dadosView.map((d: any) => d.praca_st))] as string[];
+      
+      // Criar plano mídia desc para cada cidade encontrada no Excel
+      const recordsJson = cidadesExcel.map((cidade) => ({
+        planoMidiaDesc_st: `${planoMidiaGrupo_st}_${cidade.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`,
+        usuarioId_st: user.id,
+        usuarioName_st: user.name,
+        gender_st: genero,
+        class_st: classe,
+        age_st: faixaEtaria,
+        ibgeCode_vl: "0000000" // Temporário
+      }));
+
+      const descResponse = await axios.post('/plano-midia-desc', {
+        planoMidiaGrupo_pk: uploadData.pk,
+        recordsJson
+      });
+
+      if (!descResponse.data || !Array.isArray(descResponse.data)) {
+        throw new Error('Erro na criação do plano mídia desc');
+      }
+
+      const descPks = descResponse.data.map(item => item.new_pk);
+      console.log('✅ ETAPA 4A CONCLUÍDA - Plano Mídia Desc criado para cada cidade');
+
+      // Criar períodos com base nos dados reais do Excel (cidade + semana)
+      const periodsJson = dadosView.map((dadoView: any, index: number) => {
+        // Mapear cidade para o PK correspondente
+        const cidadeIndex = cidadesExcel.indexOf(dadoView.praca_st);
+        const descPk = descPks[cidadeIndex];
+        
+        return {
+          planoMidiaDesc_pk: descPk.toString(),
+          semanaInicial_vl: dadoView.semanaInicial_vl.toString(),
+          semanaFinal_vl: dadoView.semanaFinal_vl.toString(),
+          versao_vl: "1"
+        };
+      });
+
+      const spResponse = await axios.post('/sp-plano-midia-insert', {
+        periodsJson: JSON.stringify(periodsJson)
+      });
+
+      if (!spResponse.data || !spResponse.data.data) {
+        throw new Error('Erro na execução da stored procedure sp_planoMidiaInsert');
+      }
+
+      const spResults = spResponse.data.data;
+      const midiaPks = spResults.map((item: any) => item.new_pk);
+
+      console.log('✅ ETAPA 4B CONCLUÍDA - Stored procedure executada');
+
+      // Atualizar estados finais
+      setPlanoMidia_pks(midiaPks);
+
+      // 5. Mostrar resultado final completo
       const totalRoteiros = uploadResponse.data.roteiros.length;
       const totalCidadesSemanas = dadosView.length;
       const totalPontosUnicos = pontosResponse.data?.data?.pontosUnicos || 0;
+      const totalPlanosMidia = midiaPks.length;
 
-      let mensagemSucesso = `🎯 UPLOAD E PROCESSAMENTO CONCLUÍDO!\n\n`;
-      mensagemSucesso += `📊 RESUMO:\n`;
-      mensagemSucesso += `• ${totalRoteiros} roteiros salvos\n`;
-      mensagemSucesso += `• ${totalCidadesSemanas} combinações cidade+semana\n`;
-      mensagemSucesso += `• ${totalPontosUnicos} pontos únicos no inventário\n\n`;
+      let mensagemSucesso = `🎯 FLUXO COMPLETO FINALIZADO COM SUCESSO!\n\n`;
+      mensagemSucesso += `📊 RESUMO COMPLETO:\n`;
+      mensagemSucesso += `• ${totalRoteiros} roteiros salvos do Excel\n`;
+      mensagemSucesso += `• ${totalCidadesSemanas} combinações cidade+semana detectadas\n`;
+      mensagemSucesso += `• ${totalPontosUnicos} pontos únicos processados\n`;
+      mensagemSucesso += `• ${cidadesExcel.length} planos mídia desc criados\n`;
+      mensagemSucesso += `• ${totalPlanosMidia} planos mídia finalizados\n\n`;
+      mensagemSucesso += `🏙️ CIDADES: ${cidadesExcel.join(', ')}\n`;
       mensagemSucesso += `📅 Data/hora: ${uploadData.date_dh}\n\n`;
-      mensagemSucesso += `✅ AGORA VOCÊ PODE PROSSEGUIR PARA ABA 3`;
+      mensagemSucesso += `✅ PROJETO CRIADO E CONFIGURADO AUTOMATICAMENTE!`;
       
       alert(mensagemSucesso);
 
@@ -822,20 +887,15 @@ export const CriarRoteiro: React.FC = () => {
     }
   };
 
-  // Função para salvar Aba 3 - Criar Plano Mídia com base no Excel processado
+  // Função para salvar Aba 3 - Validar e preparar cidades (salvamento local)
   const salvarAba3 = async () => {
     if (planoMidiaDesc_pks.length === 0) {
       alert('É necessário salvar a Aba 2 primeiro');
       return;
     }
 
-    if (!uploadCompleto || !dadosUpload) {
-      alert('É necessário fazer o upload do Excel na Aba 4 primeiro');
-      return;
-    }
-
-    if (dadosPlanoMidia.length === 0) {
-      alert('Nenhum dado de cidade+semana encontrado no Excel processado');
+    if (cidadesSelecionadas.length === 0) {
+      alert('É necessário selecionar pelo menos uma cidade');
       return;
     }
 
@@ -846,103 +906,31 @@ export const CriarRoteiro: React.FC = () => {
 
     setSalvandoAba3(true);
     try {
-      console.log('🔄 ETAPA 1: Criando Plano Mídia Desc para cada cidade do Excel...');
+      console.log('💾 Salvando Aba 3 localmente - Configuração de cidades...');
       
-      const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
+      // ✅ SALVAMENTO LOCAL: Apenas validar e preparar dados
+      // A criação real dos planos será feita na Aba 4 com dados enriquecidos
       
-      // 1. Extrair cidades únicas dos dados do Excel processado
-      const cidadesExcel = [...new Set(dadosPlanoMidia.map(d => d.praca_st))];
+      // Salvar as cidades selecionadas para controle de estado
+      setCidadesSalvas([...cidadesSelecionadas]);
       
-      // 2. Criar plano mídia desc para cada cidade encontrada no Excel
-      const recordsJson = cidadesExcel.map(cidade => ({
-        planoMidiaDesc_st: `${planoMidiaGrupo_st}_${cidade.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`,
-        usuarioId_st: user.id,
-        usuarioName_st: user.name,
-        gender_st: genero,
-        class_st: classe,
-        age_st: faixaEtaria,
-        ibgeCode_vl: "0000000" // Temporário, será ajustado se necessário
-      }));
-
-      const descResponse = await axios.post('/plano-midia-desc', {
-        planoMidiaGrupo_pk,
-        recordsJson
-      });
-
-      if (!descResponse.data || !Array.isArray(descResponse.data)) {
-        throw new Error('Erro na criação do plano mídia desc');
-      }
-
-      const descPks = descResponse.data.map(item => item.new_pk);
-      console.log('✅ ETAPA 1 CONCLUÍDA - Plano Mídia Desc criado para cada cidade');
-
-      console.log('🔄 ETAPA 2: Executando sp_planoMidiaInsert com dados reais do Excel...');
-
-      // 3. Criar períodos com base nos dados reais do Excel (cidade + semana)
-      const periodsJson = dadosPlanoMidia.map((dadoView, index) => {
-        // Mapear cidade para o PK correspondente
-        const cidadeIndex = cidadesExcel.indexOf(dadoView.praca_st);
-        const descPk = descPks[cidadeIndex];
-        
-        return {
-          planoMidiaDesc_pk: descPk.toString(),
-          semanaInicial_vl: dadoView.semanaInicial_vl.toString(),
-          semanaFinal_vl: dadoView.semanaFinal_vl.toString(),
-          versao_vl: "1"
-        };
-      });
-
-      console.log('📤 Enviando para sp_planoMidiaInsert:', periodsJson);
-
-      const spResponse = await axios.post('/sp-plano-midia-insert', {
-        periodsJson: JSON.stringify(periodsJson)
-      });
-
-      if (!spResponse.data || !spResponse.data.data) {
-        throw new Error('Erro na execução da stored procedure sp_planoMidiaInsert');
-      }
-
-      const spResults = spResponse.data.data;
-      const midiaPks = spResults.map((item: any) => item.new_pk);
-
-      console.log('✅ ETAPA 2 CONCLUÍDA - Stored procedure executada');
-
-      // 4. Salvar os dados para controlar o estado
-      setPlanoMidia_pks(midiaPks);
+      // Simular um plano mídia PK temporário para ativar a Aba 4
+      setPlanoMidia_pks([999999]); // PK temporário, será substituído na Aba 4
       
-      // 5. Resultado final
-      const totalCidades = cidadesExcel.length;
-      const totalPeriodos = dadosPlanoMidia.length;
-
-      let mensagemSucesso = `🎯 PLANOS DE MÍDIA CRIADOS COM SUCESSO!\n\n`;
+      const totalCidades = cidadesSelecionadas.length;
+      
+      let mensagemSucesso = `💾 CONFIGURAÇÃO SALVA LOCALMENTE!\n\n`;
       mensagemSucesso += `📊 RESUMO:\n`;
-      mensagemSucesso += `• ${totalCidades} cidades processadas\n`;
-      mensagemSucesso += `• ${totalPeriodos} períodos (cidade+semana) criados\n`;
-      mensagemSucesso += `• ${descPks.length} Plano Mídia Desc PKs: ${descPks.join(', ')}\n`;
-      mensagemSucesso += `• ${midiaPks.length} Plano Mídia PKs criados\n\n`;
-      mensagemSucesso += `🏙️ CIDADES: ${cidadesExcel.join(', ')}\n\n`;
-      mensagemSucesso += `✅ FLUXO COMPLETO FINALIZADO!`;
+      mensagemSucesso += `• ${totalCidades} cidades selecionadas\n`;
+      mensagemSucesso += `🏙️ CIDADES: ${cidadesSelecionadas.map(c => c.nome_cidade).join(', ')}\n\n`;
+      mensagemSucesso += `⏭️ PRÓXIMO PASSO: Vá para a Aba 4 e faça o upload do Excel\n`;
+      mensagemSucesso += `🎯 Os planos de mídia serão criados automaticamente na Aba 4`;
       
       alert(mensagemSucesso);
 
     } catch (error) {
       console.error('💥 Erro ao salvar Aba 3:', error);
-      
-      let mensagemErro = 'Erro ao criar planos de mídia:\n\n';
-      
-      if (error instanceof Error && 'response' in error) {
-        const axiosError = error as any;
-        if (axiosError.response) {
-          mensagemErro += `Status: ${axiosError.response.status}\n`;
-          mensagemErro += `Dados: ${JSON.stringify(axiosError.response.data, null, 2)}`;
-        } else {
-          mensagemErro += axiosError.message;
-        }
-      } else if (error instanceof Error) {
-        mensagemErro += error.message;
-      }
-      
-      alert(mensagemErro);
+      alert('Erro ao salvar configuração de cidades. Tente novamente.');
     } finally {
       setSalvandoAba3(false);
     }
