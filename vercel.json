@@ -22,6 +22,10 @@
       "destination": "/api/sp-upload-roteiros-inventario-insert.js"
     },
     {
+      "source": "/databricks-run-job",
+      "destination": "/api/databricks-run-job.js"
+    },
+    {
       "source": "/upload-roteiros",
       "destination": "/api/upload-roteiros.js"
     },

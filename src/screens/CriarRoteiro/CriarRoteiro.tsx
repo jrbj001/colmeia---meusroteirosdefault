@@ -744,15 +744,33 @@ export const CriarRoteiro: React.FC = () => {
 
       console.log('✅ ETAPA 5 CONCLUÍDA - Procedure uploadRoteirosInventarioToBaseCalculadoraInsert executada');
 
+      console.log('🔄 ETAPA 6: Executando jobs do Databricks para cada plano de mídia...');
+
+      // 6. Executar jobs do Databricks para cada planoMidia_pk
+      const databricksResponse = await axios.post('/databricks-run-job', {
+        planoMidia_pks: midiaPks,
+        date_dh: uploadData.date_dh
+      });
+
+      if (!databricksResponse.data || !databricksResponse.data.success) {
+        console.warn('⚠️ ETAPA 6 - Alguns jobs do Databricks falharam, mas o processo continuará');
+        console.warn('Resultado Databricks:', databricksResponse.data);
+      } else {
+        console.log('✅ ETAPA 6 CONCLUÍDA - Todos os jobs do Databricks executados com sucesso');
+      }
+
       // Atualizar estados finais
       setPlanoMidia_pks(midiaPks);
 
-      // 6. Mostrar resultado final completo
+      // 7. Mostrar resultado final completo
       const totalRoteiros = uploadResponse.data.roteiros.length;
       const totalCidadesSemanas = dadosView.length;
       const totalPontosUnicos = pontosResponse.data?.data?.pontosUnicos || 0;
       const totalPlanosMidia = midiaPks.length;
 
+      // Informações sobre o Databricks
+      const databricksInfo = databricksResponse.data?.summary || { successful: 0, failed: 0, total: 0 };
+      
       let mensagemSucesso = `🎯 FLUXO COMPLETO FINALIZADO COM SUCESSO!\n\n`;
       mensagemSucesso += `📊 RESUMO COMPLETO:\n`;
       mensagemSucesso += `• ${totalRoteiros} roteiros salvos do Excel\n`;
@@ -760,10 +778,11 @@ export const CriarRoteiro: React.FC = () => {
       mensagemSucesso += `• ${totalPontosUnicos} pontos únicos processados\n`;
       mensagemSucesso += `• ${cidadesExcel.length} planos mídia desc criados\n`;
       mensagemSucesso += `• ${totalPlanosMidia} planos mídia finalizados\n`;
-      mensagemSucesso += `• Dados transferidos para base calculadora\n\n`;
+      mensagemSucesso += `• Dados transferidos para base calculadora\n`;
+      mensagemSucesso += `• ${databricksInfo.successful}/${databricksInfo.total} jobs Databricks executados\n\n`;
       mensagemSucesso += `🏙️ CIDADES: ${cidadesExcel.join(', ')}\n`;
       mensagemSucesso += `📅 Data/hora: ${uploadData.date_dh}\n\n`;
-      mensagemSucesso += `✅ PROJETO CRIADO E DADOS TRANSFERIDOS PARA CALCULADORA!`;
+      mensagemSucesso += `✅ PROJETO CRIADO E PROCESSAMENTO DATABRICKS INICIADO!`;
       
       alert(mensagemSucesso);
 
