@@ -730,10 +730,24 @@ export const CriarRoteiro: React.FC = () => {
 
       console.log('✅ ETAPA 4B CONCLUÍDA - Stored procedure executada');
 
+      console.log('🔄 ETAPA 5: Executando procedure uploadRoteirosInventarioToBaseCalculadoraInsert...');
+
+      // 5. Executar procedure final para transferir dados para base calculadora
+      const procedureResponse = await axios.post('/sp-upload-roteiros-inventario-insert', {
+        planoMidiaGrupo_pk: uploadData.pk,
+        date_dh: uploadData.date_dh
+      });
+
+      if (!procedureResponse.data || !procedureResponse.data.success) {
+        throw new Error('Erro na execução da procedure uploadRoteirosInventarioToBaseCalculadoraInsert');
+      }
+
+      console.log('✅ ETAPA 5 CONCLUÍDA - Procedure uploadRoteirosInventarioToBaseCalculadoraInsert executada');
+
       // Atualizar estados finais
       setPlanoMidia_pks(midiaPks);
 
-      // 5. Mostrar resultado final completo
+      // 6. Mostrar resultado final completo
       const totalRoteiros = uploadResponse.data.roteiros.length;
       const totalCidadesSemanas = dadosView.length;
       const totalPontosUnicos = pontosResponse.data?.data?.pontosUnicos || 0;
@@ -745,10 +759,11 @@ export const CriarRoteiro: React.FC = () => {
       mensagemSucesso += `• ${totalCidadesSemanas} combinações cidade+semana detectadas\n`;
       mensagemSucesso += `• ${totalPontosUnicos} pontos únicos processados\n`;
       mensagemSucesso += `• ${cidadesExcel.length} planos mídia desc criados\n`;
-      mensagemSucesso += `• ${totalPlanosMidia} planos mídia finalizados\n\n`;
+      mensagemSucesso += `• ${totalPlanosMidia} planos mídia finalizados\n`;
+      mensagemSucesso += `• Dados transferidos para base calculadora\n\n`;
       mensagemSucesso += `🏙️ CIDADES: ${cidadesExcel.join(', ')}\n`;
       mensagemSucesso += `📅 Data/hora: ${uploadData.date_dh}\n\n`;
-      mensagemSucesso += `✅ PROJETO CRIADO E CONFIGURADO AUTOMATICAMENTE!`;
+      mensagemSucesso += `✅ PROJETO CRIADO E DADOS TRANSFERIDOS PARA CALCULADORA!`;
       
       alert(mensagemSucesso);
 

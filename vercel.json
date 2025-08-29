@@ -18,6 +18,10 @@
       "destination": "/api/upload-pontos-unicos.js"
     },
     {
+      "source": "/sp-upload-roteiros-inventario-insert",
+      "destination": "/api/sp-upload-roteiros-inventario-insert.js"
+    },
+    {
       "source": "/upload-roteiros",
       "destination": "/api/upload-roteiros.js"
     },
