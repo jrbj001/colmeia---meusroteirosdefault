@@ -665,7 +665,12 @@ export const CriarRoteiro: React.FC = () => {
         date_dh: uploadData.date_dh
       });
 
+      if (!pontosResponse.data || !pontosResponse.data.success) {
+        throw new Error('Erro no processamento dos pontos únicos para inventário');
+      }
+
       console.log('✅ ETAPA 3 CONCLUÍDA - Pontos únicos processados');
+      console.log(`📍 Pontos únicos inseridos: ${pontosResponse.data.data?.pontosInseridos || 0}`);
 
       console.log('🔄 ETAPA 4: Criando planos de mídia com dados da Aba 3...');
 
@@ -683,7 +688,7 @@ export const CriarRoteiro: React.FC = () => {
         gender_st: genero,
         class_st: classe,
         age_st: faixaEtaria,
-        ibgeCode_vl: "0000000" // Temporário
+        ibgeCode_vl: getIbgeCodeFromCidade({nome_cidade: cidade, id_cidade: 0} as Cidade)
       }));
 
       const descResponse = await axios.post('/plano-midia-desc', {
