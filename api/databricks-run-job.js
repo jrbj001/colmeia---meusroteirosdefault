@@ -20,7 +20,14 @@ async function databricksRunJob(req, res) {
 
         const databricksUrl = 'https://adb-2612949382264861.1.azuredatabricks.net/api/2.1/jobs/run-now';
         const jobId = 45676543759210;
-        const authToken = 'dapic5fcb77be3814598ffea4032b545a34e';
+        const authToken = process.env.DATABRICKS_TOKEN;
+        
+        if (!authToken) {
+            return res.status(500).json({ 
+                error: 'Token do Databricks não configurado',
+                message: 'Configure a variável de ambiente DATABRICKS_TOKEN'
+            });
+        }
 
         console.log(`✅ [databricksRunJob] Executando jobs do Databricks para ${planoMidia_pks.length} planos de mídia`);
 
