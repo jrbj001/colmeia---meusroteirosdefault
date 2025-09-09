@@ -116,6 +116,13 @@ export const CriarRoteiro: React.FC = () => {
   const [pracasUnicas, setPracasUnicas] = useState<{praca: string, uf: string}[]>([]);
   const [carregandoDadosMatrix, setCarregandoDadosMatrix] = useState(false);
 
+  // useEffect para carregar dados das tabelas quando roteirosCarregados mudar
+  useEffect(() => {
+    if (roteirosCarregados.length > 0 && planoMidiaGrupo_pk && !carregandoDadosMatrix) {
+      carregarDadosMatrix();
+    }
+  }, [roteirosCarregados.length, planoMidiaGrupo_pk]);
+
   // Carregar dados dos combos
   useEffect(() => {
     const fetchData = async () => {
@@ -578,10 +585,7 @@ export const CriarRoteiro: React.FC = () => {
           setProcessandoExcel(false);
           setTimeout(() => setMensagemProcessamento(''), 5000);
           
-          // Carregar dados das tabelas dinâmicas após processar o Excel
-          setTimeout(() => {
-            carregarDadosMatrix();
-          }, 1000);
+          // O carregamento das tabelas será feito automaticamente pelo useEffect
           
           alert(`Excel processado com sucesso!\n\nTotal de roteiros encontrados: ${roteirosProcessados.length}\nSemanas detectadas: ${semanasUnicas.join(', ')}\n\nAbas processadas:\n✅ Template: ${templateData.length - templateHeaderRow - 1} linhas\n✅ Param: ${paramData.length - paramHeaderRow - 1} linhas\n✅ IPV_vias públicas: ${ipvData.length - ipvHeaderRow - 1} linhas\n\nJoins realizados:\n✅ Template × Param: ${paramLookup.size} matches\n✅ Template × IPV: ${ipvLookup.size} matches`);
         }
@@ -600,6 +604,7 @@ export const CriarRoteiro: React.FC = () => {
 
   // Função para carregar dados das tabelas dinâmicas
   const carregarDadosMatrix = async () => {
+    
     if (!planoMidiaGrupo_pk || roteirosCarregados.length === 0) {
       console.log('❌ Não é possível carregar dados matrix: planoMidiaGrupo_pk ou roteirosCarregados não disponíveis');
       return;
@@ -657,6 +662,7 @@ export const CriarRoteiro: React.FC = () => {
     } finally {
       setCarregandoDadosMatrix(false);
     }
+
   };
 
   // Função para salvar Aba 4 - Upload de roteiros
@@ -1821,6 +1827,8 @@ export const CriarRoteiro: React.FC = () => {
                           {mensagemProcessamento}
                         </div>
                       )}
+
+
                     </div>
 
                     {/* Validação de consistência de cidades */}
@@ -1904,7 +1912,7 @@ export const CriarRoteiro: React.FC = () => {
                               <span className="text-[#3a3a3a] font-medium">Carregando dados das tabelas...</span>
                             </div>
                           </div>
-                        ) : pracasUnicas.length > 0 ? (
+                        ) : pracasUnicas && pracasUnicas.length > 0 ? (
                           <div className="space-y-8">
                             {pracasUnicas.map((praca, pracaIndex) => {
                               const semanasPraca = semanasUnicas;
@@ -2006,6 +2014,11 @@ export const CriarRoteiro: React.FC = () => {
                                 </div>
                               );
                             })}
+                          </div>
+                        ) : pracasUnicas.length === 0 ? (
+                          <div className="text-center py-8">
+                            <p className="text-gray-500">Nenhuma praça encontrada nos dados carregados.</p>
+                            <p className="text-sm text-gray-400 mt-2">Verifique se o arquivo Excel contém dados válidos.</p>
                           </div>
                         ) : (
                           <div className="text-center py-8">
