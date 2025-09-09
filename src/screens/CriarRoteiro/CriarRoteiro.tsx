@@ -703,6 +703,24 @@ export const CriarRoteiro: React.FC = () => {
       const descPks = descResponse.data.map(item => item.new_pk);
       console.log('✅ ETAPA 4A CONCLUÍDA - Plano Mídia Desc criado para cada cidade');
 
+      // 🧹 Limpeza automática: Deletar registros temporários após criar os definitivos
+      try {
+        console.log('🧹 Executando limpeza de registros temporários...');
+        const cleanupResponse = await axios.post('/plano-midia-desc-cleanup', {
+          planoMidiaGrupo_pk: uploadData.pk,
+          pattern: '_TARGET_TEMP'
+        });
+        
+        if (cleanupResponse.data?.success && cleanupResponse.data?.deleted_count > 0) {
+          console.log(`✅ Limpeza concluída: ${cleanupResponse.data.deleted_count} registro(s) temporário(s) deletado(s)`);
+        } else {
+          console.log('ℹ️ Nenhum registro temporário encontrado para deletar');
+        }
+      } catch (cleanupError) {
+        console.warn('⚠️ Erro na limpeza de registros temporários (não crítico):', cleanupError.message);
+        // Não falha o processo principal se a limpeza falhar
+      }
+
       // Criar períodos com base nos dados reais do Excel (cidade + semana)
       const periodsJson = dadosView.map((dadoView: any, index: number) => {
         // Mapear cidade para o PK correspondente

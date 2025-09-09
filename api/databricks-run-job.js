@@ -18,14 +18,16 @@ async function databricksRunJob(req, res) {
             });
         }
 
-        const databricksUrl = 'https://adb-2612949382264861.1.azuredatabricks.net/api/2.1/jobs/run-now';
-        const jobId = 45676543759210;
-        const authToken = process.env.DATABRICKS_TOKEN;
-        
-        if (!authToken) {
-            return res.status(500).json({ 
-                error: 'Token do Databricks não configurado',
-                message: 'Configure a variável de ambiente DATABRICKS_TOKEN'
+        const databricksUrl = process.env.DATABRICKS_URL;
+        const jobId = parseInt(process.env.DATABRICKS_JOB_ID);
+        const authToken = process.env.DATABRICKS_AUTH_TOKEN;
+
+        // Validar se as variáveis de ambiente estão configuradas
+        if (!databricksUrl || !jobId || !authToken) {
+            return res.status(500).json({
+                success: false,
+                error: 'Configurações do Databricks não encontradas',
+                message: 'Configure as variáveis de ambiente DATABRICKS_URL, DATABRICKS_JOB_ID e DATABRICKS_AUTH_TOKEN'
             });
         }
 

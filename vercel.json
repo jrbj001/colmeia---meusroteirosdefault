@@ -96,6 +96,10 @@
     {
       "source": "/debug",
       "destination": "/api/debug.js"
+    },
+    {
+      "source": "/plano-midia-desc-cleanup",
+      "destination": "/api/plano-midia-desc-cleanup.js"
     }
   ]
 } 
