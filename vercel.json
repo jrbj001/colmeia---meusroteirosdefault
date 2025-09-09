@@ -100,6 +100,18 @@
     {
       "source": "/plano-midia-desc-cleanup",
       "destination": "/api/plano-midia-desc-cleanup.js"
+    },
+    {
+      "source": "/matrix-data-query",
+      "destination": "/api/matrix-data-query.js"
+    },
+    {
+      "source": "/matrix-data-row-query",
+      "destination": "/api/matrix-data-row-query.js"
+    },
+    {
+      "source": "/grupo-sub-distinct",
+      "destination": "/api/grupo-sub-distinct.js"
     }
   ]
 } 

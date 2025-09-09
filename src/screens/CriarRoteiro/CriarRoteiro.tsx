@@ -107,6 +107,14 @@ export const CriarRoteiro: React.FC = () => {
   const [dadosUpload, setDadosUpload] = useState<{pk: number, date_dh: string} | null>(null);
   const [dadosPlanoMidia, setDadosPlanoMidia] = useState<any[]>([]);
   const [processandoFluxoCompleto, setProcessandoFluxoCompleto] = useState(false);
+  
+  // Estados para as tabelas dinâmicas de vias públicas
+  const [dadosMatrix, setDadosMatrix] = useState<any[]>([]);
+  const [dadosMatrixRow, setDadosMatrixRow] = useState<any[]>([]);
+  const [dadosSubGrupos, setDadosSubGrupos] = useState<any[]>([]);
+  const [semanasUnicas, setSemanasUnicas] = useState<string[]>([]);
+  const [pracasUnicas, setPracasUnicas] = useState<{praca: string, uf: string}[]>([]);
+  const [carregandoDadosMatrix, setCarregandoDadosMatrix] = useState(false);
 
   // Carregar dados dos combos
   useEffect(() => {
@@ -570,6 +578,11 @@ export const CriarRoteiro: React.FC = () => {
           setProcessandoExcel(false);
           setTimeout(() => setMensagemProcessamento(''), 5000);
           
+          // Carregar dados das tabelas dinâmicas após processar o Excel
+          setTimeout(() => {
+            carregarDadosMatrix();
+          }, 1000);
+          
           alert(`Excel processado com sucesso!\n\nTotal de roteiros encontrados: ${roteirosProcessados.length}\nSemanas detectadas: ${semanasUnicas.join(', ')}\n\nAbas processadas:\n✅ Template: ${templateData.length - templateHeaderRow - 1} linhas\n✅ Param: ${paramData.length - paramHeaderRow - 1} linhas\n✅ IPV_vias públicas: ${ipvData.length - ipvHeaderRow - 1} linhas\n\nJoins realizados:\n✅ Template × Param: ${paramLookup.size} matches\n✅ Template × IPV: ${ipvLookup.size} matches`);
         }
         
@@ -583,6 +596,67 @@ export const CriarRoteiro: React.FC = () => {
     };
     
     reader.readAsArrayBuffer(file);
+  };
+
+  // Função para carregar dados das tabelas dinâmicas
+  const carregarDadosMatrix = async () => {
+    if (!planoMidiaGrupo_pk || roteirosCarregados.length === 0) {
+      console.log('❌ Não é possível carregar dados matrix: planoMidiaGrupo_pk ou roteirosCarregados não disponíveis');
+      return;
+    }
+
+    setCarregandoDadosMatrix(true);
+    
+    try {
+      // Extrair semanas e praças únicas dos roteiros carregados
+      const semanas = [...new Set(roteirosCarregados.map(r => r.semana_st).filter(Boolean))].sort();
+      
+      // Extrair praças únicas usando Map para evitar duplicatas
+      const pracasMap = new Map();
+      roteirosCarregados.forEach(r => {
+        if (r.praca_st && r.uf_st) {
+          const key = `${r.praca_st}-${r.uf_st}`;
+          if (!pracasMap.has(key)) {
+            pracasMap.set(key, { praca: r.praca_st, uf: r.uf_st });
+          }
+        }
+      });
+      const pracas = Array.from(pracasMap.values());
+      
+      setSemanasUnicas(semanas);
+      setPracasUnicas(pracas);
+
+      console.log(`📊 Semanas encontradas: ${semanas.join(', ')}`);
+      console.log(`🏙️ Praças encontradas: ${pracas.map(p => `${p.praca}-${p.uf}`).join(', ')}`);
+
+      // Chamar as 3 APIs em paralelo
+      const [matrixResponse, matrixRowResponse, subGruposResponse] = await Promise.all([
+        axios.post('/matrix-data-query', { planoMidiaGrupo_pk }),
+        axios.post('/matrix-data-row-query', { planoMidiaGrupo_pk }),
+        axios.get('/grupo-sub-distinct')
+      ]);
+
+      if (matrixResponse.data.success) {
+        setDadosMatrix(matrixResponse.data.data);
+        console.log(`✅ Dados matrix carregados: ${matrixResponse.data.data.length} registros`);
+      }
+
+      if (matrixRowResponse.data.success) {
+        setDadosMatrixRow(matrixRowResponse.data.data);
+        console.log(`✅ Dados matrix row carregados: ${matrixRowResponse.data.data.length} registros`);
+      }
+
+      if (subGruposResponse.data.success) {
+        setDadosSubGrupos(subGruposResponse.data.data);
+        console.log(`✅ Subgrupos carregados: ${subGruposResponse.data.data.length} registros`);
+      }
+
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados matrix:', error);
+      alert('Erro ao carregar dados das tabelas. Tente novamente.');
+    } finally {
+      setCarregandoDadosMatrix(false);
+    }
   };
 
   // Função para salvar Aba 4 - Upload de roteiros
@@ -717,7 +791,7 @@ export const CriarRoteiro: React.FC = () => {
           console.log('ℹ️ Nenhum registro temporário encontrado para deletar');
         }
       } catch (cleanupError) {
-        console.warn('⚠️ Erro na limpeza de registros temporários (não crítico):', cleanupError.message);
+        console.warn('⚠️ Erro na limpeza de registros temporários (não crítico):', cleanupError instanceof Error ? cleanupError.message : 'Erro desconhecido');
         // Não falha o processo principal se a limpeza falhar
       }
 
@@ -1820,58 +1894,124 @@ export const CriarRoteiro: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Preview dos roteiros carregados */}
+                    {/* Tabelas dinâmicas por praça */}
                     {roteirosCarregados.length > 0 && (
                       <div className="mb-8">
-                        <h4 className="text-sm font-medium text-[#3a3a3a] mb-4">
-                          Roteiros carregados ({roteirosCarregados.length}):
-                        </h4>
-                        <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="bg-gray-600 text-white">
-                                <th className="px-4 py-2 text-left font-bold">Praça</th>
-                                <th className="px-4 py-2 text-left font-bold">UF</th>
-                                <th className="px-4 py-2 text-left font-bold">Ambiente</th>
-                                <th className="px-4 py-2 text-left font-bold">Formato</th>
-                                <th className="px-4 py-2 text-left font-bold">Tipo</th>
-                                <th className="px-4 py-2 text-left font-bold">Semana</th>
-                                <th className="px-4 py-2 text-left font-bold">IPV</th>
-                                <th className="px-4 py-2 text-left font-bold">Descrição</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {roteirosCarregados.map((roteiro, index) => (
-                                <tr key={index} className="border-b border-gray-200 hover:bg-gray-50">
-                                  <td className="px-4 py-2 text-[#3a3a3a]">
-                                    {roteiro.praca_st}
-                                  </td>
-                                  <td className="px-4 py-2 text-[#3a3a3a]">
-                                    {roteiro.uf_st}
-                                  </td>
-                                  <td className="px-4 py-2 text-[#3a3a3a]">
-                                    {roteiro.ambiente_st}
-                                  </td>
-                                  <td className="px-4 py-2 text-[#3a3a3a]">
-                                    {roteiro.formato_st}
-                                  </td>
-                                  <td className="px-4 py-2 text-[#3a3a3a]">
-                                    {roteiro.tipoMidia_st}
-                                  </td>
-                                  <td className="px-4 py-2 text-[#3a3a3a]">
-                                    {roteiro.semana_st}
-                                  </td>
-                                  <td className="px-4 py-2 text-[#3a3a3a]">
-                                    {roteiro.ipv_valor ? roteiro.ipv_valor.toFixed(2) : '-'}
-                                  </td>
-                                  <td className="px-4 py-2 text-[#3a3a3a]">
-                                    {roteiro.param_descricao || '-'}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                        {carregandoDadosMatrix ? (
+                          <div className="flex items-center justify-center py-8">
+                            <div className="flex items-center gap-3">
+                              <div className="animate-spin h-6 w-6 border-2 border-[#ff4600] border-t-transparent rounded-full"></div>
+                              <span className="text-[#3a3a3a] font-medium">Carregando dados das tabelas...</span>
+                            </div>
+                          </div>
+                        ) : pracasUnicas.length > 0 ? (
+                          <div className="space-y-8">
+                            {pracasUnicas.map((praca, pracaIndex) => {
+                              const semanasPraca = semanasUnicas;
+                              const gruposPraca = dadosSubGrupos || [];
+                              
+                              return (
+                                <div key={pracaIndex} className="bg-white border border-gray-300 rounded-lg overflow-hidden">
+                                  {/* Header da Praça */}
+                                  <div className="bg-gray-100 px-6 py-4 border-b border-gray-300">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <h4 className="text-lg font-bold text-[#3a3a3a]">
+                                          PRAÇA {String(pracaIndex + 1).padStart(2, '0')}
+                                        </h4>
+                                        <p className="text-sm text-gray-600">
+                                          Praça: {praca.praca} - {praca.uf} | Quantidade de semanas: {semanasPraca.length} semanas
+                                        </p>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <div 
+                                          className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm"
+                                          style={{ backgroundColor: '#ff4600' }}
+                                        >
+                                          G
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Tabela da Praça */}
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                      <thead>
+                                        <tr className="bg-blue-600 text-white">
+                                          <th className="px-4 py-3 text-left font-bold">Grupo</th>
+                                          <th className="px-4 py-3 text-left font-bold">Descrição</th>
+                                          <th className="px-4 py-3 text-left font-bold">Visibilidade</th>
+                                          <th className="px-4 py-3 text-left font-bold">Inserção comprada</th>
+                                          <th className="px-4 py-3 text-left font-bold">Inserção oferecida</th>
+                                          {semanasPraca.map((semana, semanaIndex) => (
+                                            <th key={semanaIndex} className="px-4 py-3 text-left font-bold">
+                                              W{semanaIndex + 1}
+                                            </th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {gruposPraca.map((grupo, grupoIndex) => (
+                                          <tr key={grupoIndex} className="border-b border-gray-200 hover:bg-gray-50">
+                                            <td className="px-4 py-3 text-[#3a3a3a] font-medium">
+                                              {grupo.grupo_st}{grupo.grupoSub_st}
+                                            </td>
+                                            <td className="px-4 py-3 text-[#3a3a3a]">
+                                              {grupo.grupoDesc_st}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                              <select 
+                                                className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] bg-white"
+                                                defaultValue="Selecionar"
+                                              >
+                                                <option value="Selecionar">Selecionar</option>
+                                                <option value="Alta">Alta</option>
+                                                <option value="Média">Média</option>
+                                                <option value="Baixa">Baixa</option>
+                                                <option value="N/A">N/A</option>
+                                              </select>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                              <input 
+                                                type="number" 
+                                                step="0.001"
+                                                className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right"
+                                                defaultValue="0.000"
+                                              />
+                                            </td>
+                                            <td className="px-4 py-3">
+                                              <input 
+                                                type="number" 
+                                                step="0.001"
+                                                className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right"
+                                                defaultValue="0.000"
+                                              />
+                                            </td>
+                                            {semanasPraca.map((semana, semanaIndex) => (
+                                              <td key={semanaIndex} className="px-4 py-3">
+                                                <input 
+                                                  type="number" 
+                                                  step="0.001"
+                                                  className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right"
+                                                  defaultValue="000.000"
+                                                />
+                                              </td>
+                                            ))}
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8">
+                            <p className="text-gray-500">Carregando dados das tabelas...</p>
+                          </div>
+                        )}
                       </div>
                     )}
 
