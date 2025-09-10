@@ -836,19 +836,19 @@ export const CriarRoteiro: React.FC = () => {
 
       console.log('✅ ETAPA 5 CONCLUÍDA - Procedure uploadRoteirosInventarioToBaseCalculadoraInsert executada');
 
-      console.log('🔄 ETAPA 6: Executando jobs do Databricks para cada plano de mídia...');
+      console.log('🔄 ETAPA 6: Executando job do Databricks para o grupo...');
 
-      // 6. Executar jobs do Databricks para cada planoMidia_pk
+      // 6. Executar job do Databricks para o grupo
       const databricksResponse = await axios.post('/databricks-run-job', {
-        planoMidia_pks: midiaPks,
+        planoMidiaGrupo_pk: planoMidiaGrupo_pk,
         date_dh: uploadData.date_dh
       });
 
       if (!databricksResponse.data || !databricksResponse.data.success) {
-        console.warn('⚠️ ETAPA 6 - Alguns jobs do Databricks falharam, mas o processo continuará');
+        console.warn('⚠️ ETAPA 6 - Job do Databricks falhou, mas o processo continuará');
         console.warn('Resultado Databricks:', databricksResponse.data);
       } else {
-        console.log('✅ ETAPA 6 CONCLUÍDA - Todos os jobs do Databricks executados com sucesso');
+        console.log('✅ ETAPA 6 CONCLUÍDA - Job do Databricks executado com sucesso');
       }
 
       // Atualizar estados finais

@@ -2,12 +2,12 @@ const axios = require('axios');
 
 async function databricksRunJob(req, res) {
     try {
-        const { planoMidia_pks, date_dh } = req.body;
+        const { planoMidiaGrupo_pk, date_dh } = req.body;
 
-        if (!planoMidia_pks || !Array.isArray(planoMidia_pks) || planoMidia_pks.length === 0) {
+        if (!planoMidiaGrupo_pk) {
             return res.status(400).json({ 
                 success: false, 
-                message: 'planoMidia_pks é obrigatório e deve ser um array não vazio' 
+                message: 'planoMidiaGrupo_pk é obrigatório' 
             });
         }
 
@@ -31,85 +31,71 @@ async function databricksRunJob(req, res) {
             });
         }
 
-        console.log(`✅ [databricksRunJob] Executando jobs do Databricks para ${planoMidia_pks.length} planos de mídia`);
+        console.log(`✅ [databricksRunJob] Executando job do Databricks para grupo ${planoMidiaGrupo_pk}`);
 
-        const results = [];
-        const errors = [];
+        // Converter date_dh para o formato solicitado
+        const dateDh = new Date(date_dh);
+        const formattedDateDh = dateDh.toISOString().slice(0, 19).replace('T', ' ');
+        const formattedDateDt = dateDh.toISOString().slice(0, 10);
 
-        // Executar job para cada planoMidia_pk
-        for (let i = 0; i < planoMidia_pks.length; i++) {
-            const planoMidia_pk = planoMidia_pks[i];
-            
-            try {
-                console.log(`🔄 [databricksRunJob] Processando plano mídia ${i + 1}/${planoMidia_pks.length} - PK: ${planoMidia_pk}`);
+        console.log(`📅 [databricksRunJob] Parâmetros formatados - date_dh: ${formattedDateDh}, date_dt: ${formattedDateDt}`);
 
-                // Converter date_dh para o formato solicitado
-                const dateDh = new Date(date_dh);
-                const formattedDateDh = dateDh.toISOString().slice(0, 19).replace('T', ' ');
-                const formattedDateDt = dateDh.toISOString().slice(0, 10);
+        const jobPayload = {
+            job_id: jobId,
+            notebook_params: {
+                planoMidiaGrupo_pk: planoMidiaGrupo_pk.toString(),
+                date_dh: formattedDateDh,
+                date_dt: formattedDateDt
+            }
+        };
 
-                console.log(`📅 [databricksRunJob] Parâmetros formatados - date_dh: ${formattedDateDh}, date_dt: ${formattedDateDt}`);
+        try {
+            const response = await axios.post(databricksUrl, jobPayload, {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 30000 // 30 segundos timeout
+            });
 
-                const jobPayload = {
-                    job_id: jobId,
-                    notebook_params: {
-                        planoMidia_pk: planoMidia_pk.toString(),
-                        date_dh: formattedDateDh,
-                        date_dt: formattedDateDt
-                    }
-                };
+            console.log(`✅ [databricksRunJob] Job iniciado para grupo ${planoMidiaGrupo_pk} - Run ID: ${response.data.run_id}`);
 
-                const response = await axios.post(databricksUrl, jobPayload, {
-                    headers: {
-                        'Authorization': `Bearer ${authToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    timeout: 30000 // 30 segundos timeout
-                });
-
-                results.push({
-                    planoMidia_pk: planoMidia_pk,
+            // Retornar resultado de sucesso
+            res.json({
+                success: true,
+                summary: {
+                    total: 1,
+                    successful: 1,
+                    failed: 0
+                },
+                result: {
+                    planoMidiaGrupo_pk: planoMidiaGrupo_pk,
                     success: true,
                     run_id: response.data.run_id,
                     databricks_response: response.data
-                });
+                },
+                message: `Job do Databricks executado com sucesso para grupo ${planoMidiaGrupo_pk}`
+            });
 
-                console.log(`✅ [databricksRunJob] Job iniciado para PK ${planoMidia_pk} - Run ID: ${response.data.run_id}`);
-
-            } catch (error) {
-                console.error(`❌ [databricksRunJob] Erro no job para PK ${planoMidia_pk}:`, error.message);
-                
-                errors.push({
-                    planoMidia_pk: planoMidia_pk,
+        } catch (error) {
+            console.error(`❌ [databricksRunJob] Erro no job para grupo ${planoMidiaGrupo_pk}:`, error.message);
+            
+            res.json({
+                success: false,
+                summary: {
+                    total: 1,
+                    successful: 0,
+                    failed: 1
+                },
+                error: {
+                    planoMidiaGrupo_pk: planoMidiaGrupo_pk,
                     success: false,
                     error: error.message,
                     response: error.response?.data || null
-                });
-            }
-
-            // Aguardar 1 segundo entre chamadas para evitar rate limiting
-            if (i < planoMidia_pks.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
+                },
+                message: `Erro ao executar job do Databricks para grupo ${planoMidiaGrupo_pk}`
+            });
         }
-
-        const successCount = results.length;
-        const errorCount = errors.length;
-
-        console.log(`📊 [databricksRunJob] Processamento concluído: ${successCount} sucessos, ${errorCount} erros`);
-
-        // Retornar resultado consolidado
-        res.json({
-            success: errorCount === 0,
-            summary: {
-                total: planoMidia_pks.length,
-                successful: successCount,
-                failed: errorCount
-            },
-            results: results,
-            errors: errors,
-            message: `${successCount} de ${planoMidia_pks.length} jobs do Databricks executados com sucesso`
-        });
 
     } catch (error) {
         console.error('❌ [databricksRunJob] Erro geral:', error);
