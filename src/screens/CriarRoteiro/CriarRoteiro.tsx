@@ -116,12 +116,7 @@ export const CriarRoteiro: React.FC = () => {
   const [pracasUnicas, setPracasUnicas] = useState<{praca: string, uf: string}[]>([]);
   const [carregandoDadosMatrix, setCarregandoDadosMatrix] = useState(false);
 
-  // useEffect para carregar dados das tabelas quando roteirosCarregados mudar
-  useEffect(() => {
-    if (roteirosCarregados.length > 0 && planoMidiaGrupo_pk && !carregandoDadosMatrix) {
-      carregarDadosMatrix();
-    }
-  }, [roteirosCarregados.length, planoMidiaGrupo_pk]);
+  // useEffect removido - as tabelas serão carregadas apenas após salvar os dados
 
   // Carregar dados dos combos
   useEffect(() => {
@@ -604,7 +599,6 @@ export const CriarRoteiro: React.FC = () => {
 
   // Função para carregar dados das tabelas dinâmicas
   const carregarDadosMatrix = async () => {
-    
     if (!planoMidiaGrupo_pk || roteirosCarregados.length === 0) {
       console.log('❌ Não é possível carregar dados matrix: planoMidiaGrupo_pk ou roteirosCarregados não disponíveis');
       return;
@@ -860,7 +854,11 @@ export const CriarRoteiro: React.FC = () => {
       // Atualizar estados finais
       setPlanoMidia_pks(midiaPks);
 
-      // 7. Mostrar resultado final completo
+      // 7. Carregar dados das tabelas dinâmicas após salvar
+      console.log('📊 Carregando dados das tabelas dinâmicas...');
+      await carregarDadosMatrix();
+
+      // 8. Mostrar resultado final completo
       const totalRoteiros = uploadResponse.data.roteiros.length;
       const totalCidadesSemanas = dadosView.length;
       const totalPontosUnicos = pontosResponse.data?.data?.pontosUnicos || 0;
@@ -877,10 +875,11 @@ export const CriarRoteiro: React.FC = () => {
       mensagemSucesso += `• ${cidadesExcel.length} planos mídia desc criados\n`;
       mensagemSucesso += `• ${totalPlanosMidia} planos mídia finalizados\n`;
       mensagemSucesso += `• Dados transferidos para base calculadora\n`;
-      mensagemSucesso += `• ${databricksInfo.successful}/${databricksInfo.total} jobs Databricks executados\n\n`;
+      mensagemSucesso += `• ${databricksInfo.successful}/${databricksInfo.total} jobs Databricks executados\n`;
+      mensagemSucesso += `• Tabelas dinâmicas carregadas e prontas para uso\n\n`;
       mensagemSucesso += `🏙️ CIDADES: ${cidadesExcel.join(', ')}\n`;
       mensagemSucesso += `📅 Data/hora: ${uploadData.date_dh}\n\n`;
-      mensagemSucesso += `✅ PROJETO CRIADO E PROCESSAMENTO DATABRICKS INICIADO!`;
+      mensagemSucesso += `✅ PROJETO CRIADO E PROCESSAMENTO DATABRICKS INICIADO!\n✅ TABELAS DINÂMICAS CARREGADAS!`;
       
       alert(mensagemSucesso);
 
@@ -1902,8 +1901,28 @@ export const CriarRoteiro: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Tabelas dinâmicas por praça */}
-                    {roteirosCarregados.length > 0 && (
+                    {/* Mensagem informativa quando dados não foram salvos */}
+                    {roteirosCarregados.length > 0 && uploadRoteiros_pks.length === 0 && (
+                      <div className="mb-8 p-6 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                            <span className="text-blue-600 font-bold">ℹ️</span>
+                          </div>
+                          <div>
+                            <h4 className="text-lg font-semibold text-blue-800">Tabelas Dinâmicas</h4>
+                            <p className="text-blue-700 mt-1">
+                              As tabelas dinâmicas para definir vias públicas aparecerão aqui após você salvar os dados carregados.
+                            </p>
+                            <p className="text-sm text-blue-600 mt-2">
+                              Clique em "Salvar" na Aba 4 para processar os dados e carregar as tabelas.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tabelas dinâmicas por praça - apenas após salvar os dados */}
+                    {roteirosCarregados.length > 0 && uploadRoteiros_pks.length > 0 && (
                       <div className="mb-8">
                         {carregandoDadosMatrix ? (
                           <div className="flex items-center justify-center py-8">
@@ -1912,7 +1931,7 @@ export const CriarRoteiro: React.FC = () => {
                               <span className="text-[#3a3a3a] font-medium">Carregando dados das tabelas...</span>
                             </div>
                           </div>
-                        ) : pracasUnicas && pracasUnicas.length > 0 ? (
+                        ) : pracasUnicas.length > 0 ? (
                           <div className="space-y-8">
                             {pracasUnicas.map((praca, pracaIndex) => {
                               const semanasPraca = semanasUnicas;
@@ -1960,54 +1979,69 @@ export const CriarRoteiro: React.FC = () => {
                                         </tr>
                                       </thead>
                                       <tbody>
-                                        {gruposPraca.map((grupo, grupoIndex) => (
-                                          <tr key={grupoIndex} className="border-b border-gray-200 hover:bg-gray-50">
-                                            <td className="px-4 py-3 text-[#3a3a3a] font-medium">
-                                              {grupo.grupo_st}{grupo.grupoSub_st}
-                                            </td>
-                                            <td className="px-4 py-3 text-[#3a3a3a]">
-                                              {grupo.grupoDesc_st}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                              <select 
-                                                className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] bg-white"
-                                                defaultValue="Selecionar"
-                                              >
-                                                <option value="Selecionar">Selecionar</option>
-                                                <option value="Alta">Alta</option>
-                                                <option value="Média">Média</option>
-                                                <option value="Baixa">Baixa</option>
-                                                <option value="N/A">N/A</option>
-                                              </select>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                              <input 
-                                                type="number" 
-                                                step="0.001"
-                                                className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right"
-                                                defaultValue="0.000"
-                                              />
-                                            </td>
-                                            <td className="px-4 py-3">
-                                              <input 
-                                                type="number" 
-                                                step="0.001"
-                                                className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right"
-                                                defaultValue="0.000"
-                                              />
-                                            </td>
-                                            {semanasPraca.map((semana, semanaIndex) => (
-                                              <td key={semanaIndex} className="px-4 py-3">
+                                        {gruposPraca.map((grupo, grupoIndex) => {
+                                          // Buscar dados específicos para este grupo e praça
+                                          const dadosGrupo = dadosMatrixRow.filter(d => 
+                                            d.grupoSub_st === grupo.grupoSub_st && 
+                                            d.cidade_st === praca.praca && 
+                                            d.estado_st === praca.uf
+                                          );
+                                          
+                                          return (
+                                            <tr key={grupoIndex} className="border-b border-gray-200 hover:bg-gray-50">
+                                              <td className="px-4 py-3 text-[#3a3a3a] font-medium">
+                                                {grupo.grupo_st}{grupo.grupoSub_st}
+                                              </td>
+                                              <td className="px-4 py-3 text-[#3a3a3a]">
+                                                {grupo.grupoDesc_st}
+                                              </td>
+                                              <td className="px-4 py-3">
+                                                <select 
+                                                  className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] bg-white"
+                                                  defaultValue="Selecionar"
+                                                >
+                                                  <option value="Selecionar">Selecionar</option>
+                                                  <option value="Alta">Alta</option>
+                                                  <option value="Média">Média</option>
+                                                  <option value="Baixa">Baixa</option>
+                                                  <option value="N/A">N/A</option>
+                                                </select>
+                                              </td>
+                                              <td className="px-4 py-3">
                                                 <input 
                                                   type="number" 
                                                   step="0.001"
                                                   className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right"
-                                                  defaultValue="000.000"
+                                                  defaultValue="0.000"
                                                 />
                                               </td>
-                                            ))}
-                                          </tr>
-                                        ))}
+                                              <td className="px-4 py-3">
+                                                <input 
+                                                  type="number" 
+                                                  step="0.001"
+                                                  className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right"
+                                                  defaultValue="0.000"
+                                                />
+                                              </td>
+                                              {semanasPraca.map((semana, semanaIndex) => {
+                                                // Buscar dados para esta semana específica
+                                                const dadosSemana = dadosGrupo.find(d => d.semana_vl === semanaIndex + 1);
+                                                const valorSemana = dadosSemana ? dadosSemana.qtd_registros : 0;
+                                                
+                                                return (
+                                                  <td key={semanaIndex} className="px-4 py-3">
+                                                    <input 
+                                                      type="number" 
+                                                      step="0.001"
+                                                      className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right"
+                                                      defaultValue={valorSemana.toFixed(3)}
+                                                    />
+                                                  </td>
+                                                );
+                                              })}
+                                            </tr>
+                                          );
+                                        })}
                                       </tbody>
                                     </table>
                                   </div>
