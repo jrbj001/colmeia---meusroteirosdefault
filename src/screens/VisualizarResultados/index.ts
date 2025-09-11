@@ -1,0 +1,1 @@
+export { VisualizarResultados } from './VisualizarResultados';

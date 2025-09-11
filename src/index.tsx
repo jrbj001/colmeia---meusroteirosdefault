@@ -7,6 +7,7 @@ import { Login } from "./screens/Login";
 import { MeusRoteiros } from "./screens/MeusRoteiros";
 import { Mapa } from "./screens/Mapa";
 import { CriarRoteiro } from "./screens/CriarRoteiro";
+import { VisualizarResultados } from "./screens/VisualizarResultados";
 import '../tailwind.css';
 import 'leaflet/dist/leaflet.css';
 
@@ -37,6 +38,14 @@ createRoot(document.getElementById("app") as HTMLElement).render(
             element={
               <ProtectedRoute>
                 <CriarRoteiro />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/visualizar-resultados" 
+            element={
+              <ProtectedRoute>
+                <VisualizarResultados />
               </ProtectedRoute>
             } 
           />

@@ -112,6 +112,10 @@
     {
       "source": "/grupo-sub-distinct",
       "destination": "/api/grupo-sub-distinct.js"
+    },
+    {
+      "source": "/report-indicadores-vias-publicas",
+      "destination": "/api/report-indicadores-vias-publicas.js"
     }
   ]
 } 

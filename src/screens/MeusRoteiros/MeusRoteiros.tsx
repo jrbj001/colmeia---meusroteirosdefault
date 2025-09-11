@@ -10,7 +10,7 @@ import { Pagination } from "./sections/Pagination";
 import api from "../../config/axios";
 import { LoadingColmeia } from "./components/LoadingColmeia";
 import { PinDrop } from "../../icons/PinDrop/PinDrop";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 // Definir a interface dos dados da view
 interface Roteiro {
@@ -37,6 +37,7 @@ interface PaginationInfo {
 }
 
 export const MeusRoteiros: React.FC = () => {
+  const navigate = useNavigate();
   const [menuReduzido, setMenuReduzido] = useState(false);
   const [dados, setDados] = useState<Roteiro[]>([]);
   const [paginacao, setPaginacao] = useState<PaginationInfo>({
@@ -97,6 +98,16 @@ Para solicitar acesso ou reportar problemas, entre em contato com o administrado
 Email: suporte@be180.com.br`;
 
     alert(message);
+  };
+
+  const handleVisualizarResultados = (roteiro: Roteiro) => {
+    console.log('👁️ Visualizando resultados do roteiro:', roteiro);
+    // Navegar para VisualizarResultados com os dados do roteiro
+    navigate('/visualizar-resultados', { 
+      state: { 
+        roteiroData: roteiro 
+      } 
+    });
   };
 
   return (
@@ -191,8 +202,9 @@ Email: suporte@be180.com.br`;
                             />
                           </Link>
                           <button
-                            onClick={() => handleActionRestricted("Editar roteiro")}
+                            onClick={() => handleVisualizarResultados(item)}
                             className="transition-transform duration-200 hover:scale-110"
+                            title="Visualizar resultados"
                           >
                             <Difference4 className="w-6 h-6 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
                           </button>

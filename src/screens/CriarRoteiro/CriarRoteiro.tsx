@@ -70,6 +70,13 @@ export const CriarRoteiro: React.FC = () => {
   // Estados para as abas
   const [abaAtiva, setAbaAtiva] = useState(1);
   
+  // Estados para aba 6 - Resultados
+  const [dadosResultados, setDadosResultados] = useState<any[]>([]);
+  const [totaisResultados, setTotaisResultados] = useState<any>(null);
+  const [carregandoResultados, setCarregandoResultados] = useState(false);
+  const [aba6Habilitada, setAba6Habilitada] = useState(false);
+
+  
   // Estados para aba 2 - Configurar target
   const [genero, setGenero] = useState("");
   const [classe, setClasse] = useState("");
@@ -659,6 +666,44 @@ export const CriarRoteiro: React.FC = () => {
 
   };
 
+  // Função para carregar dados dos resultados
+  const carregarDadosResultados = async () => {
+    if (!planoMidiaGrupo_pk) {
+      console.log('⚠️ planoMidiaGrupo_pk não disponível para carregar resultados');
+      return;
+    }
+
+    try {
+      setCarregandoResultados(true);
+      console.log('🔄 Carregando dados dos resultados...');
+      console.log('📊 PK sendo usado:', planoMidiaGrupo_pk);
+
+      const response = await axios.post('/report-indicadores-vias-publicas', {
+        report_pk: planoMidiaGrupo_pk
+      });
+
+      console.log('📊 Resposta completa da API:', response.data);
+
+      if (response.data.success) {
+        setDadosResultados(response.data.data);
+        setTotaisResultados(response.data.totais);
+        console.log('✅ Dados dos resultados carregados:', response.data.data.length);
+        console.log('📊 Dados carregados:', response.data.data);
+        console.log('📊 Totais calculados:', response.data.totais);
+      } else {
+        console.error('❌ Erro na resposta da API de resultados:', response.data.message);
+        // Mesmo com erro, habilitar a aba para mostrar estado vazio
+        setAba6Habilitada(true);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados dos resultados:', error);
+      // Mesmo com erro, habilitar a aba para mostrar estado vazio
+      setAba6Habilitada(true);
+    } finally {
+      setCarregandoResultados(false);
+    }
+  };
+
   // Função para salvar Aba 4 - Upload de roteiros
   const salvarAba4 = async () => {
     console.log('🚀 Iniciando Aba 4 - Upload e processamento do Excel...');
@@ -858,7 +903,12 @@ export const CriarRoteiro: React.FC = () => {
       console.log('📊 Carregando dados das tabelas dinâmicas...');
       await carregarDadosMatrix();
 
-      // 8. Mostrar resultado final completo
+      // 8. Habilitar Aba 6 e carregar dados dos resultados imediatamente
+      console.log('✅ Habilitando Aba 6 e carregando dados dos resultados...');
+      setAba6Habilitada(true);
+      await carregarDadosResultados();
+
+      // 9. Mostrar resultado final completo
       const totalRoteiros = uploadResponse.data.roteiros.length;
       const totalCidadesSemanas = dadosView.length;
       const totalPontosUnicos = pontosResponse.data?.data?.pontosUnicos || 0;
@@ -1201,10 +1251,20 @@ export const CriarRoteiro: React.FC = () => {
                   <span>Definir indoor</span>
                 </div>
                 
-                <div className="flex items-center text-[#3a3a3a]">
-                  <span className="font-bold text-sm mr-2">06</span>
-                  <span>Resultados</span>
-                </div>
+                {aba6Habilitada && (
+                  <div 
+                    className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
+                      abaAtiva === 6 
+                        ? 'bg-white border-2 border-blue-500 rounded-lg' 
+                        : 'hover:bg-gray-50 rounded-lg'
+                    }`}
+                    onClick={() => setAbaAtiva(6)}
+                  >
+                    <span className={`font-bold text-sm mr-2 ${abaAtiva === 6 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>06</span>
+                    <span className={`font-medium ${abaAtiva === 6 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Resultados</span>
+                    {abaAtiva === 6 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2125,6 +2185,143 @@ export const CriarRoteiro: React.FC = () => {
                       </button>
                     </div>
                   </form>
+                </>
+              )}
+
+              {/* Aba 6 - Resultados */}
+              {abaAtiva === 6 && (
+                <>
+                  <div className="mb-8">
+                    <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
+                      Confira o resultado do seu plano
+                    </h3>
+                  </div>
+
+                  {/* Informações do plano */}
+                  <div className="mb-8 p-6 bg-gray-50 rounded-lg">
+                    <div className="grid grid-cols-2 gap-6">
+                      <div>
+                        <h4 className="text-lg font-bold text-[#3a3a3a] mb-2">
+                          PLANO {nomeRoteiro || 'NOME_DO_PLANO'}
+                        </h4>
+                        <div className="space-y-2 text-sm text-gray-600">
+                          <p><strong>Gênero:</strong> {genero || 'Não definido'}</p>
+                          <p><strong>Faixa etária:</strong> {faixaEtaria || 'Não definida'}</p>
+                          <p><strong>Período total da campanha:</strong> {semanasUnicas.length} semanas</p>
+                        </div>
+                      </div>
+                      <div className="space-y-2 text-sm text-gray-600">
+                        <p><strong>Valor aprovado da campanha (R$):</strong> {valorCampanha || 'R$ 0,00'}</p>
+                        <p><strong>CPMView:</strong> {totaisResultados?.grp_vl?.toFixed(3) || '0.000'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dropdown de visualização */}
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-[#3a3a3a] mb-2">
+                      Visualizar resultados
+                    </label>
+                    <select className="w-64 h-10 px-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500">
+                      <option value="visao-geral">Visão geral</option>
+                    </select>
+                  </div>
+
+                  {/* Tabelas de resultados */}
+                  <div className="space-y-8">
+                    {/* Resumo Total */}
+                    <div>
+                      <h4 className="text-lg font-bold text-[#3a3a3a] mb-4">RESUMO TOTAL</h4>
+                      {carregandoResultados ? (
+                        <div className="text-center py-8">
+                          <div className="animate-spin h-8 w-8 border-2 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                          <p className="text-gray-500">Carregando dados dos resultados...</p>
+                          <p className="text-sm text-gray-400 mt-2">Aguarde alguns segundos</p>
+                        </div>
+                      ) : dadosResultados.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse border border-gray-300">
+                            <thead>
+                              <tr className="bg-gray-100">
+                                <th className="border border-gray-300 px-4 py-2 text-left font-medium text-[#3a3a3a]">Praça</th>
+                                <th className="border border-gray-300 px-4 py-2 text-right font-medium text-[#3a3a3a]">Impactos</th>
+                                <th className="border border-gray-300 px-4 py-2 text-right font-medium text-[#3a3a3a]">Cobertura (pessoas)</th>
+                                <th className="border border-gray-300 px-4 py-2 text-right font-medium text-[#3a3a3a]">Cobertura (%)</th>
+                                <th className="border border-gray-300 px-4 py-2 text-right font-medium text-[#3a3a3a]">Frequência</th>
+                                <th className="border border-gray-300 px-4 py-2 text-right font-medium text-[#3a3a3a]">GRP</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dadosResultados.map((item, index) => (
+                                <tr key={index} className="hover:bg-gray-50">
+                                  <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">
+                                    {item.cidade_st}
+                                  </td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">
+                                    {item.impactosTotal_vl?.toLocaleString('pt-BR') || '0'}
+                                  </td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">
+                                    {item.coberturaPessoasTotal_vl?.toLocaleString('pt-BR') || '0'}
+                                  </td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">
+                                    {item.coberturaProp_vl?.toFixed(2) || '0.00'}%
+                                  </td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">
+                                    {item.frequencia_vl?.toFixed(2) || '0.00'}
+                                  </td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">
+                                    {item.grp_vl?.toFixed(1) || '0.0'}
+                                  </td>
+                                </tr>
+                              ))}
+                              {/* Linha de totais */}
+                              {totaisResultados && (
+                                <tr className="bg-gray-100 font-bold">
+                                  <td className="border border-gray-300 px-4 py-2 text-[#3a3a3a]">Total</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right text-[#3a3a3a]">
+                                    {totaisResultados.impactosTotal_vl?.toLocaleString('pt-BR') || '0'}
+                                  </td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right text-[#3a3a3a]">
+                                    {totaisResultados.coberturaPessoasTotal_vl?.toLocaleString('pt-BR') || '0'}
+                                  </td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right text-[#3a3a3a]">
+                                    {totaisResultados.coberturaProp_vl?.toFixed(2) || '0.00'}%
+                                  </td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right text-[#3a3a3a]">
+                                    {totaisResultados.frequencia_vl?.toFixed(2) || '0.00'}
+                                  </td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right text-[#3a3a3a]">
+                                    {totaisResultados.grp_vl?.toFixed(1) || '0.0'}
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <p className="text-gray-500">Nenhum dado disponível ainda.</p>
+                          <p className="text-sm text-gray-400 mt-2">Os dados podem estar sendo processados ou não há informações para este plano.</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Resumo Indoor */}
+                    <div>
+                      <h4 className="text-lg font-bold text-[#3a3a3a] mb-4">RESUMO INDOOR</h4>
+                      <div className="text-center py-8">
+                        <p className="text-gray-500">Funcionalidade em desenvolvimento</p>
+                      </div>
+                    </div>
+
+                    {/* Resumo Vias Públicas */}
+                    <div>
+                      <h4 className="text-lg font-bold text-[#3a3a3a] mb-4">RESUMO VIAS PÚBLICAS</h4>
+                      <div className="text-center py-8">
+                        <p className="text-gray-500">Funcionalidade em desenvolvimento</p>
+                      </div>
+                    </div>
+                  </div>
                 </>
               )}
             </div>
