@@ -773,21 +773,49 @@ export const CriarRoteiro: React.FC = () => {
     try {
       setCarregandoResultados(true);
       console.log('🔄 Carregando dados dos resultados...');
-      console.log('📊 PK sendo usado:', planoMidiaGrupo_pk);
+      console.log('📊 PK sendo usado:', pkToUse);
 
+      // Buscar dados por cidade
       const response = await axios.post('/report-indicadores-vias-publicas', {
         report_pk: pkToUse
       });
 
-      console.log('📊 Resposta completa da API:', response.data);
+      console.log('📊 Resposta da API (cidades):', response.data);
 
       if (response.data.success) {
         setDadosResultados(response.data.data);
-        setTotaisResultados(response.data.totais);
-        console.log('✅ Dados dos resultados carregados:', response.data.data.length);
-        console.log('📊 Dados carregados:', response.data.data);
-        console.log('📊 Totais calculados:', response.data.totais);
-        console.log('🎯 Estados atualizados - dadosResultados:', response.data.data.length, 'totaisResultados:', response.data.totais);
+        console.log('✅ Dados por cidade carregados:', response.data.data.length);
+        
+        // Buscar dados de resumo da stored procedure
+        console.log('🔄 Buscando dados de resumo da stored procedure...');
+        const summaryResponse = await axios.post('/report-indicadores-summary', {
+          report_pk: pkToUse
+        });
+
+        console.log('📊 Resposta da API (resumo):', summaryResponse.data);
+
+        let totais;
+        if (summaryResponse.data.success && summaryResponse.data.data) {
+          // Usar dados da stored procedure para os totais
+          const summaryData = summaryResponse.data.data;
+          totais = {
+            impactosTotal_vl: summaryData.impactosTotal_vl || 0,
+            coberturaPessoasTotal_vl: summaryData.coberturaPessoasTotal_vl || 0,
+            coberturaProp_vl: summaryData.coberturaProp_vl || 0,
+            frequencia_vl: summaryData.frequencia_vl || 0,
+            grp_vl: summaryData.grp_vl || 0
+          };
+          
+          console.log('✅ Totais da stored procedure carregados:', totais);
+          setTotaisResultados(totais);
+        } else {
+          console.log('⚠️ Nenhum dado de resumo encontrado, usando totais da API original');
+          // Fallback: usar totais da API original
+          totais = response.data.totais;
+          setTotaisResultados(totais);
+        }
+        
+        console.log('🎯 Estados atualizados - dadosResultados:', response.data.data.length, 'totaisResultados:', totais);
       } else {
         console.error('❌ Erro na resposta da API de resultados:', response.data.message);
         // Mesmo com erro, habilitar a aba para mostrar estado vazio
