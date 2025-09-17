@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { Topbar } from "../../components/Topbar/Topbar";
 import { useAuth } from "../../contexts/AuthContext";
+import { useLocation } from "react-router-dom";
 import axios from "../../config/axios";
 import * as XLSX from 'xlsx';
 
@@ -41,7 +42,12 @@ interface TargetFaixaEtaria {
 
 export const CriarRoteiro: React.FC = () => {
   const { user } = useAuth();
+  const location = useLocation();
   const [menuReduzido, setMenuReduzido] = useState(false);
+  
+  // Estados para modo visualização
+  const [modoVisualizacao, setModoVisualizacao] = useState(false);
+  const [roteiroData, setRoteiroData] = useState<any>(null);
   const [tipoRoteiro, setTipoRoteiro] = useState("");
   const [nomeRoteiro, setNomeRoteiro] = useState("");
   const [agencia, setAgencia] = useState("");
@@ -75,6 +81,60 @@ export const CriarRoteiro: React.FC = () => {
   const [totaisResultados, setTotaisResultados] = useState<any>(null);
   const [carregandoResultados, setCarregandoResultados] = useState(false);
   const [aba6Habilitada, setAba6Habilitada] = useState(false);
+
+  // Detectar modo visualização e carregar dados
+  useEffect(() => {
+    if (location.state?.modoVisualizacao && location.state?.roteiroData) {
+      console.log('👁️ Modo visualização detectado:', location.state.roteiroData);
+      setModoVisualizacao(true);
+      setRoteiroData(location.state.roteiroData);
+      
+      // Carregar dados do roteiro
+      const roteiro = location.state.roteiroData;
+      console.log('👁️ Dados do roteiro recebidos:', roteiro);
+      
+      // Carregar dados básicos disponíveis
+      setNomeRoteiro(roteiro.planoMidiaGrupo_st || '');
+      setGenero(roteiro.gender_st || '');
+      setClasse(roteiro.class_st || '');
+      setFaixaEtaria(roteiro.age_st || '');
+      
+      // Carregar semanas para o período da campanha
+      if (roteiro.semanasMax_vl) {
+        setSemanasUnicas(Array.from({length: roteiro.semanasMax_vl}, (_, i) => `Semana ${i + 1}`));
+      }
+      
+      // Campos que não estão disponíveis - deixar vazios
+      setAgencia('');
+      setMarca('');
+      setCategoria('');
+      setValorCampanha('');
+      
+      // Buscar dados completos usando a PK (apenas para dados adicionais se necessário)
+      if (roteiro.planoMidiaGrupo_pk) {
+        carregarDadosCompletosRoteiro(roteiro.planoMidiaGrupo_pk);
+      }
+      
+      // Ir direto para a Aba 6
+      if (location.state.abaInicial === 6) {
+        console.log('🎯 Configurando Aba 6...');
+        setAbaAtiva(6);
+        setAba6Habilitada(true);
+        
+        // Carregar dados dos resultados
+        if (roteiro.planoMidiaGrupo_pk) {
+          console.log('📊 Definindo planoMidiaGrupo_pk:', roteiro.planoMidiaGrupo_pk);
+          setPlanoMidiaGrupo_pk(roteiro.planoMidiaGrupo_pk);
+          
+          // Carregar dados imediatamente
+          console.log('🔄 Chamando carregarDadosResultados imediatamente...');
+          carregarDadosResultados(roteiro.planoMidiaGrupo_pk);
+        } else {
+          console.log('⚠️ planoMidiaGrupo_pk não encontrado no roteiro');
+        }
+      }
+    }
+  }, [location.state]);
 
   
   // Estados para aba 2 - Configurar target
@@ -666,9 +726,46 @@ export const CriarRoteiro: React.FC = () => {
 
   };
 
+  // Função para carregar dados completos do roteiro
+  const carregarDadosCompletosRoteiro = async (planoMidiaGrupo_pk: number) => {
+    try {
+      console.log('🔄 Carregando dados completos do roteiro...');
+      console.log('📊 PK sendo usada:', planoMidiaGrupo_pk);
+
+      const response = await axios.post('/roteiro-completo', {
+        planoMidiaGrupo_pk: planoMidiaGrupo_pk
+      });
+
+      console.log('📊 Resposta da API roteiro-completo:', response.data);
+
+      if (response.data.success) {
+        const dadosCompletos = response.data.data;
+        
+        // Apenas atualizar dados que não foram carregados anteriormente
+        // Os dados básicos já foram carregados no useEffect
+        
+        // Carregar semanas para o período da campanha (se não foi carregado antes)
+        if (dadosCompletos.semanasMax_vl && !semanasUnicas.length) {
+          setSemanasUnicas(Array.from({length: dadosCompletos.semanasMax_vl}, (_, i) => `Semana ${i + 1}`));
+        }
+        
+        console.log('✅ Dados completos carregados:', dadosCompletos);
+      } else {
+        console.error('❌ Erro ao carregar dados completos:', response.data.error);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados completos do roteiro:', error);
+    }
+  };
+
   // Função para carregar dados dos resultados
-  const carregarDadosResultados = async () => {
-    if (!planoMidiaGrupo_pk) {
+  const carregarDadosResultados = async (pkOverride?: number) => {
+    const pkToUse = pkOverride || planoMidiaGrupo_pk;
+    console.log('🔄 carregarDadosResultados chamada');
+    console.log('📊 planoMidiaGrupo_pk atual:', planoMidiaGrupo_pk);
+    console.log('📊 pkToUse:', pkToUse);
+    
+    if (!pkToUse) {
       console.log('⚠️ planoMidiaGrupo_pk não disponível para carregar resultados');
       return;
     }
@@ -679,7 +776,7 @@ export const CriarRoteiro: React.FC = () => {
       console.log('📊 PK sendo usado:', planoMidiaGrupo_pk);
 
       const response = await axios.post('/report-indicadores-vias-publicas', {
-        report_pk: planoMidiaGrupo_pk
+        report_pk: pkToUse
       });
 
       console.log('📊 Resposta completa da API:', response.data);
@@ -690,6 +787,7 @@ export const CriarRoteiro: React.FC = () => {
         console.log('✅ Dados dos resultados carregados:', response.data.data.length);
         console.log('📊 Dados carregados:', response.data.data);
         console.log('📊 Totais calculados:', response.data.totais);
+        console.log('🎯 Estados atualizados - dadosResultados:', response.data.data.length, 'totaisResultados:', response.data.totais);
       } else {
         console.error('❌ Erro na resposta da API de resultados:', response.data.message);
         // Mesmo com erro, habilitar a aba para mostrar estado vazio
@@ -1142,8 +1240,8 @@ export const CriarRoteiro: React.FC = () => {
             breadcrumb={{
               items: [
                 { label: "Home", path: "/" },
-                { label: "Criar roteiro", path: "/criar-roteiro" },
-                { label: "Nomear roteiro" }
+                { label: modoVisualizacao ? "Visualizar resultados" : "Criar roteiro", path: "/criar-roteiro" },
+                { label: modoVisualizacao ? "Resultados" : "Nomear roteiro" }
               ]
             }}
           />
@@ -1156,11 +1254,14 @@ export const CriarRoteiro: React.FC = () => {
             {/* Header da seção */}
             <div className="bg-white px-16 py-12">
               <h1 className="text-base font-bold text-[#ff4600] tracking-[0.50px] leading-[19.2px] mb-8">
-                CRIAR ROTEIRO
+                {modoVisualizacao ? 'VISUALIZAR RESULTADOS' : 'CRIAR ROTEIRO'}
               </h1>
               
               <p className="text-base text-[#3a3a3a] tracking-[0.50px] leading-[19.2px] mb-16 max-w-[1135px]">
-                Nesta seção, é possível criar novos roteiros na Colmeia. Complete as etapas a seguir para finalizar a configuração.
+                {modoVisualizacao 
+                  ? 'Visualize os resultados detalhados do seu plano de mídia na Aba 6.'
+                  : 'Nesta seção, é possível criar novos roteiros na Colmeia. Complete as etapas a seguir para finalizar a configuração.'
+                }
               </p>
 
               {/* Tipo de roteiro */}
@@ -1251,7 +1352,7 @@ export const CriarRoteiro: React.FC = () => {
                   <span>Definir indoor</span>
                 </div>
                 
-                {aba6Habilitada && (
+                {(aba6Habilitada || modoVisualizacao) && (
                   <div 
                     className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
                       abaAtiva === 6 
@@ -1275,7 +1376,7 @@ export const CriarRoteiro: React.FC = () => {
                 <>
                   <div className="mb-8">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
-                      Cadastre os dados do seu novo roteiro
+                      {modoVisualizacao ? 'Dados do roteiro' : 'Cadastre os dados do seu novo roteiro'}
                     </h3>
                   </div>
                   
@@ -1293,7 +1394,8 @@ export const CriarRoteiro: React.FC = () => {
                             value={nomeRoteiro}
                             onChange={(e) => setNomeRoteiro(e.target.value)}
                             placeholder="Ex.: J6574_carnaval_sao_paulo"
-                            className="w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-[#b3b3b3] text-[#3a3a3a] leading-normal"
+                            disabled={modoVisualizacao}
+                            className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-[#b3b3b3] text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                           />
                         </div>
 
@@ -1307,8 +1409,8 @@ export const CriarRoteiro: React.FC = () => {
                               <select
                                 value={agencia}
                                 onChange={(e) => setAgencia(e.target.value)}
-                                className="w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal"
-                                disabled={loadingAgencias}
+                                className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                disabled={loadingAgencias || modoVisualizacao}
                               >
                                 <option value="">
                                   {loadingAgencias ? "Carregando..." : "Ex.: Agência GUT"}
@@ -1346,6 +1448,7 @@ export const CriarRoteiro: React.FC = () => {
                             type="text"
                             value={valorCampanha}
                             onChange={(e) => {
+                              if (modoVisualizacao) return;
                               const value = e.target.value;
                               // Remove tudo que não é número
                               const numbers = value.replace(/\D/g, '');
@@ -1371,7 +1474,8 @@ export const CriarRoteiro: React.FC = () => {
                               setValorCampanha(formatted);
                             }}
                             placeholder="Ex.: R$ 10.000,00"
-                            className="w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-[#b3b3b3] text-[#3a3a3a] leading-normal"
+                            disabled={modoVisualizacao}
+                            className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-[#b3b3b3] text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                           />
                         </div>
                       </div>
@@ -1388,8 +1492,8 @@ export const CriarRoteiro: React.FC = () => {
                               <select
                                 value={marca}
                                 onChange={(e) => setMarca(e.target.value)}
-                                className="w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal"
-                                disabled={loadingMarcas}
+                                className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                disabled={loadingMarcas || modoVisualizacao}
                               >
                                 <option value="">
                                   {loadingMarcas ? "Carregando..." : "Ex.: Ambev"}
@@ -1428,8 +1532,8 @@ export const CriarRoteiro: React.FC = () => {
                               <select
                                 value={categoria}
                                 onChange={(e) => setCategoria(e.target.value)}
-                                className="w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal"
-                                disabled={loadingCategorias}
+                                className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                disabled={loadingCategorias || modoVisualizacao}
                               >
                                 <option value="">
                                   {loadingCategorias ? "Carregando..." : "Ex.: Bebidas"}
@@ -1461,22 +1565,24 @@ export const CriarRoteiro: React.FC = () => {
                     </div>
 
                     {/* Botão Salvar */}
-                    <div className="mt-16 flex justify-start">
-                      <button
-                        type="button"
-                        onClick={salvarAba1}
-                        disabled={salvandoAba1 || !nomeRoteiro.trim()}
-                        className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base ${
-                          salvandoAba1 || !nomeRoteiro.trim()
-                            ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
-                            : planoMidiaGrupo_pk
-                            ? 'bg-green-500 text-white border-green-500 hover:bg-green-600'
-                            : 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600'
-                        }`}
-                      >
-                        {salvandoAba1 ? 'Salvando...' : planoMidiaGrupo_pk ? '✓ Salvo' : 'Salvar'}
-                      </button>
-                    </div>
+                    {!modoVisualizacao && (
+                      <div className="mt-16 flex justify-start">
+                        <button
+                          type="button"
+                          onClick={salvarAba1}
+                          disabled={salvandoAba1 || !nomeRoteiro.trim()}
+                          className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base ${
+                            salvandoAba1 || !nomeRoteiro.trim()
+                              ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
+                              : planoMidiaGrupo_pk
+                              ? 'bg-green-500 text-white border-green-500 hover:bg-green-600'
+                              : 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600'
+                          }`}
+                        >
+                          {salvandoAba1 ? 'Salvando...' : planoMidiaGrupo_pk ? '✓ Salvo' : 'Salvar'}
+                        </button>
+                      </div>
+                    )}
                   </form>
                 </>
               )}
@@ -1486,7 +1592,7 @@ export const CriarRoteiro: React.FC = () => {
                 <>
                   <div className="mb-8">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
-                      Defina o target que fará parte do seu roteiro
+                      {modoVisualizacao ? 'Target do roteiro' : 'Defina o target que fará parte do seu roteiro'}
                     </h3>
                   </div>
                   
@@ -1501,8 +1607,8 @@ export const CriarRoteiro: React.FC = () => {
                           <select
                             value={genero}
                             onChange={(e) => setGenero(e.target.value)}
-                            className="w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal"
-                            disabled={loadingGeneros}
+                            className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                            disabled={loadingGeneros || modoVisualizacao}
                           >
                             <option value="">
                               {loadingGeneros ? "Carregando..." : "Selecione um gênero"}
@@ -1530,8 +1636,8 @@ export const CriarRoteiro: React.FC = () => {
                           <select
                             value={classe}
                             onChange={(e) => setClasse(e.target.value)}
-                            className="w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal"
-                            disabled={loadingClasses}
+                            className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                            disabled={loadingClasses || modoVisualizacao}
                           >
                             <option value="">
                               {loadingClasses ? "Carregando..." : "Selecione uma classe"}
@@ -1560,8 +1666,8 @@ export const CriarRoteiro: React.FC = () => {
                             <select
                               value={faixaEtaria}
                               onChange={(e) => setFaixaEtaria(e.target.value)}
-                              className="w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal"
-                              disabled={loadingFaixasEtarias}
+                              className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                              disabled={loadingFaixasEtarias || modoVisualizacao}
                             >
                               <option value="">
                                 {loadingFaixasEtarias ? "Carregando..." : "Selecione uma faixa etária"}
@@ -1592,22 +1698,24 @@ export const CriarRoteiro: React.FC = () => {
                     </div>
 
                     {/* Botão Salvar */}
-                    <div className="mt-16 flex justify-start">
-                      <button
-                        type="button"
-                        onClick={salvarAba2}
-                        disabled={salvandoAba2 || !planoMidiaGrupo_pk || !genero || !classe || !faixaEtaria}
-                        className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base ${
-                          salvandoAba2 || !planoMidiaGrupo_pk || !genero || !classe || !faixaEtaria
-                            ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
-                            : planoMidiaDesc_pks.length > 0
-                            ? 'bg-green-500 text-white border-green-500 hover:bg-green-600'
-                            : 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600'
-                        }`}
-                      >
-                        {salvandoAba2 ? 'Salvando...' : planoMidiaDesc_pks.length > 0 ? '✓ Salvo' : 'Salvar'}
-                      </button>
-                    </div>
+                    {!modoVisualizacao && (
+                      <div className="mt-16 flex justify-start">
+                        <button
+                          type="button"
+                          onClick={salvarAba2}
+                          disabled={salvandoAba2 || !planoMidiaGrupo_pk || !genero || !classe || !faixaEtaria}
+                          className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base ${
+                            salvandoAba2 || !planoMidiaGrupo_pk || !genero || !classe || !faixaEtaria
+                              ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
+                              : planoMidiaDesc_pks.length > 0
+                              ? 'bg-green-500 text-white border-green-500 hover:bg-green-600'
+                              : 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600'
+                          }`}
+                        >
+                          {salvandoAba2 ? 'Salvando...' : planoMidiaDesc_pks.length > 0 ? '✓ Salvo' : 'Salvar'}
+                        </button>
+                      </div>
+                    )}
                   </form>
                 </>
               )}
@@ -1617,7 +1725,7 @@ export const CriarRoteiro: React.FC = () => {
                 <>
                   <div className="mb-8">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
-                      Defina as praças (cidade / estado) que estarão no seu roteiro.
+                      {modoVisualizacao ? 'Praças do roteiro' : 'Defina as praças (cidade / estado) que estarão no seu roteiro.'}
                     </h3>
                   </div>
                   
@@ -1632,13 +1740,17 @@ export const CriarRoteiro: React.FC = () => {
                           type="text"
                           value={searchPraca}
                           onChange={(e) => {
+                            if (modoVisualizacao) return;
                             setSearchPraca(e.target.value);
                             setShowDropdownCidades(e.target.value.length > 0);
                           }}
-                          onFocus={() => setShowDropdownCidades(searchPraca.length > 0)}
+                          onFocus={() => {
+                            if (modoVisualizacao) return;
+                            setShowDropdownCidades(searchPraca.length > 0);
+                          }}
                           placeholder="Ex.: Sorocaba - SP"
-                          className="w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-[#b3b3b3] text-[#3a3a3a] leading-normal"
-                          disabled={loadingCidades}
+                          disabled={loadingCidades || modoVisualizacao}
+                          className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-[#b3b3b3] text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                         />
                         
                         {/* Tags de cidades selecionadas */}
@@ -1785,22 +1897,24 @@ export const CriarRoteiro: React.FC = () => {
                     )}
 
                     {/* Botão Salvar */}
-                    <div className="mt-16 flex justify-start">
-                      <button
-                        type="button"
-                        onClick={salvarAba3}
-                        disabled={salvandoAba3 || planoMidiaDesc_pks.length === 0 || cidadesSelecionadas.length === 0}
-                        className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base font-medium ${
-                          salvandoAba3 || planoMidiaDesc_pks.length === 0 || cidadesSelecionadas.length === 0
-                            ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
-                            : planoMidia_pks.length > 0 && !cidadesMudaram()
-                            ? 'bg-green-500 text-white border-green-500 hover:bg-green-600'
-                            : 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600'
-                        }`}
-                      >
-                        {salvandoAba3 ? 'Salvando...' : planoMidia_pks.length > 0 && !cidadesMudaram() ? '✓ Salvo' : 'Salvar'}
-                      </button>
-                    </div>
+                    {!modoVisualizacao && (
+                      <div className="mt-16 flex justify-start">
+                        <button
+                          type="button"
+                          onClick={salvarAba3}
+                          disabled={salvandoAba3 || planoMidiaDesc_pks.length === 0 || cidadesSelecionadas.length === 0}
+                          className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base font-medium ${
+                            salvandoAba3 || planoMidiaDesc_pks.length === 0 || cidadesSelecionadas.length === 0
+                              ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
+                              : planoMidia_pks.length > 0 && !cidadesMudaram()
+                              ? 'bg-green-500 text-white border-green-500 hover:bg-green-600'
+                              : 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600'
+                          }`}
+                        >
+                          {salvandoAba3 ? 'Salvando...' : planoMidia_pks.length > 0 && !cidadesMudaram() ? '✓ Salvo' : 'Salvar'}
+                        </button>
+                      </div>
+                    )}
                   </form>
                 </>
               )}
@@ -1810,7 +1924,7 @@ export const CriarRoteiro: React.FC = () => {
                 <>
                   <div className="mb-8">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
-                      Faça o upload do seu plano.
+                      {modoVisualizacao ? 'Vias públicas do roteiro' : 'Faça o upload do seu plano.'}
                     </h3>
                   </div>
                   
@@ -2092,9 +2206,9 @@ export const CriarRoteiro: React.FC = () => {
                                                   <td key={semanaIndex} className="px-4 py-3">
                                                     <input 
                                                       type="number" 
-                                                      step="0.001"
+                                                      step="1"
                                                       className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right"
-                                                      defaultValue={valorSemana.toFixed(3)}
+                                                      defaultValue={Math.round(valorSemana)}
                                                     />
                                                   </td>
                                                 );
@@ -2143,53 +2257,55 @@ export const CriarRoteiro: React.FC = () => {
                     )}
 
                     {/* Botão Salvar */}
-                    <div className="mt-16 flex justify-start">
-                      <button
-                        type="button"
-                        onClick={salvarAba4}
-                        disabled={(() => {
-                          const validacao = validarConsistenciaCidades();
-                          return salvandoAba4 || 
-                                 !planoMidiaGrupo_pk || 
-                                 planoMidiaDesc_pks.length === 0 || 
-                                 planoMidia_pks.length === 0 || 
-                                 roteirosCarregados.length === 0 ||
-                                 !validacao.valido;
-                        })()}
-                        className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base font-medium ${
-                          (() => {
+                    {!modoVisualizacao && (
+                      <div className="mt-16 flex justify-start">
+                        <button
+                          type="button"
+                          onClick={salvarAba4}
+                          disabled={(() => {
                             const validacao = validarConsistenciaCidades();
-                            const isDisabled = salvandoAba4 || 
-                                             !planoMidiaGrupo_pk || 
-                                             planoMidiaDesc_pks.length === 0 || 
-                                             planoMidia_pks.length === 0 || 
-                                             roteirosCarregados.length === 0 ||
-                                             !validacao.valido;
-                            
-                            if (isDisabled) {
-                              return 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed';
-                            } else if (uploadRoteiros_pks.length > 0 && !roteirosMudaram()) {
-                              return 'bg-green-500 text-white border-green-500 hover:bg-green-600';
-                            } else {
-                              return 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600';
-                            }
-                          })()
-                        }`}
-                      >
-                        {salvandoAba4 ? (
-                          <div className="flex items-center justify-center">
-                            <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                            Salvando {roteirosCarregados.length} roteiros...
-                          </div>
-                        ) : uploadRoteiros_pks.length > 0 && !roteirosMudaram() ? '✓ Salvo' : 'Salvar'}
-                      </button>
-                    </div>
+                            return salvandoAba4 || 
+                                   !planoMidiaGrupo_pk || 
+                                   planoMidiaDesc_pks.length === 0 || 
+                                   planoMidia_pks.length === 0 || 
+                                   roteirosCarregados.length === 0 ||
+                                   !validacao.valido;
+                          })()}
+                          className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base font-medium ${
+                            (() => {
+                              const validacao = validarConsistenciaCidades();
+                              const isDisabled = salvandoAba4 || 
+                                               !planoMidiaGrupo_pk || 
+                                               planoMidiaDesc_pks.length === 0 || 
+                                               planoMidia_pks.length === 0 || 
+                                               roteirosCarregados.length === 0 ||
+                                               !validacao.valido;
+                              
+                              if (isDisabled) {
+                                return 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed';
+                              } else if (uploadRoteiros_pks.length > 0 && !roteirosMudaram()) {
+                                return 'bg-green-500 text-white border-green-500 hover:bg-green-600';
+                              } else {
+                                return 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600';
+                              }
+                            })()
+                          }`}
+                        >
+                          {salvandoAba4 ? (
+                            <div className="flex items-center justify-center">
+                              <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                              Salvando {roteirosCarregados.length} roteiros...
+                            </div>
+                          ) : uploadRoteiros_pks.length > 0 && !roteirosMudaram() ? '✓ Salvo' : 'Salvar'}
+                        </button>
+                      </div>
+                    )}
                   </form>
                 </>
               )}
 
               {/* Aba 6 - Resultados */}
-              {abaAtiva === 6 && (
+              {abaAtiva === 6 && (aba6Habilitada || modoVisualizacao) && (
                 <>
                   <div className="mb-8">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
@@ -2206,39 +2322,34 @@ export const CriarRoteiro: React.FC = () => {
                         </h4>
                         <div className="space-y-2 text-sm text-gray-600">
                           <p><strong>Gênero:</strong> {genero || 'Não definido'}</p>
+                          <p><strong>Classe:</strong> {classe || 'Não definida'}</p>
                           <p><strong>Faixa etária:</strong> {faixaEtaria || 'Não definida'}</p>
                           <p><strong>Período total da campanha:</strong> {semanasUnicas.length} semanas</p>
                         </div>
                       </div>
                       <div className="space-y-2 text-sm text-gray-600">
-                        <p><strong>Valor aprovado da campanha (R$):</strong> {valorCampanha || 'R$ 0,00'}</p>
+                        <p><strong>Cidades:</strong> {pracasUnicas.map(p => p.praca).join(', ')}</p>
+                        <p><strong>Data de criação:</strong> {new Date().toLocaleDateString('pt-BR')}</p>
                         <p><strong>CPMView:</strong> {totaisResultados?.grp_vl?.toFixed(3) || '0.000'}</p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Dropdown de visualização */}
-                  <div className="mb-6">
-                    <label className="block text-sm font-medium text-[#3a3a3a] mb-2">
-                      Visualizar resultados
-                    </label>
-                    <select className="w-64 h-10 px-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500">
-                      <option value="visao-geral">Visão geral</option>
-                    </select>
-                  </div>
 
                   {/* Tabelas de resultados */}
                   <div className="space-y-8">
                     {/* Resumo Total */}
                     <div>
                       <h4 className="text-lg font-bold text-[#3a3a3a] mb-4">RESUMO TOTAL</h4>
-                      {carregandoResultados ? (
-                        <div className="text-center py-8">
-                          <div className="animate-spin h-8 w-8 border-2 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                          <p className="text-gray-500">Carregando dados dos resultados...</p>
-                          <p className="text-sm text-gray-400 mt-2">Aguarde alguns segundos</p>
-                        </div>
-                      ) : dadosResultados.length > 0 ? (
+                      {(() => {
+                        console.log('🎯 Renderizando Aba 6 - carregandoResultados:', carregandoResultados, 'dadosResultados.length:', dadosResultados.length);
+                        return carregandoResultados ? (
+                          <div className="text-center py-8">
+                            <div className="animate-spin h-8 w-8 border-2 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                            <p className="text-gray-500">Carregando dados dos resultados...</p>
+                            <p className="text-sm text-gray-400 mt-2">Aguarde alguns segundos</p>
+                          </div>
+                        ) : dadosResultados.length > 0 ? (
                         <div className="overflow-x-auto">
                           <table className="w-full border-collapse border border-gray-300">
                             <thead>
@@ -2258,40 +2369,42 @@ export const CriarRoteiro: React.FC = () => {
                                     {item.cidade_st}
                                   </td>
                                   <td className="border border-gray-300 px-4 py-2 text-right">
-                                    {item.impactosTotal_vl?.toLocaleString('pt-BR') || '0'}
+                                    {Math.round(item.impactosTotal_vl || 0).toLocaleString('pt-BR')}
                                   </td>
                                   <td className="border border-gray-300 px-4 py-2 text-right">
-                                    {item.coberturaPessoasTotal_vl?.toLocaleString('pt-BR') || '0'}
+                                    {Math.round(item.coberturaPessoasTotal_vl || 0).toLocaleString('pt-BR')}
                                   </td>
                                   <td className="border border-gray-300 px-4 py-2 text-right">
-                                    {item.coberturaProp_vl?.toFixed(2) || '0.00'}%
+                                    {(item.coberturaProp_vl || 0).toFixed(1)}
                                   </td>
                                   <td className="border border-gray-300 px-4 py-2 text-right">
-                                    {item.frequencia_vl?.toFixed(2) || '0.00'}
+                                    {(item.frequencia_vl || 0).toFixed(1)}
                                   </td>
                                   <td className="border border-gray-300 px-4 py-2 text-right">
-                                    {item.grp_vl?.toFixed(1) || '0.0'}
+                                    {(item.grp_vl || 0).toFixed(3)}
                                   </td>
                                 </tr>
                               ))}
                               {/* Linha de totais */}
                               {totaisResultados && (
-                                <tr className="bg-gray-100 font-bold">
-                                  <td className="border border-gray-300 px-4 py-2 text-[#3a3a3a]">Total</td>
-                                  <td className="border border-gray-300 px-4 py-2 text-right text-[#3a3a3a]">
-                                    {totaisResultados.impactosTotal_vl?.toLocaleString('pt-BR') || '0'}
+                                <tr className="bg-orange-50 font-bold">
+                                  <td className="border border-gray-300 px-4 py-2 text-[#3a3a3a]">
+                                    TOTAL
                                   </td>
-                                  <td className="border border-gray-300 px-4 py-2 text-right text-[#3a3a3a]">
-                                    {totaisResultados.coberturaPessoasTotal_vl?.toLocaleString('pt-BR') || '0'}
+                                  <td className="border border-gray-300 px-4 py-2 text-right">
+                                    {Math.round(totaisResultados.impactosTotal_vl || 0).toLocaleString('pt-BR')}
                                   </td>
-                                  <td className="border border-gray-300 px-4 py-2 text-right text-[#3a3a3a]">
-                                    {totaisResultados.coberturaProp_vl?.toFixed(2) || '0.00'}%
+                                  <td className="border border-gray-300 px-4 py-2 text-right">
+                                    {Math.round(totaisResultados.coberturaPessoasTotal_vl || 0).toLocaleString('pt-BR')}
                                   </td>
-                                  <td className="border border-gray-300 px-4 py-2 text-right text-[#3a3a3a]">
-                                    {totaisResultados.frequencia_vl?.toFixed(2) || '0.00'}
+                                  <td className="border border-gray-300 px-4 py-2 text-right">
+                                    {(totaisResultados.coberturaProp_vl || 0).toFixed(1)}
                                   </td>
-                                  <td className="border border-gray-300 px-4 py-2 text-right text-[#3a3a3a]">
-                                    {totaisResultados.grp_vl?.toFixed(1) || '0.0'}
+                                  <td className="border border-gray-300 px-4 py-2 text-right">
+                                    {(totaisResultados.frequencia_vl || 0).toFixed(1)}
+                                  </td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">
+                                    {(totaisResultados.grp_vl || 0).toFixed(3)}
                                   </td>
                                 </tr>
                               )}
@@ -2303,24 +2416,10 @@ export const CriarRoteiro: React.FC = () => {
                           <p className="text-gray-500">Nenhum dado disponível ainda.</p>
                           <p className="text-sm text-gray-400 mt-2">Os dados podem estar sendo processados ou não há informações para este plano.</p>
                         </div>
-                      )}
+                      );
+                      })()}
                     </div>
 
-                    {/* Resumo Indoor */}
-                    <div>
-                      <h4 className="text-lg font-bold text-[#3a3a3a] mb-4">RESUMO INDOOR</h4>
-                      <div className="text-center py-8">
-                        <p className="text-gray-500">Funcionalidade em desenvolvimento</p>
-                      </div>
-                    </div>
-
-                    {/* Resumo Vias Públicas */}
-                    <div>
-                      <h4 className="text-lg font-bold text-[#3a3a3a] mb-4">RESUMO VIAS PÚBLICAS</h4>
-                      <div className="text-center py-8">
-                        <p className="text-gray-500">Funcionalidade em desenvolvimento</p>
-                      </div>
-                    </div>
                   </div>
                 </>
               )}

@@ -116,6 +116,10 @@
     {
       "source": "/report-indicadores-vias-publicas",
       "destination": "/api/report-indicadores-vias-publicas.js"
+    },
+    {
+      "source": "/roteiro-completo",
+      "destination": "/api/roteiro-completo.js"
     }
   ]
 } 

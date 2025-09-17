@@ -102,10 +102,12 @@ Email: suporte@be180.com.br`;
 
   const handleVisualizarResultados = (roteiro: Roteiro) => {
     console.log('👁️ Visualizando resultados do roteiro:', roteiro);
-    // Navegar para VisualizarResultados com os dados do roteiro
-    navigate('/visualizar-resultados', { 
+    // Navegar para CriarRoteiro na Aba 6 com os dados do roteiro
+    navigate('/criar-roteiro', { 
       state: { 
-        roteiroData: roteiro 
+        modoVisualizacao: true,
+        roteiroData: roteiro,
+        abaInicial: 6
       } 
     });
   };

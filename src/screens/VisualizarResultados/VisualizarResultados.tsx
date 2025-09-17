@@ -97,7 +97,7 @@ export const VisualizarResultados: React.FC = () => {
 
   const formatarNumero = (valor: number | undefined) => {
     if (valor === undefined || valor === null) return '0';
-    return valor.toLocaleString('pt-BR');
+    return Math.round(valor).toLocaleString('pt-BR');
   };
 
   const formatarPercentual = (valor: number | undefined) => {
