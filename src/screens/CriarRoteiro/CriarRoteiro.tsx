@@ -81,6 +81,12 @@ export const CriarRoteiro: React.FC = () => {
   const [totaisResultados, setTotaisResultados] = useState<any>(null);
   const [carregandoResultados, setCarregandoResultados] = useState(false);
   const [aba6Habilitada, setAba6Habilitada] = useState(false);
+  
+  // Estados para visão semanal
+  const [tipoVisualizacao, setTipoVisualizacao] = useState<'geral' | 'praca'>('geral');
+  const [dadosSemanais, setDadosSemanais] = useState<any[]>([]);
+  const [dadosSemanaisSummary, setDadosSemanaisSummary] = useState<any[]>([]);
+  const [carregandoSemanais, setCarregandoSemanais] = useState(false);
 
   // Detectar modo visualização e carregar dados
   useEffect(() => {
@@ -816,6 +822,9 @@ export const CriarRoteiro: React.FC = () => {
         }
         
         console.log('🎯 Estados atualizados - dadosResultados:', response.data.data.length, 'totaisResultados:', totais);
+        
+        // Carregar dados semanais também
+        await carregarDadosSemanais(pkToUse);
       } else {
         console.error('❌ Erro na resposta da API de resultados:', response.data.message);
         // Mesmo com erro, habilitar a aba para mostrar estado vazio
@@ -827,6 +836,59 @@ export const CriarRoteiro: React.FC = () => {
       setAba6Habilitada(true);
     } finally {
       setCarregandoResultados(false);
+    }
+  };
+
+  // Função para carregar dados semanais (visão por praça)
+  const carregarDadosSemanais = async (pkOverride?: number) => {
+    const pkToUse = pkOverride || planoMidiaGrupo_pk;
+    console.log('🔄 carregarDadosSemanais chamada');
+    console.log('📊 pkToUse:', pkToUse);
+    
+    if (!pkToUse) {
+      console.log('⚠️ planoMidiaGrupo_pk não disponível para carregar dados semanais');
+      return;
+    }
+
+    try {
+      setCarregandoSemanais(true);
+      console.log('🔄 Carregando dados semanais...');
+
+      const response = await axios.post('/report-indicadores-week', {
+        report_pk: pkToUse
+      });
+
+      console.log('📊 Resposta da API (semanais):', response.data);
+
+      if (response.data.success) {
+        setDadosSemanais(response.data.data);
+        console.log('✅ Dados semanais carregados:', response.data.data.length);
+        
+        // Buscar dados de resumo semanal
+        console.log('🔄 Buscando dados de resumo semanal...');
+        const summaryResponse = await axios.post('/report-indicadores-week-summary', {
+          report_pk: pkToUse
+        });
+
+        console.log('📊 Resposta da API (resumo semanal):', summaryResponse.data);
+
+        if (summaryResponse.data.success) {
+          setDadosSemanaisSummary(summaryResponse.data.data);
+          console.log('✅ Dados de resumo semanal carregados:', summaryResponse.data.data.length);
+        } else {
+          console.error('❌ Erro na resposta da API de resumo semanal:', summaryResponse.data.message);
+          setDadosSemanaisSummary([]);
+        }
+      } else {
+        console.error('❌ Erro na resposta da API de dados semanais:', response.data.message);
+        setDadosSemanais([]);
+        setDadosSemanaisSummary([]);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados semanais:', error);
+      setDadosSemanais([]);
+    } finally {
+      setCarregandoSemanais(false);
     }
   };
 
@@ -2363,12 +2425,34 @@ export const CriarRoteiro: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Combo de visualização */}
+                  <div className="mb-8">
+                    <label className="block text-base text-[#3a3a3a] mb-2">
+                      Visualizar resultados
+                    </label>
+                    <div className="relative w-64">
+                      <select
+                        value={tipoVisualizacao}
+                        onChange={(e) => setTipoVisualizacao(e.target.value as 'geral' | 'praca')}
+                        className="w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal"
+                      >
+                        <option value="geral">Visão geral</option>
+                        <option value="praca">Visão por praça</option>
+                      </select>
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                        <svg className="w-4 h-4 text-[#3A3A3A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Tabelas de resultados */}
                   <div className="space-y-8">
-                    {/* Resumo Total */}
-                    <div>
-                      <h4 className="text-lg font-bold text-[#3a3a3a] mb-4">RESUMO TOTAL</h4>
+                    {/* Visão Geral */}
+                    {tipoVisualizacao === 'geral' && (
+                      <div>
+                        <h4 className="text-lg font-bold text-[#3a3a3a] mb-4">RESUMO TOTAL</h4>
                       {(() => {
                         console.log('🎯 Renderizando Aba 6 - carregandoResultados:', carregandoResultados, 'dadosResultados.length:', dadosResultados.length);
                         return carregandoResultados ? (
@@ -2446,7 +2530,171 @@ export const CriarRoteiro: React.FC = () => {
                         </div>
                       );
                       })()}
-                    </div>
+                      </div>
+                    )}
+
+                    {/* Visão por Praça */}
+                    {tipoVisualizacao === 'praca' && (
+                      <div>
+                        <h4 className="text-lg font-bold text-[#3a3a3a] mb-4">VISÃO POR PRAÇA</h4>
+                        {(() => {
+                          if (carregandoSemanais) {
+                            return (
+                              <div className="text-center py-8">
+                                <div className="animate-spin h-8 w-8 border-2 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                                <p className="text-gray-500">Carregando dados semanais...</p>
+                                <p className="text-sm text-gray-400 mt-2">Aguarde alguns segundos</p>
+                              </div>
+                            );
+                          }
+
+                          if (dadosSemanais.length > 0) {
+                            // Agrupar dados por cidade e organizar por semana
+                            const dadosPorCidade = dadosSemanais.reduce((acc: any, item: any) => {
+                              const cidade = item.cidade_st;
+                              if (!acc[cidade]) {
+                                acc[cidade] = {};
+                              }
+                              acc[cidade][item.week_vl] = item;
+                              return acc;
+                            }, {});
+
+                            // Usar dados de resumo da stored procedure
+                            const totaisPorCidade = dadosSemanaisSummary.reduce((acc: any, item: any) => {
+                              acc[item.cidade_st] = {
+                                impactos_vl: item.impactosTotal_vl || 0,
+                                coberturaPessoas_vl: item.coberturaPessoasTotal_vl || 0,
+                                coberturaProp_vl: item.coberturaProp_vl || 0,
+                                frequencia_vl: item.frequencia_vl || 0,
+                                grp_vl: item.grp_vl || 0
+                              };
+                              return acc;
+                            }, {});
+
+                            return (
+                              <div className="space-y-8">
+                                {Object.entries(dadosPorCidade).map(([cidade, dadosCidade]: [string, any]) => (
+                                  <div key={cidade} className="border border-gray-300 rounded-lg p-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                      <div className="flex items-center">
+                                        <span className="text-lg font-bold text-[#3a3a3a]">• {cidade}</span>
+                                      </div>
+                                      <button className="px-4 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700">
+                                        View mapa
+                                      </button>
+                                    </div>
+                                    
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full border-collapse border border-gray-300">
+                                        <thead>
+                                          <tr className="bg-gray-100">
+                                            <th className="border border-gray-300 px-4 py-2 text-left font-medium text-[#3a3a3a]">Itens</th>
+                                            {Array.from({ length: 12 }, (_, i) => (
+                                              <th key={i} className="border border-gray-300 px-4 py-2 text-center font-medium text-[#3a3a3a]">
+                                                W{i + 1}
+                                              </th>
+                                            ))}
+                                            <th className="border border-gray-300 px-4 py-2 text-center font-medium text-[#3a3a3a]">TOTAL</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {/* Impactos IPV */}
+                                          <tr className="hover:bg-gray-50">
+                                            <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">Impactos IPV</td>
+                                            {Array.from({ length: 12 }, (_, i) => {
+                                              const semana = dadosCidade[i + 1];
+                                              return (
+                                                <td key={i} className="border border-gray-300 px-4 py-2 text-right">
+                                                  {semana?.impactos_vl ? Math.round(semana.impactos_vl).toLocaleString('pt-BR') : '0'}
+                                                </td>
+                                              );
+                                            })}
+                                            <td className="border border-gray-300 px-4 py-2 text-right font-bold">
+                                              {totaisPorCidade[cidade]?.impactos_vl ? Math.round(totaisPorCidade[cidade].impactos_vl).toLocaleString('pt-BR') : '0'}
+                                            </td>
+                                          </tr>
+                                          
+                                          {/* Cobertura (N° pessoas) */}
+                                          <tr className="hover:bg-gray-50">
+                                            <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">Cobertura (N° pessoas)</td>
+                                            {Array.from({ length: 12 }, (_, i) => {
+                                              const semana = dadosCidade[i + 1];
+                                              return (
+                                                <td key={i} className="border border-gray-300 px-4 py-2 text-right">
+                                                  {semana?.coberturaPessoas_vl ? Math.round(semana.coberturaPessoas_vl).toLocaleString('pt-BR') : '0'}
+                                                </td>
+                                              );
+                                            })}
+                                            <td className="border border-gray-300 px-4 py-2 text-right font-bold">
+                                              {totaisPorCidade[cidade]?.coberturaPessoas_vl ? Math.round(totaisPorCidade[cidade].coberturaPessoas_vl).toLocaleString('pt-BR') : '0'}
+                                            </td>
+                                          </tr>
+                                          
+                                          {/* Cobertura (%) */}
+                                          <tr className="hover:bg-gray-50">
+                                            <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">Cobertura (%)</td>
+                                            {Array.from({ length: 12 }, (_, i) => {
+                                              const semana = dadosCidade[i + 1];
+                                              return (
+                                                <td key={i} className="border border-gray-300 px-4 py-2 text-right">
+                                                  {semana?.coberturaProp_vl ? (semana.coberturaProp_vl * 100).toFixed(1) : '0.0'}%
+                                                </td>
+                                              );
+                                            })}
+                                            <td className="border border-gray-300 px-4 py-2 text-right font-bold">
+                                              {totaisPorCidade[cidade]?.coberturaProp_vl ? (totaisPorCidade[cidade].coberturaProp_vl * 100).toFixed(1) : '0.0'}%
+                                            </td>
+                                          </tr>
+                                          
+                                          {/* Frequência */}
+                                          <tr className="hover:bg-gray-50">
+                                            <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">Frequência</td>
+                                            {Array.from({ length: 12 }, (_, i) => {
+                                              const semana = dadosCidade[i + 1];
+                                              return (
+                                                <td key={i} className="border border-gray-300 px-4 py-2 text-right">
+                                                  {semana?.frequencia_vl ? semana.frequencia_vl.toFixed(1) : '0.0'}
+                                                </td>
+                                              );
+                                            })}
+                                            <td className="border border-gray-300 px-4 py-2 text-right font-bold">
+                                              {totaisPorCidade[cidade]?.frequencia_vl ? totaisPorCidade[cidade].frequencia_vl.toFixed(1) : '0.0'}
+                                            </td>
+                                          </tr>
+                                          
+                                          {/* GRP */}
+                                          <tr className="hover:bg-gray-50">
+                                            <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">GRP</td>
+                                            {Array.from({ length: 12 }, (_, i) => {
+                                              const semana = dadosCidade[i + 1];
+                                              return (
+                                                <td key={i} className="border border-gray-300 px-4 py-2 text-right">
+                                                  {semana?.grp_vl ? semana.grp_vl.toFixed(3) : '0.000'}
+                                                </td>
+                                              );
+                                            })}
+                                            <td className="border border-gray-300 px-4 py-2 text-right font-bold">
+                                              {totaisPorCidade[cidade]?.grp_vl ? totaisPorCidade[cidade].grp_vl.toFixed(3) : '0.000'}
+                                            </td>
+                                          </tr>
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div className="text-center py-8">
+                              <p className="text-gray-500">Nenhum dado semanal disponível ainda.</p>
+                              <p className="text-sm text-gray-400 mt-2">Os dados podem estar sendo processados ou não há informações para este plano.</p>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
 
                   </div>
                 </>

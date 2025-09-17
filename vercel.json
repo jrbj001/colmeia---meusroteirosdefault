@@ -122,6 +122,14 @@
       "destination": "/api/report-indicadores-summary.js"
     },
     {
+      "source": "/report-indicadores-week",
+      "destination": "/api/report-indicadores-week.js"
+    },
+    {
+      "source": "/report-indicadores-week-summary",
+      "destination": "/api/report-indicadores-week-summary.js"
+    },
+    {
       "source": "/roteiro-completo",
       "destination": "/api/roteiro-completo.js"
     }
