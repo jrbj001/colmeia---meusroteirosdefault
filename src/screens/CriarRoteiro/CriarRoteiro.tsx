@@ -892,6 +892,120 @@ export const CriarRoteiro: React.FC = () => {
     }
   };
 
+  // Função para exportar dados para Excel
+  const exportarParaExcel = () => {
+    try {
+      console.log('📊 Iniciando exportação para Excel...');
+      
+      // Criar workbook
+      const workbook = XLSX.utils.book_new();
+      
+      // 1. Aba: Visão Geral
+      if (dadosResultados.length > 0) {
+        const dadosVisaoGeral = [
+          // Cabeçalho com informações do plano
+          ['PLANO DE MÍDIA - RELATÓRIO DE RESULTADOS'],
+          [''],
+          ['Informações do Plano:'],
+          ['Nome do Plano:', nomeRoteiro || 'N/A'],
+          ['Gênero:', genero || 'Não definido'],
+          ['Classe:', classe || 'Não definida'],
+          ['Faixa Etária:', faixaEtaria || 'Não definida'],
+          ['Período Total:', `${semanasUnicas.length} semanas`],
+          ['Cidades:', pracasUnicas.map(p => p.praca).join(', ')],
+          ['Data de Criação:', new Date().toLocaleDateString('pt-BR')],
+          ['CPMView:', totaisResultados?.grp_vl?.toFixed(3) || '0.000'],
+          [''],
+          // Dados da tabela
+          ['VISÃO GERAL - RESUMO TOTAL'],
+          [''],
+          ['Praça', 'Impactos', 'Cobertura (pessoas)', 'Cobertura (%)', 'Frequência', 'GRP'],
+          ...dadosResultados.map(item => [
+            item.cidade_st,
+            Math.round(item.impactosTotal_vl || 0),
+            Math.round(item.coberturaPessoasTotal_vl || 0),
+            (item.coberturaProp_vl || 0).toFixed(1),
+            (item.frequencia_vl || 0).toFixed(1),
+            (item.grp_vl || 0).toFixed(3)
+          ]),
+          // Linha de totais
+          ['TOTAL', 
+           Math.round(totaisResultados?.impactosTotal_vl || 0),
+           Math.round(totaisResultados?.coberturaPessoasTotal_vl || 0),
+           (totaisResultados?.coberturaProp_vl || 0).toFixed(1),
+           (totaisResultados?.frequencia_vl || 0).toFixed(1),
+           (totaisResultados?.grp_vl || 0).toFixed(3)
+          ]
+        ];
+        
+        const worksheetGeral = XLSX.utils.aoa_to_sheet(dadosVisaoGeral);
+        XLSX.utils.book_append_sheet(workbook, worksheetGeral, 'Visão Geral');
+      }
+      
+      // 2. Aba: Visão por Praça
+      if (dadosSemanais.length > 0) {
+        // Agrupar dados por cidade
+        const dadosPorCidade = dadosSemanais.reduce((acc: any, item: any) => {
+          const cidade = item.cidade_st;
+          if (!acc[cidade]) {
+            acc[cidade] = {};
+          }
+          acc[cidade][item.week_vl] = item;
+          return acc;
+        }, {});
+
+        // Criar dados para cada cidade
+        Object.entries(dadosPorCidade).forEach(([cidade, dadosCidade]: [string, any]) => {
+          const dadosCidadeExcel = [
+            // Cabeçalho da cidade
+            [`VISÃO POR PRAÇA - ${cidade}`],
+            [''],
+            ['Itens', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9', 'W10', 'W11', 'W12', 'TOTAL'],
+            // Impactos IPV
+            ['Impactos IPV', ...Array.from({ length: 12 }, (_, i) => {
+              const semana = dadosCidade[i + 1];
+              return semana?.impactos_vl ? Math.round(semana.impactos_vl) : 0;
+            }), dadosSemanaisSummary.find(s => s.cidade_st === cidade)?.impactosTotal_vl || 0],
+            // Cobertura (N° pessoas)
+            ['Cobertura (N° pessoas)', ...Array.from({ length: 12 }, (_, i) => {
+              const semana = dadosCidade[i + 1];
+              return semana?.coberturaPessoas_vl ? Math.round(semana.coberturaPessoas_vl) : 0;
+            }), dadosSemanaisSummary.find(s => s.cidade_st === cidade)?.coberturaPessoasTotal_vl || 0],
+            // Cobertura (%)
+            ['Cobertura (%)', ...Array.from({ length: 12 }, (_, i) => {
+              const semana = dadosCidade[i + 1];
+              return semana?.coberturaProp_vl ? (semana.coberturaProp_vl * 100).toFixed(1) + '%' : '0.0%';
+            }), dadosSemanaisSummary.find(s => s.cidade_st === cidade) ? 
+              ((dadosSemanaisSummary.find(s => s.cidade_st === cidade).coberturaProp_vl || 0) * 100).toFixed(1) + '%' : '0.0%'],
+            // Frequência
+            ['Frequência', ...Array.from({ length: 12 }, (_, i) => {
+              const semana = dadosCidade[i + 1];
+              return semana?.frequencia_vl ? semana.frequencia_vl.toFixed(1) : '0.0';
+            }), dadosSemanaisSummary.find(s => s.cidade_st === cidade)?.frequencia_vl?.toFixed(1) || '0.0'],
+            // GRP
+            ['GRP', ...Array.from({ length: 12 }, (_, i) => {
+              const semana = dadosCidade[i + 1];
+              return semana?.grp_vl ? semana.grp_vl.toFixed(3) : '0.000';
+            }), dadosSemanaisSummary.find(s => s.cidade_st === cidade)?.grp_vl?.toFixed(3) || '0.000']
+          ];
+          
+          const worksheetCidade = XLSX.utils.aoa_to_sheet(dadosCidadeExcel);
+          XLSX.utils.book_append_sheet(workbook, worksheetCidade, cidade.substring(0, 31)); // Limitar nome da aba
+        });
+      }
+      
+      // 3. Gerar e baixar arquivo
+      const nomeArquivo = `Resultados_${nomeRoteiro || 'Plano'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(workbook, nomeArquivo);
+      
+      console.log('✅ Arquivo Excel gerado com sucesso:', nomeArquivo);
+      
+    } catch (error) {
+      console.error('❌ Erro ao exportar para Excel:', error);
+      alert('Erro ao gerar arquivo Excel. Tente novamente.');
+    }
+  };
+
   // Função para salvar Aba 4 - Upload de roteiros
   const salvarAba4 = async () => {
     console.log('🚀 Iniciando Aba 4 - Upload e processamento do Excel...');
@@ -2695,6 +2809,16 @@ export const CriarRoteiro: React.FC = () => {
                         })()}
                       </div>
                     )}
+
+                    {/* Botão Download Excel */}
+                    <div className="mt-8 flex justify-center">
+                      <button
+                        onClick={exportarParaExcel}
+                        className="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium"
+                      >
+                        📊 Download Excel
+                      </button>
+                    </div>
 
                   </div>
                 </>
