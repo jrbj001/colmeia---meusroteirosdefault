@@ -87,6 +87,14 @@ export const CriarRoteiro: React.FC = () => {
   const [dadosSemanais, setDadosSemanais] = useState<any[]>([]);
   const [dadosSemanaisSummary, setDadosSemanaisSummary] = useState<any[]>([]);
   const [carregandoSemanais, setCarregandoSemanais] = useState(false);
+  
+  // Estados para dados de target
+  const [dadosTarget, setDadosTarget] = useState<any[]>([]);
+  const [totaisTarget, setTotaisTarget] = useState<any>(null);
+  const [carregandoTarget, setCarregandoTarget] = useState(false);
+  const [dadosSemanaisTarget, setDadosSemanaisTarget] = useState<any[]>([]);
+  const [dadosSemanaisTargetSummary, setDadosSemanaisTargetSummary] = useState<any[]>([]);
+  const [carregandoSemanaisTarget, setCarregandoSemanaisTarget] = useState(false);
 
   // Detectar modo visualização e carregar dados
   useEffect(() => {
@@ -823,8 +831,9 @@ export const CriarRoteiro: React.FC = () => {
         
         console.log('🎯 Estados atualizados - dadosResultados:', response.data.data.length, 'totaisResultados:', totais);
         
-        // Carregar dados semanais também
+        // Carregar dados semanais e target também
         await carregarDadosSemanais(pkToUse);
+        await carregarDadosTarget(pkToUse);
       } else {
         console.error('❌ Erro na resposta da API de resultados:', response.data.message);
         // Mesmo com erro, habilitar a aba para mostrar estado vazio
@@ -879,6 +888,9 @@ export const CriarRoteiro: React.FC = () => {
           console.error('❌ Erro na resposta da API de resumo semanal:', summaryResponse.data.message);
           setDadosSemanaisSummary([]);
         }
+        
+        // Carregar dados semanais de target também
+        await carregarDadosSemanaisTarget(pkToUse);
       } else {
         console.error('❌ Erro na resposta da API de dados semanais:', response.data.message);
         setDadosSemanais([]);
@@ -889,6 +901,122 @@ export const CriarRoteiro: React.FC = () => {
       setDadosSemanais([]);
     } finally {
       setCarregandoSemanais(false);
+    }
+  };
+
+  // Função para carregar dados de target
+  const carregarDadosTarget = async (pkOverride?: number) => {
+    const pkToUse = pkOverride || planoMidiaGrupo_pk;
+    console.log('🎯 carregarDadosTarget chamada');
+    console.log('📊 pkToUse:', pkToUse);
+    
+    if (!pkToUse) {
+      console.log('⚠️ planoMidiaGrupo_pk não disponível para carregar dados de target');
+      return;
+    }
+
+    try {
+      setCarregandoTarget(true);
+      console.log('🔄 Carregando dados de target...');
+
+      const response = await axios.post('/report-indicadores-target', {
+        report_pk: pkToUse
+      });
+
+      console.log('📊 Resposta da API (target):', response.data);
+
+      if (response.data.success) {
+        setDadosTarget(response.data.data);
+        console.log('✅ Dados de target carregados:', response.data.data.length);
+        
+        // Buscar dados de resumo de target
+        console.log('🔄 Buscando dados de resumo de target...');
+        const summaryResponse = await axios.post('/report-indicadores-target-summary', {
+          report_pk: pkToUse
+        });
+
+        console.log('📊 Resposta da API (resumo target):', summaryResponse.data);
+
+        if (summaryResponse.data.success && summaryResponse.data.data) {
+          const summaryData = summaryResponse.data.data;
+          const totais = {
+            impactosTotal_vl: summaryData.impactosTotal_vl || 0,
+            coberturaPessoasTotal_vl: summaryData.coberturaPessoasTotal_vl || 0,
+            coberturaProp_vl: summaryData.coberturaProp_vl || 0,
+            frequencia_vl: summaryData.frequencia_vl || 0,
+            grp_vl: summaryData.grp_vl || 0
+          };
+          
+          console.log('✅ Totais de target carregados:', totais);
+          setTotaisTarget(totais);
+        } else {
+          console.error('❌ Erro na resposta da API de resumo de target:', summaryResponse.data.message);
+          setTotaisTarget(null);
+        }
+      } else {
+        console.error('❌ Erro na resposta da API de target:', response.data.message);
+        setDadosTarget([]);
+        setTotaisTarget(null);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados de target:', error);
+      setDadosTarget([]);
+      setTotaisTarget(null);
+    } finally {
+      setCarregandoTarget(false);
+    }
+  };
+
+  // Função para carregar dados semanais de target
+  const carregarDadosSemanaisTarget = async (pkOverride?: number) => {
+    const pkToUse = pkOverride || planoMidiaGrupo_pk;
+    console.log('🎯 carregarDadosSemanaisTarget chamada');
+    console.log('📊 pkToUse:', pkToUse);
+    
+    if (!pkToUse) {
+      console.log('⚠️ planoMidiaGrupo_pk não disponível para carregar dados semanais de target');
+      return;
+    }
+
+    try {
+      setCarregandoSemanaisTarget(true);
+      console.log('🔄 Carregando dados semanais de target...');
+
+      const response = await axios.post('/report-indicadores-week-target', {
+        report_pk: pkToUse
+      });
+
+      console.log('📊 Resposta da API (semanais target):', response.data);
+
+      if (response.data.success) {
+        setDadosSemanaisTarget(response.data.data);
+        console.log('✅ Dados semanais de target carregados:', response.data.data.length);
+        
+        // Buscar dados de resumo semanal de target
+        console.log('🔄 Buscando dados de resumo semanal de target...');
+        const summaryResponse = await axios.post('/report-indicadores-week-target-summary', {
+          report_pk: pkToUse
+        });
+
+        console.log('📊 Resposta da API (resumo semanal target):', summaryResponse.data);
+
+        if (summaryResponse.data.success) {
+          setDadosSemanaisTargetSummary(summaryResponse.data.data);
+          console.log('✅ Dados de resumo semanal de target carregados:', summaryResponse.data.data.length);
+        } else {
+          console.error('❌ Erro na resposta da API de resumo semanal de target:', summaryResponse.data.message);
+          setDadosSemanaisTargetSummary([]);
+        }
+      } else {
+        console.error('❌ Erro na resposta da API de dados semanais de target:', response.data.message);
+        setDadosSemanaisTarget([]);
+        setDadosSemanaisTargetSummary([]);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados semanais de target:', error);
+      setDadosSemanaisTarget([]);
+    } finally {
+      setCarregandoSemanaisTarget(false);
     }
   };
 
@@ -940,6 +1068,48 @@ export const CriarRoteiro: React.FC = () => {
         
         const worksheetGeral = XLSX.utils.aoa_to_sheet(dadosVisaoGeral);
         XLSX.utils.book_append_sheet(workbook, worksheetGeral, 'Visão Geral');
+      }
+      
+      // 1.1. Aba: Target (se houver dados)
+      if (dadosTarget.length > 0) {
+        const dadosTargetExcel = [
+          // Cabeçalho com informações do plano
+          ['PLANO DE MÍDIA - RELATÓRIO DE TARGET'],
+          [''],
+          ['Informações do Plano:'],
+          ['Nome do Plano:', nomeRoteiro || 'N/A'],
+          ['Gênero:', genero || 'Não definido'],
+          ['Classe:', classe || 'Não definida'],
+          ['Faixa Etária:', faixaEtaria || 'Não definida'],
+          ['Período Total:', `${semanasUnicas.length} semanas`],
+          ['Cidades:', pracasUnicas.map(p => p.praca).join(', ')],
+          ['Data de Criação:', new Date().toLocaleDateString('pt-BR')],
+          ['CPMView:', totaisTarget?.grp_vl?.toFixed(3) || '0.000'],
+          [''],
+          // Dados da tabela
+          ['TARGET - RESUMO TOTAL'],
+          [''],
+          ['Praça', 'Impactos', 'Cobertura (pessoas)', 'Cobertura (%)', 'Frequência', 'GRP'],
+          ...dadosTarget.map(item => [
+            item.cidade_st,
+            Math.round(item.impactosTotal_vl || 0),
+            Math.round(item.coberturaPessoasTotal_vl || 0),
+            (item.coberturaProp_vl || 0).toFixed(1),
+            (item.frequencia_vl || 0).toFixed(1),
+            (item.grp_vl || 0).toFixed(3)
+          ]),
+          // Linha de totais
+          ['TOTAL', 
+           Math.round(totaisTarget?.impactosTotal_vl || 0),
+           Math.round(totaisTarget?.coberturaPessoasTotal_vl || 0),
+           (totaisTarget?.coberturaProp_vl || 0).toFixed(1),
+           (totaisTarget?.frequencia_vl || 0).toFixed(1),
+           (totaisTarget?.grp_vl || 0).toFixed(3)
+          ]
+        ];
+        
+        const worksheetTarget = XLSX.utils.aoa_to_sheet(dadosTargetExcel);
+        XLSX.utils.book_append_sheet(workbook, worksheetTarget, 'Target');
       }
       
       // 2. Aba: Visão por Praça
@@ -2644,6 +2814,90 @@ export const CriarRoteiro: React.FC = () => {
                         </div>
                       );
                       })()}
+                      </div>
+                    )}
+
+                    {/* Seção TARGET */}
+                    {tipoVisualizacao === 'geral' && (
+                      <div>
+                        <h4 className="text-lg font-bold text-blue-600 mb-4">TARGET</h4>
+                        {(() => {
+                          console.log('🎯 Renderizando TARGET - carregandoTarget:', carregandoTarget, 'dadosTarget.length:', dadosTarget.length);
+                          return carregandoTarget ? (
+                            <div className="text-center py-8">
+                              <div className="animate-spin h-8 w-8 border-2 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                              <p className="text-gray-500">Carregando dados de target...</p>
+                              <p className="text-sm text-gray-400 mt-2">Aguarde alguns segundos</p>
+                            </div>
+                          ) : dadosTarget.length > 0 ? (
+                            <div className="overflow-x-auto">
+                              <table className="w-full border-collapse border border-gray-300">
+                                <thead>
+                                  <tr className="bg-blue-50">
+                                    <th className="border border-gray-300 px-4 py-2 text-left font-medium text-blue-700">Praça</th>
+                                    <th className="border border-gray-300 px-4 py-2 text-right font-medium text-blue-700">Impactos</th>
+                                    <th className="border border-gray-300 px-4 py-2 text-right font-medium text-blue-700">Cobertura (pessoas)</th>
+                                    <th className="border border-gray-300 px-4 py-2 text-right font-medium text-blue-700">Cobertura (%)</th>
+                                    <th className="border border-gray-300 px-4 py-2 text-right font-medium text-blue-700">Frequência</th>
+                                    <th className="border border-gray-300 px-4 py-2 text-right font-medium text-blue-700">GRP</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {dadosTarget.map((item, index) => (
+                                    <tr key={index} className="hover:bg-gray-50">
+                                      <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">
+                                        {item.cidade_st}
+                                      </td>
+                                      <td className="border border-gray-300 px-4 py-2 text-right">
+                                        {Math.round(item.impactosTotal_vl || 0).toLocaleString('pt-BR')}
+                                      </td>
+                                      <td className="border border-gray-300 px-4 py-2 text-right">
+                                        {Math.round(item.coberturaPessoasTotal_vl || 0).toLocaleString('pt-BR')}
+                                      </td>
+                                      <td className="border border-gray-300 px-4 py-2 text-right">
+                                        {(item.coberturaProp_vl || 0).toFixed(1)}
+                                      </td>
+                                      <td className="border border-gray-300 px-4 py-2 text-right">
+                                        {(item.frequencia_vl || 0).toFixed(1)}
+                                      </td>
+                                      <td className="border border-gray-300 px-4 py-2 text-right">
+                                        {(item.grp_vl || 0).toFixed(3)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                  {/* Linha de totais */}
+                                  {totaisTarget && (
+                                    <tr className="bg-blue-100 font-bold">
+                                      <td className="border border-gray-300 px-4 py-2 text-blue-800">
+                                        TOTAL
+                                      </td>
+                                      <td className="border border-gray-300 px-4 py-2 text-right text-blue-800">
+                                        {Math.round(totaisTarget.impactosTotal_vl || 0).toLocaleString('pt-BR')}
+                                      </td>
+                                      <td className="border border-gray-300 px-4 py-2 text-right text-blue-800">
+                                        {Math.round(totaisTarget.coberturaPessoasTotal_vl || 0).toLocaleString('pt-BR')}
+                                      </td>
+                                      <td className="border border-gray-300 px-4 py-2 text-right text-blue-800">
+                                        {(totaisTarget.coberturaProp_vl || 0).toFixed(1)}
+                                      </td>
+                                      <td className="border border-gray-300 px-4 py-2 text-right text-blue-800">
+                                        {(totaisTarget.frequencia_vl || 0).toFixed(1)}
+                                      </td>
+                                      <td className="border border-gray-300 px-4 py-2 text-right text-blue-800">
+                                        {(totaisTarget.grp_vl || 0).toFixed(3)}
+                                      </td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="text-center py-8">
+                              <p className="text-gray-500">Nenhum dado de target disponível ainda.</p>
+                              <p className="text-sm text-gray-400 mt-2">Os dados podem estar sendo processados ou não há informações para este plano.</p>
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
 

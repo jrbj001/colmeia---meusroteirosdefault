@@ -132,6 +132,22 @@
     {
       "source": "/roteiro-completo",
       "destination": "/api/roteiro-completo.js"
+    },
+    {
+      "source": "/report-indicadores-target",
+      "destination": "/api/report-indicadores-target.js"
+    },
+    {
+      "source": "/report-indicadores-target-summary",
+      "destination": "/api/report-indicadores-target-summary.js"
+    },
+    {
+      "source": "/report-indicadores-week-target",
+      "destination": "/api/report-indicadores-week-target.js"
+    },
+    {
+      "source": "/report-indicadores-week-target-summary",
+      "destination": "/api/report-indicadores-week-target-summary.js"
     }
   ]
 } 
