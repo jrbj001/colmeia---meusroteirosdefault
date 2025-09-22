@@ -1141,12 +1141,12 @@ export const CriarRoteiro: React.FC = () => {
               const semana = dadosCidade[i + 1];
               return semana?.coberturaPessoas_vl ? Math.round(semana.coberturaPessoas_vl) : 0;
             }), dadosSemanaisSummary.find(s => s.cidade_st === cidade)?.coberturaPessoasTotal_vl || 0],
-            // Cobertura (%)
-            ['Cobertura (%)', ...Array.from({ length: 12 }, (_, i) => {
+            // Cobertura
+            ['Cobertura %', ...Array.from({ length: 12 }, (_, i) => {
               const semana = dadosCidade[i + 1];
-              return semana?.coberturaProp_vl ? (semana.coberturaProp_vl * 100).toFixed(1) + '%' : '0.0%';
+              return semana?.coberturaProp_vl ? semana.coberturaProp_vl.toFixed(1) + '%' : '0.0%';
             }), dadosSemanaisSummary.find(s => s.cidade_st === cidade) ? 
-              ((dadosSemanaisSummary.find(s => s.cidade_st === cidade).coberturaProp_vl || 0) * 100).toFixed(1) + '%' : '0.0%'],
+              (dadosSemanaisSummary.find(s => s.cidade_st === cidade).coberturaProp_vl || 0).toFixed(1) + '%' : '0.0%'],
             // Frequência
             ['Frequência', ...Array.from({ length: 12 }, (_, i) => {
               const semana = dadosCidade[i + 1];
@@ -3000,17 +3000,17 @@ export const CriarRoteiro: React.FC = () => {
                                           
                                           {/* Cobertura (%) */}
                                           <tr className="hover:bg-gray-50">
-                                            <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">Cobertura (%)</td>
+                                            <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">Cobertura %</td>
                                             {Array.from({ length: 12 }, (_, i) => {
                                               const semana = dadosCidade[i + 1];
                                               return (
                                                 <td key={i} className="border border-gray-300 px-4 py-2 text-right">
-                                                  {semana?.coberturaProp_vl ? (semana.coberturaProp_vl * 100).toFixed(1) : '0.0'}%
+                                                  {semana?.coberturaProp_vl ? semana.coberturaProp_vl.toFixed(1) + '%' : '0.0%'}
                                                 </td>
                                               );
                                             })}
                                             <td className="border border-gray-300 px-4 py-2 text-right font-bold">
-                                              {totaisPorCidade[cidade]?.coberturaProp_vl ? (totaisPorCidade[cidade].coberturaProp_vl * 100).toFixed(1) : '0.0'}%
+                                              {totaisPorCidade[cidade]?.coberturaProp_vl ? totaisPorCidade[cidade].coberturaProp_vl.toFixed(1) + '%' : '0.0%'}
                                             </td>
                                           </tr>
                                           

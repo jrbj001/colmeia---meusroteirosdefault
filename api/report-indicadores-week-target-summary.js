@@ -20,13 +20,14 @@ module.exports = async function handler(req, res) {
         SELECT 
           report_pk,
           cidade_st,
-          impactosTotal_vl,
-          coberturaPessoasTotal_vl,
-          coberturaProp_vl,
-          frequencia_vl,
-          grp_vl
-        FROM [serv_product_be180].[reportDataIndicadoresViasPublicasWeekTargetSummary_dm_vw]
+          SUM(impactos_vl) as impactosTotal_vl,
+          SUM(coberturaPessoas_vl) as coberturaPessoasTotal_vl,
+          AVG(coberturaProp_vl) as coberturaProp_vl,
+          AVG(frequencia_vl) as frequencia_vl,
+          SUM(grp_vl) as grp_vl
+        FROM [serv_product_be180].[reportDataIndicadoresViasPublicasWeekTarget_dm_vw]
         WHERE report_pk = @report_pk
+        GROUP BY report_pk, cidade_st
         ORDER BY cidade_st
       `);
 
