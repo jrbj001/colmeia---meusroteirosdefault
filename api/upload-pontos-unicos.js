@@ -1,4 +1,5 @@
 const { sql, getPool } = require('./db');
+const { buscarPassantesEmLote } = require('./banco-ativos-passantes');
 
 async function uploadPontosUnicos(req, res) {
     try {
@@ -43,32 +44,28 @@ async function uploadPontosUnicos(req, res) {
             });
         }
 
-        // TODO: Em produção, consultar tabela de inventário real
-        // Exemplo de como deveria ser:
-        /*
-        const inventarioQuery = `
-            SELECT 
-                i.latitude_vl,
-                i.longitude_vl,
-                i.ambiente_st,
-                i.tipoMidia_st,
-                i.fluxoPassante_vl,
-                i.visibilidade_vl,
-                i.deflatorVisibilidade_vl
-            FROM [serv_product_be180].[inventario_ft] i
-            WHERE i.latitude_vl IN (${pontos.map(p => p.latitude_vl).join(',')})
-              AND i.longitude_vl IN (${pontos.map(p => p.longitude_vl).join(',')})
-              AND i.ambiente_st = @ambiente_st
-              AND i.tipoMidia_st = @tipoMidia_st
-        `;
-        */
+        // ✅ BUSCAR DADOS REAIS DE PASSANTES DA API DO BANCO DE ATIVOS
+        console.log(`🔍 [uploadPontosUnicos] Buscando dados reais de passantes na API do banco de ativos...`);
         
-        // Por enquanto, simular fluxo de passantes (TEMPORÁRIO)
-        const pontosEnriquecidos = pontos.map(ponto => ({
+        const resultadoPassantes = await buscarPassantesEmLote(pontos);
+        
+        if (!resultadoPassantes.sucesso) {
+            console.error('❌ [uploadPontosUnicos] Erro ao buscar dados de passantes:', resultadoPassantes.erro);
+            return res.status(500).json({
+                success: false,
+                message: 'Erro ao buscar dados de passantes da API',
+                error: resultadoPassantes.erro
+            });
+        }
+
+        // Enriquecer pontos com dados reais de passantes
+        const pontosEnriquecidos = resultadoPassantes.dados.map(ponto => ({
             ...ponto,
-            fluxoPassantes_vl: Math.floor(Math.random() * 10000) + 1000, // Simular fluxo entre 1000-11000
-            observacao: "SIMULADO - Substituir por consulta real ao inventário"
+            fluxoPassantes_vl: ponto.fluxoPassantes_vl || 0,
+            observacao: ponto.sucesso ? "DADOS REAIS - API Banco de Ativos" : `ERRO: ${ponto.erro}`
         }));
+
+        console.log(`✅ [uploadPontosUnicos] Dados de passantes obtidos: ${resultadoPassantes.resumo.sucessos} sucessos, ${resultadoPassantes.resumo.falhas} falhas`);
 
         // ✅ RESTAURAR INSERÇÃO na uploadInventario_ft com processamento em lotes
         const agora = new Date();
@@ -127,9 +124,10 @@ async function uploadPontosUnicos(req, res) {
             data: {
                 pontosUnicos: pontos.length,
                 pontosInseridos: insertResult.recordset.length,
+                dadosPassantes: resultadoPassantes.resumo,
                 insertedData: insertResult.recordset
             },
-            message: `${insertResult.recordset.length} pontos únicos processados e inseridos na uploadInventario_ft`
+            message: `${insertResult.recordset.length} pontos únicos processados com dados reais de passantes da API do banco de ativos`
         });
 
     } catch (error) {
