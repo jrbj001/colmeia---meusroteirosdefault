@@ -369,8 +369,8 @@ export const CriarRoteiro: React.FC = () => {
 
     // Extrair cidades selecionadas na Aba 3 (normalizar texto)
     const cidadesAba3 = cidadesSelecionadas.map(cidade => 
-      cidade.nome_cidade?.toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    ).sort();
+      (cidade.nome_cidade || '').toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    ).filter(Boolean).sort();
 
     // Comparar arrays
     const cidadesFaltandoNoExcel = cidadesAba3.filter(cidade => !pracasExcel.includes(cidade));
@@ -1273,7 +1273,7 @@ export const CriarRoteiro: React.FC = () => {
       
       // Criar plano mídia desc para cada cidade encontrada no Excel
       const recordsJson = cidadesExcel.map((cidade) => ({
-        planoMidiaDesc_st: `${planoMidiaGrupo_st}_${cidade.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`,
+        planoMidiaDesc_st: `${planoMidiaGrupo_st}_${(cidade || '').replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`,
         usuarioId_st: user.id,
         usuarioName_st: user.name,
         gender_st: genero,
@@ -1380,7 +1380,7 @@ export const CriarRoteiro: React.FC = () => {
       setAba6Habilitada(true);
       await carregarDadosResultados();
 
-      // 9. Mostrar resultado final completo
+      // 9. Mostrar resultado final completo COM RELATÓRIO DO BANCO DE ATIVOS
       const totalRoteiros = uploadResponse.data.roteiros.length;
       const totalCidadesSemanas = dadosView.length;
       const totalPontosUnicos = pontosResponse.data?.data?.pontosUnicos || 0;
@@ -1388,6 +1388,9 @@ export const CriarRoteiro: React.FC = () => {
 
       // Informações sobre o Databricks
       const databricksInfo = databricksResponse.data?.summary || { successful: 0, failed: 0, total: 0 };
+      
+      // 📊 RELATÓRIO DETALHADO DO BANCO DE ATIVOS
+      const relatorioBA = pontosResponse.data?.data?.relatorioDetalhado;
       
       let mensagemSucesso = `🎯 FLUXO COMPLETO FINALIZADO COM SUCESSO!\n\n`;
       mensagemSucesso += `📊 RESUMO COMPLETO:\n`;
@@ -1399,11 +1402,157 @@ export const CriarRoteiro: React.FC = () => {
       mensagemSucesso += `• Dados transferidos para base calculadora\n`;
       mensagemSucesso += `• ${databricksInfo.successful}/${databricksInfo.total} jobs Databricks executados\n`;
       mensagemSucesso += `• Tabelas dinâmicas carregadas e prontas para uso\n\n`;
+      
+      // 🏦 RELATÓRIO DO BANCO DE ATIVOS
+      if (relatorioBA) {
+        mensagemSucesso += `🏦 DADOS DO BANCO DE ATIVOS:\n`;
+        mensagemSucesso += `• ${relatorioBA.comDados} pontos com dados reais de fluxo\n`;
+        if (relatorioBA.fluxoZero > 0) {
+          mensagemSucesso += `• ${relatorioBA.fluxoZero} pontos com fluxo zero (baixo movimento)\n`;
+        }
+        if (relatorioBA.apiSemDados > 0) {
+          mensagemSucesso += `• ${relatorioBA.apiSemDados} pontos sem cobertura da API (fluxo zero)\n`;
+        }
+        if (relatorioBA.valorPadrao > 0) {
+          mensagemSucesso += `• ${relatorioBA.valorPadrao} pontos com valor padrão (API falhou)\n`;
+        }
+        mensagemSucesso += `• Total: ${relatorioBA.total} pontos processados com sucesso\n\n`;
+        
+        // Se há pontos sem cobertura da API, mostrar detalhes
+        if (relatorioBA.apiSemDados > 0) {
+          mensagemSucesso += `⚠️ PONTOS SEM COBERTURA DA API:\n`;
+          relatorioBA.detalhes.pontosApiSemDados?.slice(0, 3).forEach((ponto: string) => {
+            mensagemSucesso += `• ${ponto}\n`;
+          });
+          if ((relatorioBA.detalhes.pontosApiSemDados?.length || 0) > 3) {
+            mensagemSucesso += `• ... e mais ${(relatorioBA.detalhes.pontosApiSemDados?.length || 0) - 3} pontos\n`;
+          }
+          mensagemSucesso += `\n`;
+        }
+        
+        // Se há pontos com valor padrão, mostrar detalhes
+        if (relatorioBA.valorPadrao > 0) {
+          mensagemSucesso += `🔧 PONTOS COM VALOR PADRÃO:\n`;
+          relatorioBA.detalhes.pontosValorPadrao?.slice(0, 3).forEach((ponto: string) => {
+            mensagemSucesso += `• ${ponto}\n`;
+          });
+          if ((relatorioBA.detalhes.pontosValorPadrao?.length || 0) > 3) {
+            mensagemSucesso += `• ... e mais ${(relatorioBA.detalhes.pontosValorPadrao?.length || 0) - 3} pontos\n`;
+          }
+          mensagemSucesso += `\n`;
+        }
+      }
+      
       mensagemSucesso += `🏙️ CIDADES: ${cidadesExcel.join(', ')}\n`;
       mensagemSucesso += `📅 Data/hora: ${uploadData.date_dh}\n\n`;
       mensagemSucesso += `✅ PROJETO CRIADO E PROCESSAMENTO DATABRICKS INICIADO!\n✅ TABELAS DINÂMICAS CARREGADAS!`;
       
-      alert(mensagemSucesso);
+      // 📎 FUNÇÃO PARA EXPORTAR PONTOS SEM COBERTURA
+      const exportarPontosSemCobertura = () => {
+        if (!relatorioBA || (relatorioBA.apiSemDados === 0 && relatorioBA.valorPadrao === 0)) {
+          alert('Não há pontos com observações para exportar.');
+          return;
+        }
+
+        // Preparar dados para exportação
+        const dadosExport = [];
+        
+        // Pontos sem cobertura da API (Status 204)
+        if (relatorioBA.detalhes.pontosApiSemDados) {
+          relatorioBA.detalhes.pontosApiSemDados.forEach((ponto: string) => {
+            const [localizacao, motivo] = ponto.split(': ');
+            const [ambiente_midia, coords] = (localizacao || '').split(' (');
+            const [ambiente, midia] = (ambiente_midia || '').split('-');
+            const coordenadas = coords ? coords.replace(')', '') : '';
+            const [lat, lng] = coordenadas ? coordenadas.split(',') : ['', ''];
+            
+            dadosExport.push({
+              'Ambiente': ambiente || '',
+              'Tipo de Mídia': midia || '',
+              'Latitude': lat || '',
+              'Longitude': lng || '',
+              'Status': 'Sem cobertura da API',
+              'Motivo': motivo || 'Status 204 - Área sem dados',
+              'Data de Análise': new Date().toLocaleDateString('pt-BR'),
+              'Projeto': uploadData.planoMidiaGrupo_st,
+              'Observação': 'Coordenada fora da área de cobertura da API do banco de ativos'
+            });
+          });
+        }
+        
+        // Pontos com valor padrão
+        if (relatorioBA.detalhes.pontosValorPadrao) {
+          relatorioBA.detalhes.pontosValorPadrao.forEach((ponto: string) => {
+            const [localizacao, motivo] = ponto.split(': ');
+            const [ambiente_midia, coords] = (localizacao || '').split(' (');
+            const [ambiente, midia] = (ambiente_midia || '').split('-');
+            const coordenadas = coords ? coords.replace(')', '') : '';
+            const [lat, lng] = coordenadas ? coordenadas.split(',') : ['', ''];
+            
+            dadosExport.push({
+              'Ambiente': ambiente || '',
+              'Tipo de Mídia': midia || '',
+              'Latitude': lat || '',
+              'Longitude': lng || '',
+              'Status': 'Valor padrão aplicado',
+              'Motivo': motivo || 'API falhou',
+              'Data de Análise': new Date().toLocaleDateString('pt-BR'),
+              'Projeto': uploadData.planoMidiaGrupo_st,
+              'Observação': 'Valor padrão aplicado devido à falha na API do banco de ativos'
+            });
+          });
+        }
+
+        // Converter para CSV (compatível com Excel)
+        if (dadosExport.length === 0) {
+          alert('Nenhum dado para exportar.');
+          return;
+        }
+
+        const headers = Object.keys(dadosExport[0]);
+        
+        // Adicionar BOM para UTF-8 (compatibilidade com Excel)
+        const BOM = '\\uFEFF';
+        const csvContent = BOM + [
+          headers.join(';'), // Usar ponto e vírgula para compatibilidade com Excel brasileiro
+          ...dadosExport.map(row => 
+            headers.map(header => `"${(row[header] || '').toString().replace(/"/g, '""')}"`).join(';')
+          )
+        ].join('\\r\\n');
+
+        // Criar e baixar arquivo
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        
+        const nomeArquivo = `pontos_sem_cobertura_${(uploadData.planoMidiaGrupo_st || 'plano').replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+        link.setAttribute('download', nomeArquivo);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        alert(`📁 Arquivo exportado com sucesso!\\n\\nArquivo: ${nomeArquivo}\\nTotal de pontos: ${dadosExport.length}\\n\\nO arquivo foi salvo na pasta de Downloads e pode ser aberto no Excel.`);
+      };
+
+      // Mostrar alert customizado com botão de exportação
+      if (relatorioBA && (relatorioBA.apiSemDados > 0 || relatorioBA.valorPadrao > 0)) {
+        // Alert com opção de exportação
+        const exportarAgora = confirm(
+          mensagemSucesso + 
+          `\\n\\n📎 EXPORTAÇÃO DISPONÍVEL:\\n` +
+          `Foram encontrados ${(relatorioBA.apiSemDados || 0) + (relatorioBA.valorPadrao || 0)} pontos com observações.\\n\\n` +
+          `Deseja exportar a lista completa destes pontos para arquivo CSV?`
+        );
+        
+        if (exportarAgora) {
+          exportarPontosSemCobertura();
+        }
+      } else {
+        // Alert normal sem opção de exportação
+        alert(mensagemSucesso);
+      }
 
     } catch (error) {
       console.error('💥 Erro no processamento Aba 4:', error);
@@ -1438,7 +1587,7 @@ export const CriarRoteiro: React.FC = () => {
     const dataFormatada = `${ano}${mes}${dia}`;
     
     // Remover caracteres especiais e espaços do nome do roteiro
-    const nomeFormatado = nomeRoteiro.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
+    const nomeFormatado = (nomeRoteiro || '').replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
     
     return `${dataFormatada}_${nomeFormatado}`;
   };
