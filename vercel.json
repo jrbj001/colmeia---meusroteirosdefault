@@ -148,6 +148,10 @@
     {
       "source": "/report-indicadores-week-target-summary",
       "destination": "/api/report-indicadores-week-target-summary.js"
+    },
+    {
+      "source": "/roteiro-simulado",
+      "destination": "/api/roteiro-simulado.js"
     }
   ]
 } 

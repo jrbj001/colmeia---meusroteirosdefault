@@ -176,12 +176,18 @@ export const CriarRoteiro: React.FC = () => {
   const [cidadesSalvas, setCidadesSalvas] = useState<Cidade[]>([]);
   
   // Estados para Aba 4 - Definir vias públicas
+  const [tipoRoteiroAba4, setTipoRoteiroAba4] = useState<'completo' | 'simulado'>('completo');
   const [arquivoExcel, setArquivoExcel] = useState<File | null>(null);
   const [roteirosCarregados, setRoteirosCarregados] = useState<any[]>([]);
   const [roteirosSalvos, setRoteirosSalvos] = useState<any[]>([]);
   const [uploadRoteiros_pks, setUploadRoteiros_pks] = useState<number[]>([]);
   const [processandoExcel, setProcessandoExcel] = useState(false);
   const [mensagemProcessamento, setMensagemProcessamento] = useState<string>('');
+  
+  // Estados para Roteiro Simulado
+  const [pracaSelecionadaSimulado, setPracaSelecionadaSimulado] = useState<any | null>(null);
+  const [quantidadeSemanas, setQuantidadeSemanas] = useState<number>(12);
+  const [tabelaSimulado, setTabelaSimulado] = useState<any[]>([]);
   
   // Estados para o novo fluxo pós-upload
   const [uploadCompleto, setUploadCompleto] = useState(false);
@@ -319,6 +325,188 @@ export const CriarRoteiro: React.FC = () => {
       console.error(`Erro ao buscar inventário de ${nomeCidade}:`, error);
     }
   };
+
+
+  // Função para gerar estrutura da tabela simulada
+  const gerarTabelaSimulado = async (semanas: number) => {
+    try {
+      console.log('🏗️ Gerando tabela simulada...', { cidadesSalvas, semanas });
+      
+      // Buscar grupos/subgrupos disponíveis
+      const gruposResponse = await axios.get('/grupo-sub-distinct');
+      
+      if (gruposResponse.data.success) {
+        const grupos = gruposResponse.data.data;
+        
+        // Gerar estrutura da tabela baseada nos grupos
+        const estruturaTabela = grupos.map((grupo: any) => ({
+          grupo_st: grupo.grupo_st,
+          grupoSub_st: grupo.grupoSub_st,
+          grupoDesc_st: grupo.grupoDesc_st,
+          visibilidade: 'Selecionável', // Valor padrão
+          // Criar colunas para cada semana
+          semanas: Array.from({ length: semanas }, (_, index) => ({
+            semana: `W${index + 1}`,
+            insercaoComprada: 0,
+            insercaoOferecida: 0
+          }))
+        }));
+        
+        setTabelaSimulado(estruturaTabela);
+        console.log('✅ Tabela simulada gerada:', estruturaTabela.length, 'grupos');
+      }
+    } catch (error) {
+      console.error('❌ Erro ao gerar tabela simulada:', error);
+      alert('Erro ao gerar estrutura da tabela. Tente novamente.');
+    }
+  };
+
+  // Função para salvar roteiro simulado
+  const salvarRoteiroSimulado = async () => {
+    try {
+      setSalvandoAba4(true);
+      
+      console.log('🚀 Iniciando salvamento do roteiro simulado...');
+      
+      // Validações básicas
+      if (!planoMidiaGrupo_pk) {
+        alert('É necessário salvar a Aba 1 primeiro');
+        return;
+      }
+
+      if (planoMidiaDesc_pks.length === 0) {
+        alert('É necessário salvar a Aba 2 primeiro');
+        return;
+      }
+
+      if (cidadesSalvas.length === 0) {
+        alert('É necessário configurar as praças na Aba 3 primeiro');
+        return;
+      }
+
+      if (!pracaSelecionadaSimulado) {
+        alert('Selecione uma praça para configurar');
+        return;
+      }
+
+      if (tabelaSimulado.length === 0) {
+        alert('Configure a tabela de vias públicas primeiro');
+        return;
+      }
+
+      // Coletar dados da tabela (incluindo inputs dos usuários)
+      const dadosTabela = tabelaSimulado.map((linha, index) => {
+        // Buscar valores dos inputs na DOM
+        const linhaDOM = document.querySelectorAll('tbody tr')[index];
+        const inputsSemanas = linhaDOM?.querySelectorAll('input[type="number"]');
+        
+        const semanasData = [];
+        if (inputsSemanas) {
+          // Os primeiros 2 inputs são inserção comprada/oferecida, depois vêm as semanas
+          for (let i = 2; i < inputsSemanas.length; i++) {
+            semanasData.push({
+              insercaoComprada: parseInt((inputsSemanas[i] as HTMLInputElement).value) || 0,
+              insercaoOferecida: 0 // Por enquanto só inserção comprada
+            });
+          }
+        }
+
+        return {
+          ...linha,
+          semanas: semanasData
+        };
+      });
+
+      console.log('📊 Dados da tabela coletados:', dadosTabela);
+
+      console.log('🔄 ETAPA 1: Criando planoMidiaDesc_pk específico para a praça...');
+      
+      // Criar planoMidiaDesc_pk específico para a praça selecionada
+      const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
+      const cidadeFormatada = (pracaSelecionadaSimulado.nome_cidade || '').replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
+      
+      const recordsJson = [{
+        planoMidiaDesc_st: `${planoMidiaGrupo_st}_${cidadeFormatada}`,
+        usuarioId_st: user?.id || '',
+        usuarioName_st: user?.name || '',
+        gender_st: genero,
+        class_st: classe,
+        age_st: faixaEtaria,
+        ibgeCode_vl: getIbgeCodeFromCidade(pracaSelecionadaSimulado)
+      }];
+
+      console.log('📋 Criando planoMidiaDesc para:', recordsJson[0]);
+
+      const descResponse = await axios.post('/plano-midia-desc', {
+        planoMidiaGrupo_pk,
+        recordsJson
+      });
+
+      if (!descResponse.data || !Array.isArray(descResponse.data) || descResponse.data.length === 0) {
+        throw new Error('Erro ao criar planoMidiaDesc específico para a praça');
+      }
+
+      const planoMidiaDesc_pk = descResponse.data[0].new_pk;
+      console.log('✅ ETAPA 1 CONCLUÍDA - planoMidiaDesc_pk criado:', planoMidiaDesc_pk);
+
+      console.log('🔄 ETAPA 2: Salvando roteiro simulado...');
+
+      // Chamar API
+      const response = await axios.post('/roteiro-simulado', {
+        planoMidiaDesc_pk,
+        dadosTabela,
+        pracasSelecionadas: [pracaSelecionadaSimulado], // Apenas a praça selecionada
+        quantidadeSemanas
+      });
+
+      if (response.data.success) {
+        const resultado = response.data.data;
+        
+        let mensagemSucesso = `🎉 ROTEIRO SIMULADO SALVO COM SUCESSO!\n\n`;
+        mensagemSucesso += `📊 RESUMO:\n`;
+        mensagemSucesso += `• ${resultado.registrosProcessados} registros processados\n`;
+        mensagemSucesso += `• ${resultado.semanasConfiguradas} semanas configuradas\n`;
+        mensagemSucesso += `• ${resultado.gruposConfigurados} grupos com mídia\n`;
+        mensagemSucesso += `• ${resultado.detalhes.totalInsecoesCompradas} inserções compradas no total\n\n`;
+        
+        mensagemSucesso += `🏙️ PRAÇA CONFIGURADA: ${pracaSelecionadaSimulado.nome_cidade} - ${pracaSelecionadaSimulado.nome_estado}\n`;
+        mensagemSucesso += `📋 PLANO MÍDIA DESC PK: ${planoMidiaDesc_pk}\n`;
+        mensagemSucesso += `📺 GRUPOS ATIVOS: ${resultado.detalhes.gruposAtivos.join(', ')}\n\n`;
+        
+        mensagemSucesso += `✅ PLANO MÍDIA DESC CRIADO PARA A PRAÇA!\n`;
+        mensagemSucesso += `✅ DADOS SALVOS NA BASE CALCULADORA!\n`;
+        mensagemSucesso += `✅ PRONTO PARA PROCESSAMENTO DATABRICKS!`;
+
+        alert(mensagemSucesso);
+        
+        // Ativar Aba 6 para visualizar resultados
+        setAba6Habilitada(true);
+        
+      } else {
+        throw new Error(response.data.message || 'Erro desconhecido');
+      }
+
+    } catch (error) {
+      console.error('❌ Erro ao salvar roteiro simulado:', error);
+      
+      let mensagemErro = 'Erro ao salvar roteiro simulado:\n\n';
+      if (error instanceof Error && 'response' in error) {
+        const axiosError = error as any;
+        if (axiosError.response?.data?.message) {
+          mensagemErro += axiosError.response.data.message;
+        } else {
+          mensagemErro += axiosError.message;
+        }
+      } else {
+        mensagemErro += error instanceof Error ? error.message : 'Erro desconhecido';
+      }
+      
+      alert(mensagemErro);
+    } finally {
+      setSalvandoAba4(false);
+    }
+  };
+
 
   // Funções para lidar com seleção de cidades
   const handleSelecionarCidade = (cidade: Cidade) => {
@@ -1551,7 +1739,7 @@ export const CriarRoteiro: React.FC = () => {
         }
       } else {
         // Alert normal sem opção de exportação
-        alert(mensagemSucesso);
+      alert(mensagemSucesso);
       }
 
     } catch (error) {
@@ -2447,11 +2635,52 @@ export const CriarRoteiro: React.FC = () => {
                 <>
                   <div className="mb-8">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
-                      {modoVisualizacao ? 'Vias públicas do roteiro' : 'Faça o upload do seu plano.'}
+                      {modoVisualizacao 
+                        ? 'Vias públicas do roteiro' 
+                        : tipoRoteiroAba4 === 'simulado' 
+                          ? 'Adicione as mídias de via pública ao seu roteiro ou faça upload de seu plano pronto.'
+                          : 'Faça o upload do seu plano.'
+                      }
                     </h3>
                   </div>
+
+                  {/* Seletor de tipo de roteiro */}
+                  {!modoVisualizacao && (
+                    <div className="mb-8">
+                      <label className="block text-base text-[#3a3a3a] mb-3">
+                        Tipo de roteiro
+                      </label>
+                      <div className="flex gap-4">
+                        <label className="flex items-center">
+                          <input
+                            type="radio"
+                            name="tipoRoteiro"
+                            value="completo"
+                            checked={tipoRoteiroAba4 === 'completo'}
+                            onChange={(e) => setTipoRoteiroAba4(e.target.value as 'completo' | 'simulado')}
+                            className="mr-2"
+                          />
+                          <span>Roteiro completo</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="radio"
+                            name="tipoRoteiro"
+                            value="simulado"
+                            checked={tipoRoteiroAba4 === 'simulado'}
+                            onChange={(e) => setTipoRoteiroAba4(e.target.value as 'completo' | 'simulado')}
+                            className="mr-2"
+                          />
+                          <span>Roteiro simulado</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
                   
                   <form onSubmit={handleSubmit}>
+                    {/* Roteiro Completo - Upload de arquivo */}
+                    {tipoRoteiroAba4 === 'completo' && (
+                      <>
                     {/* Download do template */}
                     <div className="mb-8">
                       <div className="flex items-center gap-4">
@@ -2522,10 +2751,237 @@ export const CriarRoteiro: React.FC = () => {
                         }`}>
                           {mensagemProcessamento}
                         </div>
-                      )}
+                          )}
+                        </div>
+                      </>
+                    )}
 
+                    {/* Roteiro Simulado - Seleção manual */}
+                    {tipoRoteiroAba4 === 'simulado' && (
+                      <>
+                        {/* Praças da Aba 3 */}
+                        <div className="mb-8">
+                          <label className="block text-base text-[#3a3a3a] mb-3">
+                            Praça(s) configurada(s) na Aba 3
+                          </label>
+                          <div className="relative">
+                            {cidadesSalvas.length > 0 ? (
+                              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="flex items-center mb-2">
+                                  <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center mr-3">
+                                    <span className="text-white text-sm font-bold">✓</span>
+                                  </div>
+                                  <span className="font-medium text-blue-800">
+                                    {cidadesSalvas.length} praça(s) configurada(s):
+                                  </span>
+                                </div>
+                                <div className="ml-9">
+                                  {cidadesSalvas.map((cidade, index) => (
+                                    <div key={cidade.id_cidade} className="text-blue-700">
+                                      {index + 1}. {cidade.nome_cidade} - {cidade.nome_estado}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <div className="flex items-center">
+                                  <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center mr-3">
+                                    <span className="text-white text-sm font-bold">!</span>
+                                  </div>
+                                  <div>
+                                    <p className="font-medium text-yellow-800">Configuração necessária</p>
+                                    <p className="text-sm text-yellow-700">
+                                      Vá para a Aba 3 e configure as praças antes de criar o roteiro simulado.
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
 
+                        {/* Seleção da Praça Específica */}
+                        {cidadesSalvas.length > 0 && (
+                          <div className="mb-8">
+                            <label className="block text-base text-[#3a3a3a] mb-3">
+                              Selecione a praça para configurar
+                            </label>
+                            <select 
+                              value={pracaSelecionadaSimulado?.id_cidade || ''}
+                              onChange={(e) => {
+                                const cidadeId = parseInt(e.target.value);
+                                const cidade = cidadesSalvas.find(c => c.id_cidade === cidadeId);
+                                setPracaSelecionadaSimulado(cidade || null);
+                                // Limpar tabela quando mudar de praça
+                                setTabelaSimulado([]);
+                              }}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="">Escolha uma praça...</option>
+                              {cidadesSalvas.map((cidade) => (
+                                <option key={cidade.id_cidade} value={cidade.id_cidade}>
+                                  {cidade.nome_cidade} - {cidade.nome_estado}
+                                </option>
+                              ))}
+                            </select>
+                            {pracaSelecionadaSimulado && (
+                              <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                                <div className="flex items-center">
+                                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center mr-2">
+                                    <span className="text-white text-xs font-bold">🎯</span>
+                                  </div>
+                                  <span className="text-green-800 font-medium">
+                                    Configurando: {pracaSelecionadaSimulado.nome_cidade} - {pracaSelecionadaSimulado.nome_estado}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Quantidade de Semanas */}
+                        <div className="mb-8">
+                          <label className="block text-base text-[#3a3a3a] mb-3">
+                            Quantidade de semanas
+                          </label>
+                          <select 
+                            value={quantidadeSemanas}
+                            onChange={(e) => setQuantidadeSemanas(Number(e.target.value))}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            {Array.from({ length: 52 }, (_, i) => i + 1).map(semana => (
+                              <option key={semana} value={semana}>
+                                {semana} semana{semana > 1 ? 's' : ''}
+                              </option>
+                            ))}
+                          </select>
                     </div>
+
+                        {/* Botão para gerar tabela */}
+                        <div className="mb-8">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (cidadesSalvas.length === 0) {
+                                alert('Configure as praças na Aba 3 primeiro');
+                                return;
+                              }
+                              if (!pracaSelecionadaSimulado) {
+                                alert('Selecione uma praça para configurar');
+                                return;
+                              }
+                              gerarTabelaSimulado(quantidadeSemanas);
+                            }}
+                            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400"
+                            disabled={cidadesSalvas.length === 0 || !pracaSelecionadaSimulado}
+                          >
+                            {pracaSelecionadaSimulado 
+                              ? `Configurar vias públicas para ${pracaSelecionadaSimulado.nome_cidade}` 
+                              : 'Selecione uma praça para configurar'
+                            }
+                          </button>
+                        </div>
+
+                        {/* Tabela Simulada */}
+                        {tabelaSimulado.length > 0 && (
+                          <div className="mb-8">
+                            <h4 className="text-lg font-semibold text-[#3a3a3a] mb-4">
+                              Configure as vias públicas de {pracaSelecionadaSimulado?.nome_cidade || 'praça'}
+                            </h4>
+                            <div className="overflow-x-auto border border-gray-300 rounded-lg">
+                              <table className="w-full">
+                                <thead className="bg-blue-600 text-white">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left font-medium text-sm">Grupo</th>
+                                    <th className="px-3 py-2 text-left font-medium text-sm">Descrição</th>
+                                    <th className="px-3 py-2 text-left font-medium text-sm">Visibilidade</th>
+                                    <th className="px-3 py-2 text-center font-medium text-sm">Inserção comprada</th>
+                                    <th className="px-3 py-2 text-center font-medium text-sm">Inserção oferecida</th>
+                                    {Array.from({ length: quantidadeSemanas }, (_, i) => (
+                                      <th key={i} className="px-3 py-2 text-center font-medium text-sm">
+                                        W{i + 1}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {tabelaSimulado.map((linha, index) => (
+                                    <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                                      <td className="px-3 py-2 text-sm font-medium">{linha.grupo_st}</td>
+                                      <td className="px-3 py-2 text-sm">{linha.grupoDesc_st}</td>
+                                      <td className="px-3 py-2">
+                                        <select 
+                                          value={linha.visibilidade}
+                                          onChange={(e) => {
+                                            const novaTabela = [...tabelaSimulado];
+                                            novaTabela[index].visibilidade = e.target.value;
+                                            setTabelaSimulado(novaTabela);
+                                          }}
+                                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                                        >
+                                          <option value="Selecionável">Selecionável</option>
+                                          <option value="Não">Não</option>
+                                        </select>
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          defaultValue="0"
+                                          className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded"
+                                        />
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          defaultValue="0"
+                                          className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded"
+                                        />
+                                      </td>
+                                      {Array.from({ length: quantidadeSemanas }, (_, semanaIndex) => (
+                                        <td key={semanaIndex} className="px-3 py-2">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            defaultValue="0"
+                                            className="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded"
+                                          />
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Botão Salvar para Roteiro Simulado */}
+                        {tabelaSimulado.length > 0 && (
+                          <div className="mb-8">
+                            <button
+                              type="button"
+                              onClick={salvarRoteiroSimulado}
+                              className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400"
+                              disabled={salvandoAba4}
+                            >
+                              {salvandoAba4 ? (
+                                <div className="flex items-center justify-center">
+                                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                                  Salvando roteiro simulado...
+                                </div>
+                              ) : 'Salvar Roteiro Simulado'}
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* Continuação do conteúdo para roteiro completo */}
+                    {tipoRoteiroAba4 === 'completo' && (
+                      <>
 
                     {/* Validação de consistência de cidades */}
                     {roteirosCarregados.length > 0 && cidadesSelecionadas.length > 0 && (
@@ -2822,6 +3278,8 @@ export const CriarRoteiro: React.FC = () => {
                           ) : uploadRoteiros_pks.length > 0 && !roteirosMudaram() ? '✓ Salvo' : 'Salvar'}
                         </button>
                       </div>
+                    )}
+                      </>
                     )}
                   </form>
                 </>
