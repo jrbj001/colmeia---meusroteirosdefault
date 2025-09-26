@@ -67,10 +67,69 @@ function padronizarCoordenadas(latitude, longitude) {
 }
 
 /**
+ * Busca fuzzy com pequenas variações nas coordenadas (baseado no teste que mostrou diferenças de 0.001)
+ */
+async function buscarComVariacoesCoordenadas(latPadronizada, lngPadronizada, token, tentativa) {
+    // Variações pequenas baseadas no teste real (0.001 fez diferença de 300k passantes)
+    const variacoes = [
+        { lat: parseFloat(latPadronizada) + 0.001, lng: parseFloat(lngPadronizada), nome: '+0.001 lat' },
+        { lat: parseFloat(latPadronizada) - 0.001, lng: parseFloat(lngPadronizada), nome: '-0.001 lat' },
+        { lat: parseFloat(latPadronizada), lng: parseFloat(lngPadronizada) + 0.001, nome: '+0.001 lng' },
+        { lat: parseFloat(latPadronizada), lng: parseFloat(lngPadronizada) - 0.001, nome: '-0.001 lng' },
+        { lat: parseFloat(latPadronizada) + 0.002, lng: parseFloat(lngPadronizada), nome: '+0.002 lat' },
+        { lat: parseFloat(latPadronizada) - 0.002, lng: parseFloat(lngPadronizada), nome: '-0.002 lat' },
+        { lat: parseFloat(latPadronizada), lng: parseFloat(lngPadronizada) + 0.002, nome: '+0.002 lng' },
+        { lat: parseFloat(latPadronizada), lng: parseFloat(lngPadronizada) - 0.002, nome: '-0.002 lng' },
+    ];
+    
+    for (const variacao of variacoes) {
+        try {
+            const latVar = variacao.lat.toFixed(6);
+            const lngVar = variacao.lng.toFixed(6);
+            
+            console.log(`🎯 [Fuzzy ${variacao.nome}] Testando: ${latVar}, ${lngVar}`);
+            
+            const url = `${BANCO_ATIVOS_CONFIG.baseURL}/api/v1/data/geofusion/${latVar}/${lngVar}`;
+            const response = await axios.get(url, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 30000
+            });
+
+            if (response.status === 200 && response.data) {
+                const dados = response.data;
+                console.log(`✅ [Fuzzy ${variacao.nome}] Dados encontrados: fluxo=${dados.flow}, classe=${dados.socialClass}`);
+                
+                return {
+                    sucesso: true,
+                    dados: dados,
+                    coordenadaOriginal: `${latPadronizada}, ${lngPadronizada}`,
+                    coordenadaEncontrada: `${latVar}, ${lngVar}`,
+                    variacao: variacao.nome
+                };
+            }
+            
+        } catch (error) {
+            // Silencioso para não poluir logs com muitas tentativas
+            if (error.response?.status !== 204) {
+                console.log(`🔍 [Fuzzy ${variacao.nome}] Sem dados`);
+            }
+        }
+    }
+    
+    return {
+        sucesso: false,
+        erro: 'Nenhuma variação de coordenada encontrou dados'
+    };
+}
+
+/**
  * Busca com coordenadas aproximadas (fuzzy matching)
  */
 async function buscarComCoordenadaAproximada(latPadronizada, lngPadronizada, token, tentativa) {
-    const raiosBusca = [0, 100, 500, 1000]; // metros de raio para busca aproximada
+    const raiosBusca = [0, 50, 100, 200, 500, 1000, 2000]; // busca fuzzy mais agressiva
     
     for (const raio of raiosBusca) {
         try {
@@ -85,7 +144,7 @@ async function buscarComCoordenadaAproximada(latPadronizada, lngPadronizada, tok
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
-                timeout: 10000 // 10 segundos
+                timeout: 30000 // 30 segundos timeout - API externa é lenta
             });
 
             if (response.status === 200 && response.data) {
@@ -136,15 +195,26 @@ async function buscarPassantesPorCoordenadas(latitude, longitude, raio = null, t
             
             console.log(`📍 [Tentativa ${tentativa}/${tentativas}] Buscando dados para: ${latPadronizada}, ${lngPadronizada}`);
             
-            // 🔍 BUSCA COM FUZZY MATCHING (coordenadas aproximadas)
-            const resultado = await buscarComCoordenadaAproximada(latPadronizada, lngPadronizada, token, tentativa);
+            // 🔍 BUSCA COM FUZZY MATCHING (coordenadas aproximadas por raio)
+            let resultado = await buscarComCoordenadaAproximada(latPadronizada, lngPadronizada, token, tentativa);
+            
+            // 🎯 BUSCA FUZZY COORDENADAS: Se não encontrou com raios, tentar variações pequenas
+            if (!resultado.sucesso) {
+                console.log(`🔍 Tentando busca fuzzy com variações de coordenadas...`);
+                resultado = await buscarComVariacoesCoordenadas(latPadronizada, lngPadronizada, token, tentativa);
+            }
             
             if (resultado.sucesso && resultado.dados) {
                 const dados = resultado.dados;
                 const fluxoFinal = dados.flow || 0;
-                const fonte = resultado.raioUsado > 0 ? 
-                    `banco-ativos-api-real-raio-${resultado.raioUsado}m` : 
-                    'banco-ativos-api-real';
+                
+                // Definir fonte baseada no tipo de busca
+                let fonte = 'banco-ativos-api-real';
+                if (resultado.variacao) {
+                    fonte = `banco-ativos-api-fuzzy-${resultado.variacao}`;
+                } else if (resultado.raioUsado > 0) {
+                    fonte = `banco-ativos-api-real-raio-${resultado.raioUsado}m`;
+                }
                 
                 if (fluxoFinal === 0) {
                     console.log(`📊 Fluxo REAL = 0 para ${latPadronizada},${lngPadronizada} (área com baixo movimento)`);
@@ -183,8 +253,8 @@ async function buscarPassantesPorCoordenadas(latitude, longitude, raio = null, t
             
             // 🔄 RETRY: Se não é a última tentativa, tenta novamente
             if (tentativa < tentativas) {
-                const delayMs = tentativa * 2000; // Delay progressivo: 2s, 4s, 6s...
-                console.log(`⏳ Aguardando ${delayMs}ms antes da próxima tentativa...`);
+                const delayMs = tentativa * 4000; // Delay progressivo mais longo: 4s, 8s, 12s...
+                console.log(`⏳ Aguardando ${delayMs/1000}s antes da próxima tentativa (API externa lenta)...`);
                 await new Promise(resolve => setTimeout(resolve, delayMs));
                 continue; // Próxima tentativa
             }
@@ -226,20 +296,41 @@ async function buscarPassantesPorCoordenadas(latitude, longitude, raio = null, t
  */
 async function buscarPassantesEmLote(coordenadas) {
     try {
-        console.log(`🔄 Iniciando busca em lote para ${coordenadas.length} coordenadas...`);
+        console.log(`🔄 Iniciando busca SEQUENCIAL em lote para ${coordenadas.length} coordenadas...`);
 
-        // Mapear todas as coordenadas para promises
-        const promises = coordenadas.map(coord => 
-            buscarPassantesPorCoordenadas(coord.latitude_vl, coord.longitude_vl)
-                .then(resultado => ({
+        // Processar SEQUENCIALMENTE para evitar sobrecarga da API externa
+        const resultadosLote = [];
+        for (let index = 0; index < coordenadas.length; index++) {
+            const coord = coordenadas[index];
+            console.log(`📍 [${index + 1}/${coordenadas.length}] Processando: ${coord.latitude_vl}, ${coord.longitude_vl}`);
+            
+            try {
+                const resultado = await buscarPassantesPorCoordenadas(coord.latitude_vl, coord.longitude_vl);
+                
+                resultadosLote.push({
                     ...coord, // Preservar dados originais
                     ...resultado.dados, // Adicionar dados da API
                     sucesso: resultado.sucesso,
                     erro: resultado.erro
-                }))
-        );
-
-        const resultadosLote = await Promise.all(promises);
+                });
+                
+                // Delay de 1.5 segundos entre requisições para não sobrecarregar a API
+                if (index < coordenadas.length - 1) {
+                    console.log(`⏱️ Aguardando 1.5s antes da próxima requisição...`);
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                }
+                
+            } catch (error) {
+                console.error(`❌ Erro na coordenada ${index}:`, error.message);
+                resultadosLote.push({
+                    ...coord,
+                    sucesso: false,
+                    erro: error.message,
+                    fluxoPassantes_vl: 0,
+                    fonte: 'api-falha'
+                });
+            }
+        }
         
         const sucessos = resultadosLote.filter(r => r.sucesso).length;
         const falhas = resultadosLote.filter(r => !r.sucesso).length;
