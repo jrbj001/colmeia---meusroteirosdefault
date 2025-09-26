@@ -67,6 +67,20 @@ function padronizarCoordenadas(latitude, longitude) {
 }
 
 /**
+ * Calcula distância entre duas coordenadas GPS em metros
+ */
+function calcularDistanciaGPS(lat1, lng1, lat2, lng2) {
+    const R = 6371000; // Raio da Terra em metros
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return Math.round(R * c); // Distância em metros
+}
+
+/**
  * Busca fuzzy com pequenas variações nas coordenadas (baseado no teste que mostrou diferenças de 0.001)
  */
 async function buscarComVariacoesCoordenadas(latPadronizada, lngPadronizada, token, tentativa) {
@@ -107,7 +121,9 @@ async function buscarComVariacoesCoordenadas(latPadronizada, lngPadronizada, tok
                     dados: dados,
                     coordenadaOriginal: `${latPadronizada}, ${lngPadronizada}`,
                     coordenadaEncontrada: `${latVar}, ${lngVar}`,
-                    variacao: variacao.nome
+                    variacao: variacao.nome,
+                    tipoEncontro: 'fuzzy-coordenadas',
+                    distanciaCalculada: calcularDistanciaGPS(parseFloat(latPadronizada), parseFloat(lngPadronizada), variacao.lat, variacao.lng)
                 };
             }
             
@@ -154,7 +170,11 @@ async function buscarComCoordenadaAproximada(latPadronizada, lngPadronizada, tok
                 return {
                     sucesso: true,
                     dados: dados,
-                    raioUsado: raio
+                    raioUsado: raio,
+                    tipoEncontro: raio === 0 ? 'busca-exata' : 'busca-raio',
+                    coordenadaOriginal: `${latPadronizada}, ${lngPadronizada}`,
+                    coordenadaEncontrada: `${latPadronizada}, ${lngPadronizada}`, // Mesma coordenada, mas com raio
+                    distanciaCalculada: raio
                 };
             } else if (response.status === 204) {
                 console.log(`⚠️ [Raio ${raio}m] Sem dados (204)`);
@@ -188,6 +208,7 @@ async function buscarComCoordenadaAproximada(latPadronizada, lngPadronizada, tok
 async function buscarPassantesPorCoordenadas(latitude, longitude, raio = null, tentativas = 3) {
     // 🎯 PADRONIZAR COORDENADAS PRIMEIRO
     const { latitude: latPadronizada, longitude: lngPadronizada } = padronizarCoordenadas(latitude, longitude);
+    const tempoInicio = Date.now();
     
     for (let tentativa = 1; tentativa <= tentativas; tentativa++) {
         try {
@@ -216,6 +237,17 @@ async function buscarPassantesPorCoordenadas(latitude, longitude, raio = null, t
                     fonte = `banco-ativos-api-real-raio-${resultado.raioUsado}m`;
                 }
                 
+                // 📊 DADOS DO RELATÓRIO DETALHADO
+                const relatorioDetalhado = {
+                    tipoEncontro: resultado.tipoEncontro || 'busca-exata',
+                    coordenadaOriginal: resultado.coordenadaOriginal || `${latPadronizada}, ${lngPadronizada}`,
+                    coordenadaEncontrada: resultado.coordenadaEncontrada || `${latPadronizada}, ${lngPadronizada}`,
+                    distanciaCalculada: resultado.distanciaCalculada || 0,
+                    raioUsado: resultado.raioUsado || 0,
+                    variacao: resultado.variacao || null,
+                    tempoProcessamento: Date.now() - tempoInicio
+                };
+                
                 if (fluxoFinal === 0) {
                     console.log(`📊 Fluxo REAL = 0 para ${latPadronizada},${lngPadronizada} (área com baixo movimento)`);
                 }
@@ -229,7 +261,8 @@ async function buscarPassantesPorCoordenadas(latitude, longitude, raio = null, t
                         latitude_vl: latitude, // Retornar coordenada original
                         longitude_vl: longitude, // Retornar coordenada original
                         fonte: fonte
-                    }
+                    },
+                    relatorioDetalhado: relatorioDetalhado
                 };
             } else if (resultado.sucesso && resultado.semDados) {
                 // Sem dados mesmo com busca aproximada
@@ -244,6 +277,15 @@ async function buscarPassantesPorCoordenadas(latitude, longitude, raio = null, t
                         latitude_vl: latitude,
                         longitude_vl: longitude,
                         fonte: `api-sem-dados-raio-${resultado.raioUsado}m`
+                    },
+                    relatorioDetalhado: {
+                        tipoEncontro: 'sem-dados-raio',
+                        coordenadaOriginal: `${latPadronizada}, ${lngPadronizada}`,
+                        coordenadaEncontrada: `${latPadronizada}, ${lngPadronizada}`,
+                        distanciaCalculada: resultado.raioUsado,
+                        raioUsado: resultado.raioUsado,
+                        variacao: null,
+                        tempoProcessamento: Date.now() - tempoInicio
                     }
                 };
             }
@@ -292,13 +334,103 @@ async function buscarPassantesPorCoordenadas(latitude, longitude, raio = null, t
 }
 
 /**
+ * Processamento híbrido para lotes grandes (>50 coordenadas)
+ * Divide em lotes menores e processa com paralelismo controlado
+ */
+async function processarLoteHibrido(coordenadas) {
+    const TAMANHO_LOTE = 10; // Processar 10 coordenadas por vez
+    const DELAY_ENTRE_LOTES = 2000; // 2s entre lotes
+    const MAX_PARALELO = 3; // Máximo 3 requests paralelos por lote
+
+    console.log(`🔧 Processamento híbrido: ${coordenadas.length} coords em lotes de ${TAMANHO_LOTE}`);
+    
+    const resultadosFinais = [];
+    const totalLotes = Math.ceil(coordenadas.length / TAMANHO_LOTE);
+
+    for (let loteIndex = 0; loteIndex < totalLotes; loteIndex++) {
+        const inicio = loteIndex * TAMANHO_LOTE;
+        const fim = Math.min(inicio + TAMANHO_LOTE, coordenadas.length);
+        const loteAtual = coordenadas.slice(inicio, fim);
+
+        console.log(`📦 [Lote ${loteIndex + 1}/${totalLotes}] Processando coordenadas ${inicio + 1}-${fim}...`);
+
+        // Processar lote atual com paralelismo limitado
+        const promessasLote = [];
+        for (let i = 0; i < loteAtual.length; i += MAX_PARALELO) {
+            const grupoCoords = loteAtual.slice(i, Math.min(i + MAX_PARALELO, loteAtual.length));
+            
+            const promessasGrupo = grupoCoords.map(async (coord, index) => {
+                try {
+                    // Delay escalonado para evitar sobrecarga (0ms, 200ms, 400ms)
+                    await new Promise(resolve => setTimeout(resolve, index * 200));
+                    
+                    const resultado = await buscarPassantesPorCoordenadas(coord.latitude_vl, coord.longitude_vl);
+                    return {
+                        ...coord,
+                        ...resultado.dados,
+                        sucesso: resultado.sucesso,
+                        erro: resultado.erro
+                    };
+                } catch (error) {
+                    console.error(`❌ Erro na coordenada ${coord.latitude_vl}, ${coord.longitude_vl}:`, error.message);
+                    return {
+                        ...coord,
+                        sucesso: false,
+                        erro: error.message,
+                        fluxoPassantes_vl: 0,
+                        fonte: 'api-falha'
+                    };
+                }
+            });
+
+            promessasLote.push(...promessasGrupo);
+        }
+
+        // Aguardar conclusão do lote atual
+        const resultadosLote = await Promise.all(promessasLote);
+        resultadosFinais.push(...resultadosLote);
+
+        console.log(`✅ [Lote ${loteIndex + 1}/${totalLotes}] Concluído: ${resultadosLote.length} coordenadas processadas`);
+
+        // Delay entre lotes (exceto no último)
+        if (loteIndex < totalLotes - 1) {
+            console.log(`⏱️ Aguardando ${DELAY_ENTRE_LOTES}ms antes do próximo lote...`);
+            await new Promise(resolve => setTimeout(resolve, DELAY_ENTRE_LOTES));
+        }
+    }
+
+    const sucessos = resultadosFinais.filter(r => r.sucesso).length;
+    const falhas = resultadosFinais.filter(r => !r.sucesso).length;
+    const percentualSucesso = (sucessos / coordenadas.length) * 100;
+
+    console.log(`🎯 Processamento híbrido concluído: ${sucessos}/${coordenadas.length} sucessos (${percentualSucesso.toFixed(1)}%)`);
+
+    return {
+        sucesso: true,
+        dados: resultadosFinais,
+        resumo: {
+            total: coordenadas.length,
+            sucessos: sucessos,
+            falhas: falhas,
+            percentualSucesso: percentualSucesso
+        }
+    };
+}
+
+/**
  * Busca dados de passantes em lote (múltiplas coordenadas)
  */
 async function buscarPassantesEmLote(coordenadas) {
     try {
-        console.log(`🔄 Iniciando busca SEQUENCIAL em lote para ${coordenadas.length} coordenadas...`);
+        console.log(`🔄 Iniciando busca OTIMIZADA em lote para ${coordenadas.length} coordenadas...`);
 
-        // Processar SEQUENCIALMENTE para evitar sobrecarga da API externa
+        // 🚀 OTIMIZAÇÃO: Para lotes grandes (>50), usar processamento híbrido
+        if (coordenadas.length > 50) {
+            console.log(`⚡ Lote grande detectado (${coordenadas.length}). Usando processamento híbrido...`);
+            return await processarLoteHibrido(coordenadas);
+        }
+
+        // Processar SEQUENCIALMENTE para lotes menores
         const resultadosLote = [];
         for (let index = 0; index < coordenadas.length; index++) {
             const coord = coordenadas[index];
@@ -314,10 +446,10 @@ async function buscarPassantesEmLote(coordenadas) {
                     erro: resultado.erro
                 });
                 
-                // Delay de 1.5 segundos entre requisições para não sobrecarregar a API
+                // Delay adaptativo: menor para lotes grandes
                 if (index < coordenadas.length - 1) {
-                    console.log(`⏱️ Aguardando 1.5s antes da próxima requisição...`);
-                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    const delay = coordenadas.length > 20 ? 300 : 800; // 0.3s para +20 coords, 0.8s para menos
+                    await new Promise(resolve => setTimeout(resolve, delay));
                 }
                 
             } catch (error) {

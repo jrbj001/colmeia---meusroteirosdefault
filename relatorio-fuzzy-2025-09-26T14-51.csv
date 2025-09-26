@@ -1,0 +1,11 @@
+Indice,Cidade,UF,Ambiente,Formato,Coord_Original,Coord_Encontrada,Tipo_Encontro,Distancia_m,Raio_m,Variacao,Fluxo_Passantes,Classe_Social,Fonte,Tempo_ms,Sucesso
+1,"Niterói","RJ","Via pública","Estático","-22.90277, -43.13272","-22.90277, -43.13272","busca-exata",0,0,"",0,"B1","banco-ativos-api-real",4852,true
+2,"Niterói","RJ","Via pública","Estático","-22.902771, -43.133721","-22.902771, -43.133721","busca-exata",0,0,"",68032.2480381278,"B1","banco-ativos-api-real",2551,true
+3,"João Pessoa","PB","Via pública","Outdoor totem simples","-7.12509, -34.838783","-7.12509, -34.838783","busca-exata",0,0,"",115302.93991557788,"A+","banco-ativos-api-real",2463,true
+4,"João Pessoa","PB","Via pública","Outdoor totem simples","-7.085717, -34.833532","-7.085717, -34.833532","busca-exata",0,0,"",79404.60601211611,"A++","banco-ativos-api-real",2692,true
+5,"João Pessoa","PB","Via pública","Outdoor totem simples","-7.11358, -34.838498","-7.11358, -34.838498","busca-exata",0,0,"",31260.04837588384,"A++","banco-ativos-api-real",2531,true
+6,"João Pessoa","PB","Via pública","Outdoor totem simples","-7.108251, -34.836368","-7.108251, -34.836368","busca-exata",0,0,"",113899.66134123191,"A++","banco-ativos-api-real",2691,true
+7,"João Pessoa","PB","Via pública","Outdoor painel simples","-7.126845, -34.841037","-7.126845, -34.841037","busca-exata",0,0,"",0,"C1","banco-ativos-api-real",2380,true
+8,"João Pessoa","PB","Via pública","Outdoor painel simples","-7.104088, -34.835392","-7.104088, -34.835392","busca-exata",0,0,"",174264.91747721474,"A++","banco-ativos-api-real",2969,true
+9,"João Pessoa","PB","Via pública","Teste Fuzzy +0.001 lng","-7.12509, -34.837783","-7.12509, -34.837783","busca-exata",0,0,"",339245.6097532543,"A+","banco-ativos-api-real",2651,true
+10,"João Pessoa","PB","Via pública","Teste Fuzzy -0.001 lat","-7.12609, -34.838783","-7.12609, -34.838783","busca-exata",0,0,"",346002.5801310567,"C1","banco-ativos-api-real",2476,true

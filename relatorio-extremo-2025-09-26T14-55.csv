@@ -1,0 +1,11 @@
+Indice,Local,Tipo,Coord_Original,Coord_Encontrada,Tipo_Encontro,Distancia_m,Raio_m,Variacao,Passantes,Classe_Social,Fonte,Tempo_ms,Sucesso,Usou_Fuzzy,Usou_Raio
+1,"Oceano próximo ao RJ","água","-23, -43","-23, -43","busca-exata",0,0,"",0,"","banco-ativos-api-real",4902,true,false,false
+2,"Oceano próximo a João Pessoa","água","-7, -35","-7, -35","busca-exata",0,0,"",0,"","banco-ativos-api-real",2652,true,false,false
+3,"Brasília - área remota","rural","-15.7801, -47.9292","-15.7801, -47.9292","busca-exata",0,0,"",538252.7269052481,"B1","banco-ativos-api-real",4228,true,false,false
+4,"Fortaleza - periferia","periferia","-3.7319, -38.5267","-3.7319, -38.5267","busca-exata",0,0,"",255939.35238887588,"C1","banco-ativos-api-real",2806,true,false,false
+5,"João Pessoa - coordenada fictícia","fictícia","-7.123456789, -34.987654321","-7.123457, -34.987654","busca-exata",0,0,"",0,"C1","banco-ativos-api-real",2546,true,false,false
+6,"RJ - coordenada fictícia","fictícia","-22.999999, -43.111111","-22.999999, -43.111111","busca-exata",0,0,"",0,"","banco-ativos-api-real",2468,true,false,false
+7,"Santos - área portuária","industrial","-23.9618, -46.3322","-23.9618, -46.3322","busca-exata",0,0,"",451702.6889439245,"B1","banco-ativos-api-real",2555,true,false,false
+8,"RJ - área industrial","industrial","-22.8305, -43.2192","-22.8305, -43.2192","busca-exata",0,0,"",0,"","banco-ativos-api-real",2507,true,false,false
+9,"João Pessoa - GPS baixa precisão","baixa-precisao","-7.1, -34.8","-7.1, -34.8","busca-exata",0,0,"",0,"","banco-ativos-api-real",2416,true,false,false
+10,"RJ - GPS baixa precisão","baixa-precisao","-22.9, -43.1","-22.9, -43.1","busca-exata",0,0,"",41199.06638751439,"A+","banco-ativos-api-real",2643,true,false,false
