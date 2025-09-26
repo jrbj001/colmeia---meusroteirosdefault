@@ -169,6 +169,14 @@ export const CriarRoteiro: React.FC = () => {
   const [planoMidiaGrupo_pk, setPlanoMidiaGrupo_pk] = useState<number | null>(null);
   const [planoMidiaDesc_pks, setPlanoMidiaDesc_pks] = useState<number[]>([]);
   const [planoMidia_pks, setPlanoMidia_pks] = useState<number[]>([]);
+  
+  // Estados para salvamento local do target (sem tocar na base)
+  const [targetSalvoLocal, setTargetSalvoLocal] = useState<{
+    genero: string;
+    classe: string;
+    faixaEtaria: string;
+    salvo: boolean;
+  } | null>(null);
   const [salvandoAba1, setSalvandoAba1] = useState(false);
   const [salvandoAba2, setSalvandoAba2] = useState(false);
   const [salvandoAba3, setSalvandoAba3] = useState(false);
@@ -374,7 +382,7 @@ export const CriarRoteiro: React.FC = () => {
         return;
       }
 
-      if (planoMidiaDesc_pks.length === 0) {
+      if (!targetSalvoLocal?.salvo) {
         alert('É necessário salvar a Aba 2 primeiro');
         return;
       }
@@ -429,9 +437,9 @@ export const CriarRoteiro: React.FC = () => {
         planoMidiaDesc_st: `${planoMidiaGrupo_st}_${cidadeFormatada}`,
         usuarioId_st: user?.id || '',
         usuarioName_st: user?.name || '',
-        gender_st: genero,
-        class_st: classe,
-        age_st: faixaEtaria,
+        gender_st: targetSalvoLocal.genero,
+        class_st: targetSalvoLocal.classe,
+        age_st: targetSalvoLocal.faixaEtaria,
         ibgeCode_vl: getIbgeCodeFromCidade(pracaSelecionadaSimulado)
       }];
 
@@ -462,25 +470,52 @@ export const CriarRoteiro: React.FC = () => {
       if (response.data.success) {
         const resultado = response.data.data;
         
-        let mensagemSucesso = `🎉 ROTEIRO SIMULADO SALVO COM SUCESSO!\n\n`;
-        mensagemSucesso += `📊 RESUMO:\n`;
-        mensagemSucesso += `• ${resultado.registrosProcessados} registros processados\n`;
-        mensagemSucesso += `• ${resultado.semanasConfiguradas} semanas configuradas\n`;
-        mensagemSucesso += `• ${resultado.gruposConfigurados} grupos com mídia\n`;
-        mensagemSucesso += `• ${resultado.detalhes.totalInsecoesCompradas} inserções compradas no total\n\n`;
-        
-        mensagemSucesso += `🏙️ PRAÇA CONFIGURADA: ${pracaSelecionadaSimulado.nome_cidade} - ${pracaSelecionadaSimulado.nome_estado}\n`;
-        mensagemSucesso += `📋 PLANO MÍDIA DESC PK: ${planoMidiaDesc_pk}\n`;
-        mensagemSucesso += `📺 GRUPOS ATIVOS: ${resultado.detalhes.gruposAtivos.join(', ')}\n\n`;
-        
-        mensagemSucesso += `✅ PLANO MÍDIA DESC CRIADO PARA A PRAÇA!\n`;
-        mensagemSucesso += `✅ DADOS SALVOS NA BASE CALCULADORA!\n`;
-        mensagemSucesso += `✅ PRONTO PARA PROCESSAMENTO DATABRICKS!`;
+        console.log('✅ ETAPA 2 CONCLUÍDA - Roteiro simulado salvo');
+        console.log('🔄 ETAPA 3: Executando processamento Databricks para roteiro simulado...');
 
-        alert(mensagemSucesso);
-        
-        // Ativar Aba 6 para visualizar resultados
-        setAba6Habilitada(true);
+        // Executar Databricks específico para roteiro simulado
+        try {
+          const databricksResponse = await axios.post('/databricks-roteiro-simulado', {
+            planoMidiaDesc_pk: planoMidiaGrupo_pk, // Usar planoMidiaGrupo_pk para o Databricks
+            date_dh: resultado.data?.date_dh || new Date().toISOString().slice(0, 19).replace('T', ' '),
+            date_dt: resultado.data?.date_dt || new Date().toISOString().slice(0, 10)
+          });
+
+          console.log('✅ ETAPA 3 CONCLUÍDA - Databricks executado');
+
+          let mensagemSucesso = `🎉 ROTEIRO SIMULADO PROCESSADO COM SUCESSO!\n\n`;
+          mensagemSucesso += `📊 RESUMO:\n`;
+          mensagemSucesso += `• ${resultado.registrosProcessados} registros processados\n`;
+          mensagemSucesso += `• ${resultado.semanasConfiguradas} semanas configuradas\n`;
+          mensagemSucesso += `• ${resultado.gruposConfigurados} grupos com mídia\n`;
+          mensagemSucesso += `• ${resultado.detalhes.totalInsecoesCompradas} inserções compradas no total\n\n`;
+          
+          mensagemSucesso += `🏙️ PRAÇA CONFIGURADA: ${pracaSelecionadaSimulado.nome_cidade} - ${pracaSelecionadaSimulado.nome_estado}\n`;
+          mensagemSucesso += `📋 PLANO MÍDIA DESC PK: ${planoMidiaDesc_pk}\n`;
+          mensagemSucesso += `📺 GRUPOS ATIVOS: ${resultado.detalhes.gruposAtivos.join(', ')}\n\n`;
+          
+          mensagemSucesso += `✅ PLANO MÍDIA DESC CRIADO PARA A PRAÇA!\n`;
+          mensagemSucesso += `✅ DADOS SALVOS NA BASE CALCULADORA!\n`;
+          mensagemSucesso += `✅ PROCESSAMENTO DATABRICKS EXECUTADO!\n`;
+          mensagemSucesso += `🎯 ROTEIRO SIMULADO PRONTO PARA VISUALIZAÇÃO!`;
+
+          alert(mensagemSucesso);
+          
+          // Ativar Aba 6 para visualizar resultados
+          setAba6Habilitada(true);
+
+        } catch (databricksError) {
+          console.error('❌ Erro no processamento Databricks:', databricksError);
+          
+          let mensagemErro = `⚠️ ROTEIRO SIMULADO SALVO, MAS ERRO NO PROCESSAMENTO!\n\n`;
+          mensagemErro += `✅ Dados salvos na base calculadora\n`;
+          mensagemErro += `❌ Erro no processamento Databricks\n\n`;
+          mensagemErro += `📋 PLANO MÍDIA DESC PK: ${planoMidiaDesc_pk}\n`;
+          mensagemErro += `🏙️ PRAÇA: ${pracaSelecionadaSimulado.nome_cidade}\n\n`;
+          mensagemErro += `💡 Contate o suporte para verificar o processamento.`;
+          
+          alert(mensagemErro);
+        }
         
       } else {
         throw new Error(response.data.message || 'Erro desconhecido');
@@ -1374,7 +1409,7 @@ export const CriarRoteiro: React.FC = () => {
       return;
     }
 
-    if (planoMidiaDesc_pks.length === 0) {
+    if (!targetSalvoLocal?.salvo) {
       alert('É necessário salvar a Aba 2 primeiro');
       return;
     }
@@ -1451,6 +1486,16 @@ export const CriarRoteiro: React.FC = () => {
       console.log('✅ ETAPA 3 CONCLUÍDA - Pontos únicos processados');
       console.log(`📍 Pontos únicos inseridos: ${pontosResponse.data.data?.pontosInseridos || 0}`);
 
+        // 📊 MOSTRAR RELATÓRIO DETALHADO DE PASSANTES
+        if (pontosResponse.data.data?.relatorioDetalhado) {
+          const relatorio = pontosResponse.data.data.relatorioDetalhado;
+          console.log('📊 RELATÓRIO BANCO DE ATIVOS:');
+          console.log(`   ✅ Com dados reais: ${relatorio.comDados}`);
+          console.log(`   🔴 Fluxo zero: ${relatorio.fluxoZero}`);
+          console.log(`   📍 API sem cobertura: ${relatorio.apiSemDados}`);
+          console.log(`   🔧 Valor padrão: ${relatorio.valorPadrao}`);
+        }
+
       console.log('🔄 ETAPA 4: Criando planos de mídia com dados da Aba 3...');
 
       // 4. Executar lógica da Aba 3 automaticamente com dados enriquecidos
@@ -1459,14 +1504,17 @@ export const CriarRoteiro: React.FC = () => {
       // Extrair cidades únicas dos dados do Excel processado
       const cidadesExcel = [...new Set(dadosView.map((d: any) => d.praca_st))] as string[];
       
+      console.log(`🏙️ Cidades encontradas no Excel: ${cidadesExcel.join(', ')}`);
+      console.log(`📊 Total de cidades para processar: ${cidadesExcel.length}`);
+      
       // Criar plano mídia desc para cada cidade encontrada no Excel
       const recordsJson = cidadesExcel.map((cidade) => ({
         planoMidiaDesc_st: `${planoMidiaGrupo_st}_${(cidade || '').replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`,
-        usuarioId_st: user.id,
-        usuarioName_st: user.name,
-        gender_st: genero,
-        class_st: classe,
-        age_st: faixaEtaria,
+        usuarioId_st: user?.id || '',
+        usuarioName_st: user?.name || '',
+        gender_st: targetSalvoLocal.genero,
+        class_st: targetSalvoLocal.classe,
+        age_st: targetSalvoLocal.faixaEtaria,
         ibgeCode_vl: getIbgeCodeFromCidade({nome_cidade: cidade, id_cidade: 0} as Cidade)
       }));
 
@@ -1481,24 +1529,23 @@ export const CriarRoteiro: React.FC = () => {
 
       const descPks = descResponse.data.map(item => item.new_pk);
       console.log('✅ ETAPA 4A CONCLUÍDA - Plano Mídia Desc criado para cada cidade');
-
-      // 🧹 Limpeza automática: Deletar registros temporários após criar os definitivos
-      try {
-        console.log('🧹 Executando limpeza de registros temporários...');
-        const cleanupResponse = await axios.post('/plano-midia-desc-cleanup', {
-          planoMidiaGrupo_pk: uploadData.pk,
-          pattern: '_TARGET_TEMP'
+      console.log(`📋 PKs criados: ${descPks.join(', ')}`);
+      
+      // Verificar se todas as cidades têm PKs
+      if (descPks.length !== cidadesExcel.length) {
+        console.warn(`⚠️ ATENÇÃO: ${cidadesExcel.length} cidades no Excel, mas apenas ${descPks.length} PKs criados!`);
+        cidadesExcel.forEach((cidade, index) => {
+          const pk = descPks[index];
+          console.log(`   ${cidade}: ${pk ? `PK ${pk}` : '❌ SEM PK'}`);
         });
-        
-        if (cleanupResponse.data?.success && cleanupResponse.data?.deleted_count > 0) {
-          console.log(`✅ Limpeza concluída: ${cleanupResponse.data.deleted_count} registro(s) temporário(s) deletado(s)`);
-        } else {
-          console.log('ℹ️ Nenhum registro temporário encontrado para deletar');
-        }
-      } catch (cleanupError) {
-        console.warn('⚠️ Erro na limpeza de registros temporários (não crítico):', cleanupError instanceof Error ? cleanupError.message : 'Erro desconhecido');
-        // Não falha o processo principal se a limpeza falhar
+      } else {
+        cidadesExcel.forEach((cidade, index) => {
+          console.log(`   ✅ ${cidade}: PK ${descPks[index]}`);
+        });
       }
+
+      // ✅ SEM LIMPEZA: Não há mais registros temporários para deletar
+      // Os registros são criados diretamente com dados reais
 
       // Criar períodos com base nos dados reais do Excel (cidade + semana)
       const periodsJson = dadosView.map((dadoView: any, index: number) => {
@@ -1830,7 +1877,7 @@ export const CriarRoteiro: React.FC = () => {
     }
   };
 
-  // Função para salvar Aba 2 - Salvar apenas configurações de target
+  // Função para salvar Aba 2 - Salvamento puramente local (sem tocar na base)
   const salvarAba2 = async () => {
     if (!planoMidiaGrupo_pk) {
       alert('É necessário salvar a Aba 1 primeiro');
@@ -1842,40 +1889,33 @@ export const CriarRoteiro: React.FC = () => {
       return;
     }
 
-    if (!user) {
-      alert('Usuário não está logado');
-      return;
-    }
-
     setSalvandoAba2(true);
     try {
-      // Criar um registro temporário de target (sem cidade ainda)
-      const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
+      console.log('💾 Salvando Aba 2 localmente - Configuração de target...');
       
-      const recordsJson = [{
-        planoMidiaDesc_st: `${planoMidiaGrupo_st}_TARGET_TEMP`,
-        usuarioId_st: user.id,
-        usuarioName_st: user.name,
-        gender_st: genero,
-        class_st: classe,
-        age_st: faixaEtaria,
-        ibgeCode_vl: "0000000" // Código temporário
-      }];
-
-      const response = await axios.post('/plano-midia-desc', {
-        planoMidiaGrupo_pk,
-        recordsJson
+      // ✅ SALVAMENTO PURAMENTE LOCAL: Não toca na base de dados
+      // Os planoMidiaDesc_pk serão criados apenas na Aba 4 com dados reais
+      
+      // Salvar configuração de target no estado local
+      setTargetSalvoLocal({
+        genero,
+        classe,
+        faixaEtaria,
+        salvo: true
       });
+      
+      let mensagemSucesso = `💾 TARGET CONFIGURADO LOCALMENTE!\n\n`;
+      mensagemSucesso += `📊 CONFIGURAÇÃO:\n`;
+      mensagemSucesso += `• Gênero: ${genero}\n`;
+      mensagemSucesso += `• Classe: ${classe}\n`;
+      mensagemSucesso += `• Faixa Etária: ${faixaEtaria}\n\n`;
+      mensagemSucesso += `⏭️ PRÓXIMO PASSO: Vá para a Aba 3 e selecione as cidades\n`;
+      mensagemSucesso += `🎯 Os registros de mídia serão criados apenas na Aba 4`;
+      
+      alert(mensagemSucesso);
 
-      if (response.data && Array.isArray(response.data)) {
-        const descPks = response.data.map(item => item.new_pk);
-        setPlanoMidiaDesc_pks(descPks);
-        alert(`Target configurado com sucesso!\nGênero: ${genero}\nClasse: ${classe}\nFaixa Etária: ${faixaEtaria}\nPKs: ${descPks.join(', ')}`);
-      } else {
-        throw new Error('Resposta inválida do servidor');
-      }
     } catch (error) {
-      console.error('Erro ao salvar Aba 2:', error);
+      console.error('💥 Erro ao salvar Aba 2:', error);
       alert('Erro ao salvar configuração de target. Tente novamente.');
     } finally {
       setSalvandoAba2(false);
@@ -1884,7 +1924,7 @@ export const CriarRoteiro: React.FC = () => {
 
   // Função para salvar Aba 3 - Validar e preparar cidades (salvamento local)
   const salvarAba3 = async () => {
-    if (planoMidiaDesc_pks.length === 0) {
+    if (!targetSalvoLocal?.salvo) {
       alert('É necessário salvar a Aba 2 primeiro');
       return;
     }
@@ -1894,17 +1934,12 @@ export const CriarRoteiro: React.FC = () => {
       return;
     }
 
-    if (!user) {
-      alert('Usuário não está logado');
-      return;
-    }
-
     setSalvandoAba3(true);
     try {
       console.log('💾 Salvando Aba 3 localmente - Configuração de cidades...');
       
       // ✅ SALVAMENTO LOCAL: Apenas validar e preparar dados
-      // A criação real dos planos será feita na Aba 4 com dados enriquecidos
+      // A criação real dos planos será feita na Aba 4 com dados reais
       
       // Salvar as cidades selecionadas para controle de estado
       setCidadesSalvas([...cidadesSelecionadas]);
@@ -1917,9 +1952,10 @@ export const CriarRoteiro: React.FC = () => {
       let mensagemSucesso = `💾 CONFIGURAÇÃO SALVA LOCALMENTE!\n\n`;
       mensagemSucesso += `📊 RESUMO:\n`;
       mensagemSucesso += `• ${totalCidades} cidades selecionadas\n`;
+      mensagemSucesso += `• Target: ${targetSalvoLocal.genero} | ${targetSalvoLocal.classe} | ${targetSalvoLocal.faixaEtaria}\n`;
       mensagemSucesso += `🏙️ CIDADES: ${cidadesSelecionadas.map(c => c.nome_cidade).join(', ')}\n\n`;
       mensagemSucesso += `⏭️ PRÓXIMO PASSO: Vá para a Aba 4 e faça o upload do Excel\n`;
-      mensagemSucesso += `🎯 Os planos de mídia serão criados automaticamente na Aba 4`;
+      mensagemSucesso += `🎯 Os registros de mídia serão criados automaticamente na Aba 4`;
       
       alert(mensagemSucesso);
 
@@ -2418,12 +2454,12 @@ export const CriarRoteiro: React.FC = () => {
                           className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base ${
                             salvandoAba2 || !planoMidiaGrupo_pk || !genero || !classe || !faixaEtaria
                               ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
-                              : planoMidiaDesc_pks.length > 0
+                              : targetSalvoLocal?.salvo
                               ? 'bg-green-500 text-white border-green-500 hover:bg-green-600'
                               : 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600'
                           }`}
                         >
-                          {salvandoAba2 ? 'Salvando...' : planoMidiaDesc_pks.length > 0 ? '✓ Salvo' : 'Salvar'}
+                          {salvandoAba2 ? 'Salvando...' : targetSalvoLocal?.salvo ? '✓ Salvo' : 'Salvar'}
                         </button>
                       </div>
                     )}
@@ -2613,9 +2649,9 @@ export const CriarRoteiro: React.FC = () => {
                         <button
                           type="button"
                           onClick={salvarAba3}
-                          disabled={salvandoAba3 || planoMidiaDesc_pks.length === 0 || cidadesSelecionadas.length === 0}
+                          disabled={salvandoAba3 || !targetSalvoLocal?.salvo || cidadesSelecionadas.length === 0}
                           className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base font-medium ${
-                            salvandoAba3 || planoMidiaDesc_pks.length === 0 || cidadesSelecionadas.length === 0
+                            salvandoAba3 || !targetSalvoLocal?.salvo || cidadesSelecionadas.length === 0
                               ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
                               : planoMidia_pks.length > 0 && !cidadesMudaram()
                               ? 'bg-green-500 text-white border-green-500 hover:bg-green-600'
@@ -2830,7 +2866,7 @@ export const CriarRoteiro: React.FC = () => {
                                 <div className="flex items-center">
                                   <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center mr-2">
                                     <span className="text-white text-xs font-bold">🎯</span>
-                                  </div>
+                    </div>
                                   <span className="text-green-800 font-medium">
                                     Configurando: {pracaSelecionadaSimulado.nome_cidade} - {pracaSelecionadaSimulado.nome_estado}
                                   </span>
@@ -3245,7 +3281,7 @@ export const CriarRoteiro: React.FC = () => {
                             const validacao = validarConsistenciaCidades();
                             return salvandoAba4 || 
                                    !planoMidiaGrupo_pk || 
-                                   planoMidiaDesc_pks.length === 0 || 
+                                   !targetSalvoLocal?.salvo || 
                                    planoMidia_pks.length === 0 || 
                                    roteirosCarregados.length === 0 ||
                                    !validacao.valido;
@@ -3255,7 +3291,7 @@ export const CriarRoteiro: React.FC = () => {
                               const validacao = validarConsistenciaCidades();
                               const isDisabled = salvandoAba4 || 
                                                !planoMidiaGrupo_pk || 
-                                               planoMidiaDesc_pks.length === 0 || 
+                                               !targetSalvoLocal?.salvo || 
                                                planoMidia_pks.length === 0 || 
                                                roteirosCarregados.length === 0 ||
                                                !validacao.valido;

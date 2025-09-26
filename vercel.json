@@ -152,6 +152,10 @@
     {
       "source": "/roteiro-simulado",
       "destination": "/api/roteiro-simulado.js"
+    },
+    {
+      "source": "/databricks-roteiro-simulado",
+      "destination": "/api/databricks-roteiro-simulado.js"
     }
   ]
 } 
