@@ -181,6 +181,15 @@ export const CriarRoteiro: React.FC = () => {
   const [salvandoAba2, setSalvandoAba2] = useState(false);
   const [salvandoAba3, setSalvandoAba3] = useState(false);
   const [salvandoAba4, setSalvandoAba4] = useState(false);
+  
+  // 📊 LOADING EM TEMPO REAL - Aba 4
+  const [loadingAba4, setLoadingAba4] = useState({
+    etapa: '',
+    progresso: 0,
+    detalhes: '',
+    tempoInicio: null as Date | null,
+    ativo: false
+  });
   const [cidadesSalvas, setCidadesSalvas] = useState<Cidade[]>([]);
   
   // Estados para Aba 4 - Definir vias públicas
@@ -1399,27 +1408,47 @@ export const CriarRoteiro: React.FC = () => {
     }
   };
 
+  // 📊 Função para atualizar loading em tempo real
+  const atualizarLoadingAba4 = (etapa: string, progresso: number, detalhes: string = '') => {
+    setLoadingAba4(prev => ({
+      ...prev,
+      etapa,
+      progresso,
+      detalhes,
+      ativo: true,
+      tempoInicio: prev.tempoInicio || new Date()
+    }));
+    console.log(`📊 [${progresso}%] ${etapa} - ${detalhes}`);
+  };
+
   // Função para salvar Aba 4 - Upload de roteiros
   const salvarAba4 = async () => {
     console.log('🚀 Iniciando Aba 4 - Upload e processamento do Excel...');
+    
+    // 🚀 INICIAR LOADING EM TEMPO REAL
+    atualizarLoadingAba4('Iniciando', 0, 'Validando dados de entrada...');
 
     // ✅ NOVO FLUXO: Aba 4 vem ANTES da Aba 3
     if (!planoMidiaGrupo_pk) {
+      setLoadingAba4(prev => ({ ...prev, ativo: false }));
       alert('É necessário salvar a Aba 1 primeiro');
       return;
     }
 
     if (!targetSalvoLocal?.salvo) {
+      setLoadingAba4(prev => ({ ...prev, ativo: false }));
       alert('É necessário salvar a Aba 2 primeiro');
       return;
     }
 
     if (roteirosCarregados.length === 0) {
+      setLoadingAba4(prev => ({ ...prev, ativo: false }));
       alert('É necessário carregar um arquivo Excel com roteiros');
       return;
     }
 
     if (!user) {
+      setLoadingAba4(prev => ({ ...prev, ativo: false }));
       alert('Usuário não está logado');
       return;
     }
@@ -1428,6 +1457,8 @@ export const CriarRoteiro: React.FC = () => {
     setProcessandoFluxoCompleto(true);
     
     try {
+      // 🔄 ETAPA 1: Salvando roteiros do Excel
+      atualizarLoadingAba4('Salvando roteiros', 10, `Processando ${roteirosCarregados.length} roteiros do Excel...`);
       console.log('🔄 ETAPA 1: Salvando roteiros do Excel...');
       
       // 1. Salvar roteiros do Excel
@@ -1455,6 +1486,9 @@ export const CriarRoteiro: React.FC = () => {
       setRoteirosSalvos([...roteirosCarregados]);
 
       console.log('✅ ETAPA 1 CONCLUÍDA - Roteiros salvos');
+      
+      // 🔄 ETAPA 2: Consultando view
+      atualizarLoadingAba4('Consultando dados', 25, 'Preparando dados para processamento...');
       console.log('🔄 ETAPA 2: Consultando view uploadRoteirosPlanoMidia...');
 
       // 2. Consultar a view para obter dados processados
@@ -1471,6 +1505,10 @@ export const CriarRoteiro: React.FC = () => {
       setDadosPlanoMidia(dadosView);
 
       console.log('✅ ETAPA 2 CONCLUÍDA - View consultada');
+      
+      // 🔄 ETAPA 3: Processando pontos únicos - CRÍTICA!
+      const pontosUnicos = [...new Set(dadosView.map((d: any) => `${d.latitude_vl},${d.longitude_vl}`))] as string[];
+      atualizarLoadingAba4('Banco de Ativos', 40, `Consultando ${pontosUnicos.length} coordenadas na API (processo longo)...`);
       console.log('🔄 ETAPA 3: Processando pontos únicos...');
 
       // 3. Processar pontos únicos e inserir no inventário
@@ -1496,6 +1534,8 @@ export const CriarRoteiro: React.FC = () => {
           console.log(`   🔧 Valor padrão: ${relatorio.valorPadrao}`);
         }
 
+      // 🔄 ETAPA 4: Criando planos de mídia
+      atualizarLoadingAba4('Criando planos', 70, 'Processando cidades do Excel...');
       console.log('🔄 ETAPA 4: Criando planos de mídia com dados da Aba 3...');
 
       // 4. Executar lógica da Aba 3 automaticamente com dados enriquecidos
@@ -1588,6 +1628,8 @@ export const CriarRoteiro: React.FC = () => {
 
       console.log('✅ ETAPA 5 CONCLUÍDA - Procedure uploadRoteirosInventarioToBaseCalculadoraInsert executada');
 
+      // 🔄 ETAPA 6: Executando Databricks
+      atualizarLoadingAba4('Databricks', 90, 'Executando processamento de dados avançado...');
       console.log('🔄 ETAPA 6: Executando job do Databricks para o grupo...');
 
       // 6. Executar job do Databricks para o grupo
@@ -1690,7 +1732,7 @@ export const CriarRoteiro: React.FC = () => {
         }
 
         // Preparar dados para exportação
-        const dadosExport = [];
+        const dadosExport: any[] = [];
         
         // Pontos sem cobertura da API (Status 204)
         if (relatorioBA.detalhes.pontosApiSemDados) {
@@ -1709,7 +1751,7 @@ export const CriarRoteiro: React.FC = () => {
               'Status': 'Sem cobertura da API',
               'Motivo': motivo || 'Status 204 - Área sem dados',
               'Data de Análise': new Date().toLocaleDateString('pt-BR'),
-              'Projeto': uploadData.planoMidiaGrupo_st,
+              'Projeto': planoMidiaGrupo_st || 'N/A',
               'Observação': 'Coordenada fora da área de cobertura da API do banco de ativos'
             });
           });
@@ -1732,7 +1774,7 @@ export const CriarRoteiro: React.FC = () => {
               'Status': 'Valor padrão aplicado',
               'Motivo': motivo || 'API falhou',
               'Data de Análise': new Date().toLocaleDateString('pt-BR'),
-              'Projeto': uploadData.planoMidiaGrupo_st,
+              'Projeto': planoMidiaGrupo_st || 'N/A',
               'Observação': 'Valor padrão aplicado devido à falha na API do banco de ativos'
             });
           });
@@ -1761,7 +1803,7 @@ export const CriarRoteiro: React.FC = () => {
         const url = URL.createObjectURL(blob);
         link.setAttribute('href', url);
         
-        const nomeArquivo = `pontos_sem_cobertura_${(uploadData.planoMidiaGrupo_st || 'plano').replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+        const nomeArquivo = `pontos_sem_cobertura_${(planoMidiaGrupo_st || 'plano').replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
         link.setAttribute('download', nomeArquivo);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
@@ -1788,9 +1830,23 @@ export const CriarRoteiro: React.FC = () => {
         // Alert normal sem opção de exportação
       alert(mensagemSucesso);
       }
+      
+      // ✅ FINALIZAR LOADING COM SUCESSO
+      atualizarLoadingAba4('Concluído', 100, 'Processamento finalizado com sucesso!');
+      
+      // Aguardar 2 segundos para mostrar sucesso
+      setTimeout(() => {
+        setLoadingAba4(prev => ({ ...prev, ativo: false }));
+      }, 2000);
 
     } catch (error) {
       console.error('💥 Erro no processamento Aba 4:', error);
+      
+      // ❌ FINALIZAR LOADING COM ERRO
+      atualizarLoadingAba4('Erro', 0, `Falha: ${error}`);
+      setTimeout(() => {
+        setLoadingAba4(prev => ({ ...prev, ativo: false }));
+      }, 3000);
       
       let mensagemErro = 'Erro no upload e processamento:\n\n';
       
@@ -2679,6 +2735,69 @@ export const CriarRoteiro: React.FC = () => {
                       }
                     </h3>
                   </div>
+
+                  {/* 📊 LOADING EM TEMPO REAL - ABA 4 */}
+                  {loadingAba4.ativo && (
+                    <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg shadow-sm">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-3"></div>
+                          <div>
+                            <h4 className="text-lg font-bold text-blue-800">{loadingAba4.etapa}</h4>
+                            <p className="text-sm text-blue-600 mt-1">{loadingAba4.detalhes}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-2xl font-bold text-blue-800">{loadingAba4.progresso}%</div>
+                          {loadingAba4.tempoInicio && (
+                            <div className="text-xs text-blue-600 mt-1">
+                              {Math.floor((new Date().getTime() - loadingAba4.tempoInicio.getTime()) / 1000)}s
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Barra de progresso */}
+                      <div className="w-full bg-blue-200 rounded-full h-3 mb-4">
+                        <div 
+                          className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${loadingAba4.progresso}%` }}
+                        ></div>
+                      </div>
+                      
+                      {/* Etapas do processo */}
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                        <div className={`p-2 rounded text-center ${loadingAba4.progresso >= 10 ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-600'}`}>
+                          📊 Salvando roteiros
+                        </div>
+                        <div className={`p-2 rounded text-center ${loadingAba4.progresso >= 25 ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-600'}`}>
+                          🔄 Consultando dados
+                        </div>
+                        <div className={`p-2 rounded text-center ${loadingAba4.progresso >= 40 ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-600'}`}>
+                          🏢 Banco de Ativos
+                        </div>
+                        <div className={`p-2 rounded text-center ${loadingAba4.progresso >= 70 ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-600'}`}>
+                          📋 Criando planos
+                        </div>
+                        <div className={`p-2 rounded text-center ${loadingAba4.progresso >= 90 ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-600'}`}>
+                          🚀 Databricks
+                        </div>
+                      </div>
+                      
+                      {loadingAba4.etapa === 'Banco de Ativos' && (
+                        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <div className="flex items-center">
+                            <div className="w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center mr-2">
+                              <span className="text-white text-xs font-bold">⚡</span>
+                            </div>
+                            <span className="text-yellow-800 text-sm">
+                              <strong>Processo crítico:</strong> Consultando API externa para dados de passantes. Este processo pode demorar alguns minutos dependendo do tamanho do arquivo.
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Seletor de tipo de roteiro */}
                   {!modoVisualizacao && (
