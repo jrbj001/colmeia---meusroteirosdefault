@@ -10,7 +10,9 @@ const dbConfig = {
     encrypt: true,
     trustServerCertificate: true,
     enableArithAbort: true,
-    connectTimeout: 30000
+    connectTimeout: 60000,  // 60s para conectar
+    requestTimeout: 600000, // 10 minutos para requests longos
+    cancelTimeout: 60000    // 60s para cancelar
   }
 };
 

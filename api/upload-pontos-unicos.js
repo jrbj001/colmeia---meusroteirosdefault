@@ -46,8 +46,23 @@ async function uploadPontosUnicos(req, res) {
 
         // ✅ BUSCAR DADOS REAIS DE PASSANTES DA API DO BANCO DE ATIVOS
         console.log(`🔍 [uploadPontosUnicos] Buscando dados reais de passantes na API do banco de ativos...`);
+        console.log(`⏱️ [uploadPontosUnicos] Timeout configurado: 8 minutos para ${pontos.length} pontos`);
         
-        const resultadoPassantes = await buscarPassantesEmLote(pontos);
+        // 🚀 TIMEOUT AGRESSIVO: 8 minutos para API externa
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout de 8 minutos na API banco de ativos')), 480000)
+        );
+        
+        let resultadoPassantes;
+        try {
+            resultadoPassantes = await Promise.race([
+                buscarPassantesEmLote(pontos),
+                timeoutPromise
+            ]);
+        } catch (timeoutError) {
+            console.error('⏰ [uploadPontosUnicos] TIMEOUT na API banco de ativos:', timeoutError.message);
+            resultadoPassantes = { sucesso: false, erro: timeoutError.message };
+        }
         
         let pontosEnriquecidos; // Declarar fora dos blocos
         
