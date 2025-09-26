@@ -160,7 +160,7 @@ async function buscarComCoordenadaAproximada(latPadronizada, lngPadronizada, tok
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
-                timeout: 30000 // 30 segundos timeout - API externa é lenta
+                timeout: 15000 // 15 segundos timeout - reduzido para arquivos pequenos
             });
 
             if (response.status === 200 && response.data) {
@@ -339,8 +339,8 @@ async function buscarPassantesPorCoordenadas(latitude, longitude, raio = null, t
  */
 async function processarLoteHibrido(coordenadas) {
     const TAMANHO_LOTE = 10; // Processar 10 coordenadas por vez
-    const DELAY_ENTRE_LOTES = 2000; // 2s entre lotes
-    const MAX_PARALELO = 3; // Máximo 3 requests paralelos por lote
+    const DELAY_ENTRE_LOTES = 500; // 0.5s entre lotes (reduzido de 2s)
+    const MAX_PARALELO = 5; // Máximo 5 requests paralelos por lote (aumentado)
 
     console.log(`🔧 Processamento híbrido: ${coordenadas.length} coords em lotes de ${TAMANHO_LOTE}`);
     
@@ -361,8 +361,8 @@ async function processarLoteHibrido(coordenadas) {
             
             const promessasGrupo = grupoCoords.map(async (coord, index) => {
                 try {
-                    // Delay escalonado para evitar sobrecarga (0ms, 200ms, 400ms)
-                    await new Promise(resolve => setTimeout(resolve, index * 200));
+                    // Delay escalonado REDUZIDO para evitar sobrecarga (0ms, 50ms, 100ms)
+                    await new Promise(resolve => setTimeout(resolve, index * 50));
                     
                     const resultado = await buscarPassantesPorCoordenadas(coord.latitude_vl, coord.longitude_vl);
                     return {
@@ -418,11 +418,77 @@ async function processarLoteHibrido(coordenadas) {
 }
 
 /**
+ * 🚀 MODO RÁPIDO - Para arquivos pequenos (<= 5 coordenadas)
+ * Processa tudo em paralelo sem delays
+ */
+async function processarModoRapido(coordenadas) {
+    console.log(`⚡ MODO RÁPIDO: Processando ${coordenadas.length} coordenadas em paralelo...`);
+    
+    const tempoInicio = Date.now();
+    
+    // Processar TODAS em paralelo para máxima velocidade
+    const promessas = coordenadas.map(async (coord, index) => {
+        try {
+            console.log(`🚀 [${index + 1}/${coordenadas.length}] Iniciando: ${coord.latitude_vl}, ${coord.longitude_vl}`);
+            
+            const resultado = await buscarPassantesPorCoordenadas(coord.latitude_vl, coord.longitude_vl);
+            
+            console.log(`✅ [${index + 1}/${coordenadas.length}] Concluído em MODO RÁPIDO`);
+            
+            return {
+                ...coord,
+                ...resultado.dados,
+                sucesso: resultado.sucesso,
+                erro: resultado.erro
+            };
+        } catch (error) {
+            console.error(`❌ [MODO RÁPIDO] Erro na coordenada ${coord.latitude_vl}, ${coord.longitude_vl}:`, error.message);
+            return {
+                ...coord,
+                sucesso: false,
+                erro: error.message,
+                fluxoPassantes_vl: 0,
+                fonte: 'api-falha'
+            };
+        }
+    });
+    
+    const resultados = await Promise.all(promessas);
+    const tempoTotal = (Date.now() - tempoInicio) / 1000;
+    
+    const sucessos = resultados.filter(r => r.sucesso).length;
+    const falhas = resultados.length - sucessos;
+    const percentualSucesso = (sucessos / resultados.length) * 100;
+    
+    console.log(`🏁 MODO RÁPIDO concluído em ${tempoTotal.toFixed(1)}s`);
+    console.log(`   📊 Sucessos: ${sucessos}/${resultados.length} (${percentualSucesso.toFixed(1)}%)`);
+    
+    return {
+        sucesso: true,
+        dados: resultados,
+        resumo: {
+            total: coordenadas.length,
+            sucessos: sucessos,
+            falhas: falhas,
+            percentualSucesso: percentualSucesso,
+            tempoTotal: tempoTotal,
+            modo: 'RÁPIDO - Paralelo sem delays'
+        }
+    };
+}
+
+/**
  * Busca dados de passantes em lote (múltiplas coordenadas)
  */
 async function buscarPassantesEmLote(coordenadas) {
     try {
         console.log(`🔄 Iniciando busca OTIMIZADA em lote para ${coordenadas.length} coordenadas...`);
+
+        // 🚀 MODO RÁPIDO: Para arquivos muito pequenos (<= 5), sem delay
+        if (coordenadas.length <= 5) {
+            console.log(`⚡ MODO RÁPIDO ativado para ${coordenadas.length} coordenadas - SEM DELAYS!`);
+            return await processarModoRapido(coordenadas);
+        }
 
         // 🚀 OTIMIZAÇÃO: Para lotes grandes (>50), usar processamento híbrido
         if (coordenadas.length > 50) {
@@ -446,9 +512,9 @@ async function buscarPassantesEmLote(coordenadas) {
                     erro: resultado.erro
                 });
                 
-                // Delay adaptativo: menor para lotes grandes
+                // Delay adaptativo: MUITO reduzido
                 if (index < coordenadas.length - 1) {
-                    const delay = coordenadas.length > 20 ? 300 : 800; // 0.3s para +20 coords, 0.8s para menos
+                    const delay = coordenadas.length > 20 ? 100 : 200; // 0.1s para +20 coords, 0.2s para menos
                     await new Promise(resolve => setTimeout(resolve, delay));
                 }
                 
