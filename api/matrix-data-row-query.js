@@ -20,6 +20,13 @@ async function matrixDataRowQuery(req, res) {
 
     console.log(`✅ [matrixDataRowQuery] Executando sp_baseCalculadoraMatrixDataRowQuery para grupo ${planoMidiaGrupo_pk}:`);
     console.log(`📊 Total de registros retornados: ${result.recordset.length}`);
+    
+    // Log de amostra dos primeiros registros para debug
+    if (result.recordset.length > 0) {
+      console.log(`📋 Exemplo de registro:`, JSON.stringify(result.recordset[0], null, 2));
+    } else {
+      console.warn(`⚠️ [matrixDataRowQuery] ATENÇÃO: Stored procedure retornou 0 registros!`);
+    }
 
     res.json({
       success: true,

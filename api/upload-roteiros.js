@@ -1,5 +1,19 @@
 const { sql, getPool } = require('./db');
 
+/**
+ * Normaliza o nome da cidade para corresponder ao padrão do banco
+ * - Remove acentos
+ * - Converte para maiúsculas
+ * Exemplo: "Belém" → "BELEM", "João Pessoa" → "JOAO PESSOA"
+ */
+function normalizarNomeCidade(nome) {
+  if (!nome) return nome;
+  return nome
+    .toUpperCase()
+    .normalize('NFD')  // Separa caracteres base dos acentos
+    .replace(/[\u0300-\u036f]/g, '');  // Remove os acentos
+}
+
 async function uploadRoteiros(req, res) {
   try {
     const { roteiros } = req.body;
@@ -19,12 +33,16 @@ async function uploadRoteiros(req, res) {
 
     const pool = await getPool();
     
+    // ✅ Log de cidades únicas ANTES da normalização
+    const cidadesOriginais = [...new Set(roteiros.map(r => r.praca_st).filter(Boolean))];
+    console.log(`🏙️ Cidades originais (${cidadesOriginais.length}): ${cidadesOriginais.join(', ')}`);
+    
     // Preparar os dados para inserção
     const roteirosParaInserir = roteiros.map(roteiro => ({
       pk2: 0, // ✅ Sempre zero como solicitado
       planoMidiaGrupo_pk: roteiro.planoMidiaGrupo_pk || 0, // ✅ Nova coluna 
-      praca_st: roteiro.praca_st || null,
-      uf_st: roteiro.uf_st || null,
+      praca_st: normalizarNomeCidade(roteiro.praca_st) || null, // ✅ Normalizado!
+      uf_st: roteiro.uf_st ? roteiro.uf_st.toUpperCase() : null, // ✅ UF em maiúsculas
       ambiente_st: roteiro.ambiente_st || null,
       grupoFormatosMidia_st: roteiro.grupoFormatosMidia_st || null,
       formato_st: roteiro.formato_st || null,
@@ -110,6 +128,10 @@ async function uploadRoteiros(req, res) {
     console.log(`✅ Upload concluído: ${resultados.length} roteiros inseridos`);
     console.log(`📅 Data/hora do lote: ${dateLote}`);
     console.log(`📊 Semanas inseridas: ${semanasInseridas.join(', ')}`);
+    
+    // ✅ Log de cidades APÓS normalização
+    const cidadesNormalizadas = [...new Set(resultados.map(r => r.praca_st).filter(Boolean))];
+    console.log(`🏙️ Cidades normalizadas (${cidadesNormalizadas.length}): ${cidadesNormalizadas.join(', ')}`);
 
     await pool.close();
 
@@ -119,7 +141,8 @@ async function uploadRoteiros(req, res) {
       estatisticas: {
         totalRoteiros: resultados.length,
         dateLote: dateLote,
-        semanasInseridas: semanasInseridas
+        semanasInseridas: semanasInseridas,
+        cidadesNormalizadas: cidadesNormalizadas
       }
     });
 

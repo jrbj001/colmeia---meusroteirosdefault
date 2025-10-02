@@ -190,6 +190,22 @@ export const CriarRoteiro: React.FC = () => {
     tempoInicio: null as Date | null,
     ativo: false
   });
+
+  // Estados para controle específico do Banco de Ativos
+  const [bancoAtivosStatus, setBancoAtivosStatus] = useState({
+    ativo: false,
+    etapa: '',
+    coordenadasProcessadas: 0,
+    coordenadasTotal: 0,
+    lotesProcessados: 0,
+    lotesTotal: 0,
+    sucessos: 0,
+    falhas: 0,
+    tempoInicio: null as Date | null,
+    detalhes: '',
+    modoProcessamento: '',
+    taxaSucesso: 0
+  });
   const [cidadesSalvas, setCidadesSalvas] = useState<Cidade[]>([]);
   
   // Estados para Aba 4 - Definir vias públicas
@@ -442,6 +458,22 @@ export const CriarRoteiro: React.FC = () => {
       const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
       const cidadeFormatada = (pracaSelecionadaSimulado.nome_cidade || '').replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
       
+      // Buscar código IBGE dinamicamente do banco
+      let ibgeCode = pracaSelecionadaSimulado.id_cidade; // Fallback para o id_cidade original
+      try {
+        const ibgeResponse = await axios.post('/cidades', {
+          cidade_st: pracaSelecionadaSimulado.nome_cidade,
+          estado_st: pracaSelecionadaSimulado.estado // assumindo que existe esta propriedade
+        });
+        
+        if (ibgeResponse.data && ibgeResponse.data.ibgeCode) {
+          ibgeCode = ibgeResponse.data.ibgeCode;
+          console.log(`✅ ibgeCode encontrado para ${pracaSelecionadaSimulado.nome_cidade}: ${ibgeCode}`);
+        }
+      } catch (error: any) {
+        console.warn(`⚠️ Não foi possível buscar ibgeCode, usando id_cidade: ${ibgeCode}`, error.response?.data || error.message);
+      }
+      
       const recordsJson = [{
         planoMidiaDesc_st: `${planoMidiaGrupo_st}_${cidadeFormatada}`,
         usuarioId_st: user?.id || '',
@@ -449,7 +481,7 @@ export const CriarRoteiro: React.FC = () => {
         gender_st: targetSalvoLocal.genero,
         class_st: targetSalvoLocal.classe,
         age_st: targetSalvoLocal.faixaEtaria,
-        ibgeCode_vl: getIbgeCodeFromCidade(pracaSelecionadaSimulado)
+        ibgeCode_vl: ibgeCode
       }];
 
       console.log('📋 Criando planoMidiaDesc para:', recordsJson[0]);
@@ -1421,6 +1453,46 @@ export const CriarRoteiro: React.FC = () => {
     console.log(`📊 [${progresso}%] ${etapa} - ${detalhes}`);
   };
 
+  // 🎯 CONTROLE GRANULAR DO BANCO DE ATIVOS
+  const atualizarBancoAtivosStatus = (updates: Partial<typeof bancoAtivosStatus>) => {
+    setBancoAtivosStatus(prev => {
+      const novo = { ...prev, ...updates };
+      if (updates.coordenadasProcessadas && updates.coordenadasTotal) {
+        novo.taxaSucesso = (novo.sucessos / novo.coordenadasProcessadas) * 100;
+      }
+      return novo;
+    });
+  };
+
+  const iniciarBancoAtivos = (totalCoordenadas: number, totalLotes: number) => {
+    setBancoAtivosStatus({
+      ativo: true,
+      etapa: 'Iniciando processamento',
+      coordenadasProcessadas: 0,
+      coordenadasTotal: totalCoordenadas,
+      lotesProcessados: 0,
+      lotesTotal: totalLotes,
+      sucessos: 0,
+      falhas: 0,
+      tempoInicio: new Date(),
+      detalhes: `Processando ${totalCoordenadas} coordenadas em ${totalLotes} lotes`,
+      modoProcessamento: 'VERCEL-OTIMIZADO',
+      taxaSucesso: 0
+    });
+  };
+
+  const finalizarBancoAtivos = (sucessos: number, falhas: number, tempoTotal: number) => {
+    setBancoAtivosStatus(prev => ({
+      ...prev,
+      ativo: false,
+      etapa: 'Concluído',
+      sucessos,
+      falhas,
+      taxaSucesso: (sucessos / (sucessos + falhas)) * 100,
+      detalhes: `Processamento concluído em ${tempoTotal.toFixed(1)}s`
+    }));
+  };
+
   // Função para salvar Aba 4 - Upload de roteiros
   const salvarAba4 = async () => {
     console.log('🚀 Iniciando Aba 4 - Upload e processamento do Excel...');
@@ -1506,9 +1578,8 @@ export const CriarRoteiro: React.FC = () => {
 
       console.log('✅ ETAPA 2 CONCLUÍDA - View consultada');
       
-      // 🔄 ETAPA 3: Processando pontos únicos - CRÍTICA!
-      const pontosUnicos = [...new Set(dadosView.map((d: any) => `${d.latitude_vl},${d.longitude_vl}`))] as string[];
-      atualizarLoadingAba4('Banco de Ativos', 40, `Consultando ${pontosUnicos.length} coordenadas na API (processo longo)...`);
+      // 🔄 ETAPA 3: Processando pontos únicos e inserindo no inventário (BANCO DE ATIVOS RESTAURADO)
+      atualizarLoadingAba4('Banco de Ativos', 40, 'Consultando API e inserindo dados no inventário...');
       console.log('🔄 ETAPA 3: Processando pontos únicos...');
 
       // 3. Processar pontos únicos e inserir no inventário
@@ -1541,11 +1612,42 @@ export const CriarRoteiro: React.FC = () => {
       // 4. Executar lógica da Aba 3 automaticamente com dados enriquecidos
       const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
       
-      // Extrair cidades únicas dos dados do Excel processado
-      const cidadesExcel = [...new Set(dadosView.map((d: any) => d.praca_st))] as string[];
+      // Extrair cidades únicas dos dados do Excel processado com seus estados
+      const cidadesEstadosMap: {[key: string]: string} = {};
+      dadosView.forEach((d: any) => {
+        if (d.praca_st && !cidadesEstadosMap[d.praca_st]) {
+          cidadesEstadosMap[d.praca_st] = d.uf_st;
+        }
+      });
+      
+      const cidadesExcel = Object.keys(cidadesEstadosMap);
       
       console.log(`🏙️ Cidades encontradas no Excel: ${cidadesExcel.join(', ')}`);
       console.log(`📊 Total de cidades para processar: ${cidadesExcel.length}`);
+      
+      // Buscar códigos IBGE dinamicamente do banco de dados
+      const ibgeCodesMap: {[key: string]: number} = {};
+      for (const cidade of cidadesExcel) {
+        const estado = cidadesEstadosMap[cidade];
+        
+        try {
+          const ibgeResponse = await axios.post('/cidades-ibge', {
+            cidade_st: cidade,
+            estado_st: estado
+          });
+          
+          if (ibgeResponse.data && ibgeResponse.data.ibgeCode) {
+            ibgeCodesMap[cidade] = ibgeResponse.data.ibgeCode;
+            console.log(`✅ ibgeCode encontrado para ${cidade}/${estado}: ${ibgeResponse.data.ibgeCode}`);
+          } else {
+            console.warn(`⚠️ ibgeCode não encontrado para ${cidade}/${estado}, usando 0`);
+            ibgeCodesMap[cidade] = 0;
+          }
+        } catch (error: any) {
+          console.error(`❌ Erro ao buscar ibgeCode para ${cidade}/${estado}:`, error.response?.data || error.message);
+          ibgeCodesMap[cidade] = 0;
+        }
+      }
       
       // Criar plano mídia desc para cada cidade encontrada no Excel
       const recordsJson = cidadesExcel.map((cidade) => ({
@@ -1555,7 +1657,7 @@ export const CriarRoteiro: React.FC = () => {
         gender_st: targetSalvoLocal.genero,
         class_st: targetSalvoLocal.classe,
         age_st: targetSalvoLocal.faixaEtaria,
-        ibgeCode_vl: getIbgeCodeFromCidade({nome_cidade: cidade, id_cidade: 0} as Cidade)
+        ibgeCode_vl: ibgeCodesMap[cidade] || 0
       }));
 
       const descResponse = await axios.post('/plano-midia-desc', {
@@ -1578,7 +1680,7 @@ export const CriarRoteiro: React.FC = () => {
           const pk = descPks[index];
           console.log(`   ${cidade}: ${pk ? `PK ${pk}` : '❌ SEM PK'}`);
         });
-      } else {
+        } else {
         cidadesExcel.forEach((cidade, index) => {
           console.log(`   ✅ ${cidade}: PK ${descPks[index]}`);
         });
@@ -1617,9 +1719,10 @@ export const CriarRoteiro: React.FC = () => {
       console.log('🔄 ETAPA 5: Executando procedure uploadRoteirosInventarioToBaseCalculadoraInsert...');
 
       // 5. Executar procedure final para transferir dados para base calculadora
+      // ✅ USAR A MESMA DATA QUE FOI USADA NO /upload-pontos-unicos
       const procedureResponse = await axios.post('/sp-upload-roteiros-inventario-insert', {
         planoMidiaGrupo_pk: uploadData.pk,
-        date_dh: uploadData.date_dh
+        date_dh: uploadData.date_dh // Esta data já foi corrigida no /upload-pontos-unicos
       });
 
       if (!procedureResponse.data || !procedureResponse.data.success) {
@@ -1722,6 +1825,14 @@ export const CriarRoteiro: React.FC = () => {
       
       mensagemSucesso += `🏙️ CIDADES: ${cidadesExcel.join(', ')}\n`;
       mensagemSucesso += `📅 Data/hora: ${uploadData.date_dh}\n\n`;
+      
+      // ⚠️ ALERTA ESPECÍFICO PARA VALORES PADRÃO
+      if (relatorioBA && relatorioBA.valorPadrao > 0) {
+        mensagemSucesso += `⚠️ ATENÇÃO: ${relatorioBA.valorPadrao} pontos usaram VALOR PADRÃO!\n`;
+        mensagemSucesso += `   Motivo: API do Banco de Ativos falhou para essas coordenadas.\n`;
+        mensagemSucesso += `   Os valores de fluxo foram simulados automaticamente.\n\n`;
+      }
+      
       mensagemSucesso += `✅ PROJETO CRIADO E PROCESSAMENTO DATABRICKS INICIADO!\n✅ TABELAS DINÂMICAS CARREGADAS!`;
       
       // 📎 FUNÇÃO PARA EXPORTAR PONTOS SEM COBERTURA
@@ -1828,7 +1939,7 @@ export const CriarRoteiro: React.FC = () => {
         }
       } else {
         // Alert normal sem opção de exportação
-      alert(mensagemSucesso);
+        alert(mensagemSucesso);
       }
       
       // ✅ FINALIZAR LOADING COM SUCESSO
@@ -1883,25 +1994,7 @@ export const CriarRoteiro: React.FC = () => {
     return `${dataFormatada}_${nomeFormatado}`;
   };
 
-  // Função para mapear IDs de cidades para códigos IBGE corretos
-  const getIbgeCodeFromCidade = (cidade: Cidade) => {
-    const cidadeNome = cidade.nome_cidade?.toUpperCase().trim();
-    
-    // Mapeamento manual dos principais municípios para códigos IBGE corretos
-    const ibgeMap: {[key: string]: string} = {
-      'SÃO PAULO': '3550308',
-      'SAO PAULO': '3550308',
-      'RIO DE JANEIRO': '3304557',
-      'BELO HORIZONTE': '3106200',
-      'SOROCABA': '3552205',
-      'CAMPINAS': '3509502',
-      'SANTOS': '3548500',
-      'RIBEIRÃO PRETO': '3543402',
-      'RIBEIRAO PRETO': '3543402'
-    };
-    
-    return ibgeMap[cidadeNome] || cidade.id_cidade.toString();
-  };
+  // ✅ REMOVIDO: getIbgeCodeFromCidade() - Agora busca dinamicamente do banco via /api/cidades
 
   // Função para salvar Aba 1 - Criar Plano Mídia Grupo
   const salvarAba1 = async () => {
@@ -2794,6 +2887,64 @@ export const CriarRoteiro: React.FC = () => {
                               <strong>Processo crítico:</strong> Consultando API externa para dados de passantes. Este processo pode demorar alguns minutos dependendo do tamanho do arquivo.
                             </span>
                           </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 🎯 CONTROLE GRANULAR DO BANCO DE ATIVOS */}
+                  {bancoAtivosStatus.ativo && (
+                    <div className="mb-8 p-6 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg shadow-sm">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center">
+                          <div className="animate-pulse rounded-full h-6 w-6 bg-green-500 mr-3"></div>
+                          <div>
+                            <h4 className="text-lg font-bold text-green-800">Banco de Ativos - Controle Granular</h4>
+                            <p className="text-sm text-green-600 mt-1">{bancoAtivosStatus.detalhes}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-2xl font-bold text-green-800">
+                            {bancoAtivosStatus.coordenadasProcessadas}/{bancoAtivosStatus.coordenadasTotal}
+                          </div>
+                          <div className="text-xs text-green-600 mt-1">
+                            {bancoAtivosStatus.taxaSucesso.toFixed(1)}% sucesso
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Progresso das coordenadas */}
+                      <div className="w-full bg-green-200 rounded-full h-3 mb-4">
+                        <div 
+                          className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${(bancoAtivosStatus.coordenadasProcessadas / bancoAtivosStatus.coordenadasTotal) * 100}%` }}
+                        ></div>
+                      </div>
+                      
+                      {/* Estatísticas detalhadas */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div className="bg-green-100 p-3 rounded-lg text-center">
+                          <div className="text-lg font-bold text-green-800">{bancoAtivosStatus.sucessos}</div>
+                          <div className="text-xs text-green-600">Sucessos</div>
+                        </div>
+                        <div className="bg-red-100 p-3 rounded-lg text-center">
+                          <div className="text-lg font-bold text-red-800">{bancoAtivosStatus.falhas}</div>
+                          <div className="text-xs text-red-600">Falhas</div>
+                        </div>
+                        <div className="bg-blue-100 p-3 rounded-lg text-center">
+                          <div className="text-lg font-bold text-blue-800">{bancoAtivosStatus.lotesProcessados}/{bancoAtivosStatus.lotesTotal}</div>
+                          <div className="text-xs text-blue-600">Lotes</div>
+                        </div>
+                        <div className="bg-purple-100 p-3 rounded-lg text-center">
+                          <div className="text-lg font-bold text-purple-800">{bancoAtivosStatus.modoProcessamento}</div>
+                          <div className="text-xs text-purple-600">Modo</div>
+                        </div>
+                      </div>
+                      
+                      {/* Tempo decorrido */}
+                      {bancoAtivosStatus.tempoInicio && (
+                        <div className="mt-4 text-center text-sm text-green-600">
+                          ⏱️ Tempo decorrido: {Math.floor((new Date().getTime() - bancoAtivosStatus.tempoInicio.getTime()) / 1000)}s
                         </div>
                       )}
                     </div>
