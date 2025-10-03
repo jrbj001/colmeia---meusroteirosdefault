@@ -3394,7 +3394,51 @@ export const CriarRoteiro: React.FC = () => {
                           <div className="space-y-8">
                             {pracasUnicas.map((praca, pracaIndex) => {
                               const semanasPraca = semanasUnicas;
-                              const gruposPraca = dadosSubGrupos || [];
+                              
+                              // Extrair grupos únicos que existem nos dados desta praça
+                              // Normalizar nomes para comparação (maiúsculas, sem acentos)
+                              const normalizarNome = (nome: string) => nome?.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') || '';
+                              const pracaNormalizada = normalizarNome(praca.praca);
+                              const ufNormalizada = praca.uf?.toUpperCase() || '';
+                              
+                              const gruposPracaMap = new Map();
+                              const grupoComDados = new Map(); // Rastrear quais grupos têm dados
+                              
+                              dadosMatrixRow.forEach(d => {
+                                const cidadeNormalizada = normalizarNome(d.cidade_st);
+                                const estadoNormalizado = d.estado_st?.toUpperCase() || '';
+                                
+                                if (cidadeNormalizada === pracaNormalizada && estadoNormalizado === ufNormalizada && d.grupoSub_st) {
+                                  // Acumular quantidade de registros por grupo
+                                  const qtdAtual = grupoComDados.get(d.grupoSub_st) || 0;
+                                  grupoComDados.set(d.grupoSub_st, qtdAtual + (d.qtd_registros || 0));
+                                  
+                                  if (!gruposPracaMap.has(d.grupoSub_st)) {
+                                    // Buscar descrição real do grupo nos dados de subgrupos
+                                    const subGrupoInfo = dadosSubGrupos.find(sg => sg.grupoSub_st === d.grupoSub_st);
+                                    
+                                    // Debug para primeira praça
+                                    if (pracaIndex === 0 && gruposPracaMap.size === 0) {
+                                      console.log('🔍 DEBUG - Buscando descrição:', {
+                                        grupoSub_st: d.grupoSub_st,
+                                        subGrupoInfo: subGrupoInfo,
+                                        totalSubGrupos: dadosSubGrupos.length,
+                                        exemploSubGrupo: dadosSubGrupos[0]
+                                      });
+                                    }
+                                    
+                                    gruposPracaMap.set(d.grupoSub_st, {
+                                      grupoSub_st: d.grupoSub_st,
+                                      grupo_st: d.grupoSub_st.substring(0, 2), // Ex: G1E -> G1
+                                      grupoDesc_st: subGrupoInfo?.grupoDesc_st || d.grupoSub_st
+                                    });
+                                  }
+                                }
+                              });
+                              
+                              // Filtrar apenas grupos que têm dados (qtd_registros > 0)
+                              const gruposPraca = Array.from(gruposPracaMap.values())
+                                .filter(grupo => (grupoComDados.get(grupo.grupoSub_st) || 0) > 0);
                               
                               return (
                                 <div key={pracaIndex} className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -3440,16 +3484,40 @@ export const CriarRoteiro: React.FC = () => {
                                       <tbody>
                                         {gruposPraca.map((grupo, grupoIndex) => {
                                           // Buscar dados específicos para este grupo e praça
-                                          const dadosGrupo = dadosMatrixRow.filter(d => 
-                                            d.grupoSub_st === grupo.grupoSub_st && 
-                                            d.cidade_st === praca.praca && 
-                                            d.estado_st === praca.uf
-                                          );
+                                          const dadosGrupo = dadosMatrixRow.filter(d => {
+                                            const cidadeNormalizada = normalizarNome(d.cidade_st);
+                                            const estadoNormalizado = d.estado_st?.toUpperCase() || '';
+                                            return d.grupoSub_st === grupo.grupoSub_st && 
+                                                   cidadeNormalizada === pracaNormalizada && 
+                                                   estadoNormalizado === ufNormalizada;
+                                          });
+                                          
+                                          // Debug: Ver o que está sendo filtrado
+                                          if (grupoIndex === 0 && pracaIndex === 0) {
+                                            console.log('🔍 DEBUG - Primeira linha da primeira praça:');
+                                            console.log('  grupo.grupoSub_st:', grupo.grupoSub_st);
+                                            console.log('  praca.praca:', praca.praca);
+                                            console.log('  praca.uf:', praca.uf);
+                                            console.log('  dadosMatrixRow total:', dadosMatrixRow.length);
+                                            console.log('  dadosGrupo filtrado:', dadosGrupo.length);
+                                            if (dadosMatrixRow.length > 0) {
+                                              console.log('  Exemplo dadosMatrixRow[0]:', dadosMatrixRow[0]);
+                                            }
+                                            if (dadosGrupo.length > 0) {
+                                              console.log('  Exemplo dadosGrupo[0]:', dadosGrupo[0]);
+                                            }
+                                          }
+                                          
+                                          // Calcular inserção comprada (soma de todas as semanas) - SEMPRE INTEIRO
+                                          const insercaoComprada = Math.round(dadosGrupo.reduce((acc, d) => acc + (d.qtd_registros || 0), 0));
+                                          
+                                          // Inserção oferecida (por enquanto igual à comprada) - SEMPRE INTEIRO
+                                          const insercaoOferecida = insercaoComprada;
                                           
                                           return (
                                             <tr key={grupoIndex} className="border-b border-gray-200 hover:bg-gray-50">
                                               <td className="px-4 py-3 text-[#3a3a3a] font-medium">
-                                                {grupo.grupo_st}{grupo.grupoSub_st}
+                                                {grupo.grupoSub_st}
                                               </td>
                                               <td className="px-4 py-3 text-[#3a3a3a]">
                                                 {grupo.grupoDesc_st}
@@ -3469,31 +3537,60 @@ export const CriarRoteiro: React.FC = () => {
                                               <td className="px-4 py-3">
                                                 <input 
                                                   type="number" 
-                                                  step="0.001"
+                                                  step="1"
+                                                  min="0"
                                                   className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right"
-                                                  defaultValue="0.000"
+                                                  value={insercaoComprada}
+                                                  onChange={(e) => {
+                                                    // Garantir que sempre seja inteiro
+                                                    const valor = Math.round(Number(e.target.value) || 0);
+                                                    e.target.value = valor.toString();
+                                                  }}
                                                 />
                                               </td>
                                               <td className="px-4 py-3">
                                                 <input 
                                                   type="number" 
-                                                  step="0.001"
+                                                  step="1"
+                                                  min="0"
                                                   className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right"
-                                                  defaultValue="0.000"
+                                                  value={insercaoOferecida}
+                                                  onChange={(e) => {
+                                                    // Garantir que sempre seja inteiro
+                                                    const valor = Math.round(Number(e.target.value) || 0);
+                                                    e.target.value = valor.toString();
+                                                  }}
                                                 />
                                               </td>
                                               {semanasPraca.map((semana, semanaIndex) => {
                                                 // Buscar dados para esta semana específica
                                                 const dadosSemana = dadosGrupo.find(d => d.semana_vl === semanaIndex + 1);
-                                                const valorSemana = dadosSemana ? dadosSemana.qtd_registros : 0;
+                                                const valorSemana = Math.round(dadosSemana ? dadosSemana.qtd_registros : 0);
+                                                
+                                                // Debug da primeira linha e primeira semana
+                                                if (grupoIndex === 0 && pracaIndex === 0 && semanaIndex === 0) {
+                                                  console.log('🔍 DEBUG - Semana:', {
+                                                    semanaIndex,
+                                                    semanaIndexMaisUm: semanaIndex + 1,
+                                                    dadosGrupoComSemanas: dadosGrupo.map(d => ({ semana_vl: d.semana_vl, qtd_registros: d.qtd_registros })),
+                                                    dadosSemanaEncontrado: dadosSemana,
+                                                    valorSemana
+                                                  });
+                                                }
                                                 
                                                 return (
                                                   <td key={semanaIndex} className="px-4 py-3">
                                                     <input 
                                                       type="number" 
                                                       step="1"
+                                                      min="0"
                                                       className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right"
-                                                      defaultValue={Math.round(valorSemana)}
+                                                      value={valorSemana}
+                                                      onChange={(e) => {
+                                                        // Garantir que sempre seja inteiro
+                                                        const valor = Math.round(Number(e.target.value) || 0);
+                                                        e.target.value = valor.toString();
+                                                      }}
                                                     />
                                                   </td>
                                                 );
