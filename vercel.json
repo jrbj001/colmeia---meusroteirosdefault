@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/*.js": {
-      "maxDuration": 300
+      "maxDuration": 600
     }
   },
   "rewrites": [
@@ -160,6 +160,10 @@
     {
       "source": "/teste-rapido",
       "destination": "/api/teste-rapido.js"
+    },
+    {
+      "source": "/banco-ativos-controle",
+      "destination": "/api/banco-ativos-controle.js"
     }
   ]
 } 

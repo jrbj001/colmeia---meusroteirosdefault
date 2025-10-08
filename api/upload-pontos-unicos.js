@@ -46,22 +46,17 @@ async function uploadPontosUnicos(req, res) {
 
         // ✅ BUSCAR DADOS REAIS DE PASSANTES DA API DO BANCO DE ATIVOS
         console.log(`🔍 [uploadPontosUnicos] Buscando dados reais de passantes na API do banco de ativos...`);
-        console.log(`⏱️ [uploadPontosUnicos] Timeout configurado: 8 minutos para ${pontos.length} pontos`);
+        console.log(`⏱️ [uploadPontosUnicos] Usando controle granular para Vercel - ${pontos.length} pontos`);
         
-        // 🚀 TIMEOUT AGRESSIVO: 8 minutos para API externa
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout de 8 minutos na API banco de ativos')), 480000)
-        );
-        
+        // 🎯 USAR CONTROLE GRANULAR PARA VERCEL
         let resultadoPassantes;
         try {
-            resultadoPassantes = await Promise.race([
-                buscarPassantesEmLote(pontos),
-                timeoutPromise
-            ]);
-        } catch (timeoutError) {
-            console.error('⏰ [uploadPontosUnicos] TIMEOUT na API banco de ativos:', timeoutError.message);
-            resultadoPassantes = { sucesso: false, erro: timeoutError.message };
+            // Usar o novo controle granular otimizado para Vercel
+            const { buscarPassantesEmLote } = require('./banco-ativos-passantes');
+            resultadoPassantes = await buscarPassantesEmLote(pontos);
+        } catch (error) {
+            console.error('❌ [uploadPontosUnicos] Erro na API banco de ativos:', error.message);
+            resultadoPassantes = { sucesso: false, erro: error.message };
         }
         
         let pontosEnriquecidos; // Declarar fora dos blocos
@@ -126,8 +121,8 @@ async function uploadPontosUnicos(req, res) {
         console.log(`✅ [uploadPontosUnicos] RELATÓRIO: ${pontosComDados.length} com dados, ${pontosFluxoZero.length} fluxo zero, ${pontosValorPadrao.length} valor padrão`);
 
         // ✅ RESTAURAR INSERÇÃO na uploadInventario_ft com processamento em lotes
-        const agora = new Date();
-        const dateLote = new Date(agora.getTime() - (3 * 60 * 60 * 1000)); // -3 horas para compensar SQL Server
+        // ✅ USAR A MESMA DATA QUE FOI PASSADA COMO PARÂMETRO
+        const dateLote = new Date(date_dh);
 
         // Processar em lotes para evitar limite de 2100 parâmetros do SQL Server
         // Cada ponto usa 7 parâmetros, então máximo 250 pontos por lote (250 × 7 = 1750) - margem de segurança
@@ -135,15 +130,30 @@ async function uploadPontosUnicos(req, res) {
         const allInsertResults = [];
         
         console.log(`🗄️ [uploadPontosUnicos] Inserindo ${pontosEnriquecidos.length} pontos na uploadInventario_ft em lotes de ${batchSize}...`);
+        console.log(`🔍 [uploadPontosUnicos] DEBUG: Primeiros 3 pontos para inserção:`);
+        pontosEnriquecidos.slice(0, 3).forEach((p, i) => {
+            console.log(`   ${i+1}. ${p.ambiente_st} | ${p.tipoMidia_st} | ${p.latitude_vl},${p.longitude_vl} | fluxo:${p.fluxoPassantes_vl}`);
+        });
+        
+        // 🔍 VERIFICAR SE HÁ PONTOS DUPLICADOS NO INPUT ANTES DA INSERÇÃO
+        const inputPks = pontosEnriquecidos.map(p => `${p.ambiente_st}-${p.tipoMidia_st}-${p.latitude_vl}-${p.longitude_vl}`);
+        const uniqueInputPks = [...new Set(inputPks)];
+        if (inputPks.length !== uniqueInputPks.length) {
+            console.log(`⚠️ [uploadPontosUnicos] DUPLICATAS NO INPUT DETECTADAS: ${inputPks.length} pontos, ${uniqueInputPks.length} únicos`);
+        } else {
+            console.log(`✅ [uploadPontosUnicos] Input sem duplicatas: ${inputPks.length} pontos únicos`);
+        }
         
         for (let i = 0; i < pontosEnriquecidos.length; i += batchSize) {
             const batch = pontosEnriquecidos.slice(i, i + batchSize);
             const request = pool.request();
             const values = [];
             
+            console.log(`🔄 [uploadPontosUnicos] Preparando lote ${Math.floor(i/batchSize) + 1}/${Math.ceil(pontosEnriquecidos.length/batchSize)} com ${batch.length} pontos...`);
+            
             batch.forEach((ponto, batchIndex) => {
                 const paramPrefix = `p${batchIndex}`;
-                request.input(`${paramPrefix}_pk2`, sql.Int, 0);
+                request.input(`${paramPrefix}_pk2`, sql.Int, planoMidiaGrupo_pk);
                 request.input(`${paramPrefix}_ambiente_st`, sql.VarChar(255), ponto.ambiente_st || '');
                 request.input(`${paramPrefix}_tipoMidia_st`, sql.VarChar(255), ponto.tipoMidia_st || '');
                 request.input(`${paramPrefix}_latitude_vl`, sql.Float, ponto.latitude_vl || 0);
@@ -163,18 +173,87 @@ async function uploadPontosUnicos(req, res) {
                 VALUES ${values.join(', ')};
             `;
 
-            console.log(`🔄 [uploadPontosUnicos] Processando lote ${Math.floor(i/batchSize) + 1}/${Math.ceil(pontosEnriquecidos.length/batchSize)} (${batch.length} pontos)...`);
+            console.log(`🚀 [uploadPontosUnicos] Executando INSERT para lote ${Math.floor(i/batchSize) + 1}...`);
 
-            const insertResult = await request.query(insertQuery);
-            allInsertResults.push(...insertResult.recordset);
-            
-            console.log(`✅ Lote ${Math.floor(i/batchSize) + 1} processado: ${insertResult.recordset.length} pontos inseridos`);
+            try {
+                const insertResult = await request.query(insertQuery);
+                allInsertResults.push(...insertResult.recordset);
+                
+                console.log(`✅ [uploadPontosUnicos] Lote ${Math.floor(i/batchSize) + 1} processado: ${insertResult.recordset.length} pontos inseridos`);
+                console.log(`🔍 [uploadPontosUnicos] DEBUG: Primeiros 3 resultados do lote:`);
+                insertResult.recordset.slice(0, 3).forEach((r, idx) => {
+                    console.log(`   ${idx+1}. pk:${r.pk} | ${r.ambiente_st} | fluxo:${r.fluxoPassantes_vl}`);
+                });
+                
+                // 🔍 VERIFICAR SE HÁ DUPLICATAS NO LOTE
+                const uniquePks = [...new Set(insertResult.recordset.map(r => r.pk))];
+                if (uniquePks.length !== insertResult.recordset.length) {
+                    console.log(`⚠️ [uploadPontosUnicos] DUPLICATAS DETECTADAS NO LOTE ${Math.floor(i/batchSize) + 1}:`);
+                    console.log(`   📊 Total de resultados: ${insertResult.recordset.length}`);
+                    console.log(`   🔑 PKs únicos: ${uniquePks.length}`);
+                    console.log(`   🚨 Duplicatas encontradas: ${insertResult.recordset.length - uniquePks.length}`);
+                    
+                    // Detalhar as duplicatas
+                    const pkCounts = {};
+                    insertResult.recordset.forEach(r => {
+                        pkCounts[r.pk] = (pkCounts[r.pk] || 0) + 1;
+                    });
+                    
+                    const duplicatedPks = Object.entries(pkCounts).filter(([pk, count]) => count > 1);
+                    if (duplicatedPks.length > 0) {
+                        console.log(`   🔍 PKs duplicados:`);
+                        duplicatedPks.forEach(([pk, count]) => {
+                            console.log(`      PK ${pk}: ${count} ocorrências`);
+                        });
+                    }
+                } else {
+                    console.log(`✅ [uploadPontosUnicos] Lote ${Math.floor(i/batchSize) + 1} sem duplicatas: ${insertResult.recordset.length} PKs únicos`);
+                }
+                
+            } catch (error) {
+                console.error(`❌ [uploadPontosUnicos] Erro no lote ${Math.floor(i/batchSize) + 1}:`, error.message);
+                throw error;
+            }
         }
 
         const insertResult = { recordset: allInsertResults };
 
         console.log(`📊 [uploadPontosUnicos] ${pontos.length} pontos únicos processados`);
         console.log(`📍 [uploadPontosUnicos] ${insertResult.recordset.length} pontos inseridos na uploadInventario_ft`);
+        console.log(`🔍 [uploadPontosUnicos] DEBUG: Total de resultados coletados: ${allInsertResults.length}`);
+        
+        // 🔍 VERIFICAR DUPLICATAS FINAIS COM ESTATÍSTICAS DETALHADAS
+        const finalUniquePks = [...new Set(allInsertResults.map(r => r.pk))];
+        console.log(`🔍 [uploadPontosUnicos] DEBUG: Total de PKs únicos inseridos: ${finalUniquePks.length}`);
+        
+        if (finalUniquePks.length !== allInsertResults.length) {
+            console.log(`🚨 [uploadPontosUnicos] DUPLICATAS FINAIS DETECTADAS!`);
+            console.log(`   📊 Total de resultados OUTPUT INSERTED: ${allInsertResults.length}`);
+            console.log(`   🔑 Total de PKs únicos: ${finalUniquePks.length}`);
+            console.log(`   ⚠️ Duplicatas totais: ${allInsertResults.length - finalUniquePks.length}`);
+            
+            // Análise detalhada das duplicatas finais
+            const finalPkCounts = {};
+            allInsertResults.forEach(r => {
+                finalPkCounts[r.pk] = (finalPkCounts[r.pk] || 0) + 1;
+            });
+            
+            const finalDuplicatedPks = Object.entries(finalPkCounts).filter(([pk, count]) => count > 1);
+            if (finalDuplicatedPks.length > 0) {
+                console.log(`   🔍 PKs duplicados finais (${finalDuplicatedPks.length} PKs):`);
+                finalDuplicatedPks.forEach(([pk, count]) => {
+                    console.log(`      PK ${pk}: ${count} ocorrências`);
+                });
+                
+                // 🎯 ALERTA CRÍTICO
+                console.log(`🚨 ALERTA CRÍTICO: OUTPUT INSERTED está retornando duplicatas!`);
+                console.log(`   💡 Isso pode indicar que o INSERT está sobrescrevendo registros existentes`);
+                console.log(`   💡 ou que há triggers/constraints causando inserções múltiplas`);
+            }
+        } else {
+            console.log(`✅ [uploadPontosUnicos] Nenhuma duplicata final detectada: ${allInsertResults.length} PKs únicos`);
+        }
+        
         console.log(`📅 [uploadPontosUnicos] Data/hora do lote: ${dateLote.toISOString()}`);
 
         res.json({
