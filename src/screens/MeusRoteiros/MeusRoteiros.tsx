@@ -8,7 +8,9 @@ import { Difference4 } from "../../icons/Difference4";
 import { Delete4 } from "../../icons/Delete4";
 import { Pagination } from "./sections/Pagination";
 import api from "../../config/axios";
-import { LoadingColmeia } from "./components/LoadingColmeia";
+import { TableSkeleton } from "./components/TableSkeleton";
+import { LoadingSpinner } from "../../components/LoadingSpinner";
+import { CheckCircle } from "../../icons/CheckCircle";
 import { PinDrop } from "../../icons/PinDrop/PinDrop";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -27,6 +29,11 @@ interface Roteiro {
   cidadeUpper_st_concat: string;
   semanasMax_vl: number;
   date_dh: string;
+  inProgress_bl: number;
+  inProgress_st: string;
+  active_bl: number;
+  active_st: string;
+  delete_bl: number;
 }
 
 interface PaginationInfo {
@@ -160,7 +167,7 @@ Email: suporte@be180.com.br`;
                       tabIndex={0}
                       role="button"
                     >
-                      Tipo de roteiro
+                      Status do roteiro
                     </th>
                     <th
                       className="text-white text-xs font-bold uppercase text-left px-6 py-2 tracking-wider font-sans cursor-pointer hover:text-[#FF9800] transition-colors duration-200"
@@ -174,11 +181,7 @@ Email: suporte@be180.com.br`;
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr>
-                      <td colSpan={5} className="py-16">
-                        <LoadingColmeia />
-                      </td>
-                    </tr>
+                    <TableSkeleton />
                   ) : erro ? (
                     <tr>
                       <td colSpan={5} className="text-center py-4 text-red-500">{erro}</td>
@@ -195,7 +198,19 @@ Email: suporte@be180.com.br`;
                       >
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans max-w-xs truncate">{item.planoMidiaGrupo_st}</td>
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{formatarData(item.date_dh)}</td>
-                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.planoMidiaType_st}</td>
+                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">
+                          {item.inProgress_bl === 1 ? (
+                            <div className="flex items-center gap-2">
+                              <LoadingSpinner size="sm" />
+                              <span className="text-xs text-[#FF9800] font-medium">Processando</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <CheckCircle size={16} color="#3a3a3a" />
+                              <span className="text-[#3a3a3a] font-medium">Finalizado</span>
+                            </div>
+                          )}
+                        </td>
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.semanasMax_vl} {item.semanasMax_vl === 1 ? 'semana' : 'semanas'}</td>
                         <td className="text-[#222] text-xs px-6 py-4 whitespace-nowrap text-right flex items-center gap-4 justify-end font-sans">
                           <Link to={`/mapa?grupo=${item.planoMidiaGrupo_pk}`}>
