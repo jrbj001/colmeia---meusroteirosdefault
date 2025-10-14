@@ -13,7 +13,7 @@ const getBaseURL = () => {
 
 const api = axios.create({
   baseURL: getBaseURL(),
-  timeout: 600000, // 10 minutos para processamento do banco de ativos
+  timeout: 0, // SEM timeout - deixa o servidor decidir
   headers: {
     'Content-Type': 'application/json'
   }

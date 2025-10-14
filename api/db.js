@@ -13,14 +13,24 @@ const dbConfig = {
     connectTimeout: 60000,  // 60s para conectar
     requestTimeout: 600000, // 10 minutos para requests longos
     cancelTimeout: 60000    // 60s para cancelar
+  },
+  pool: {
+    max: 10,
+    min: 0,
+    idleTimeoutMillis: 30000 // Fechar conexões idle após 30s
   }
 };
 
 let pool;
 
 async function getPool() {
-  if (pool && pool.connected) return pool;
+  if (pool && pool.connected) {
+    return pool;
+  }
+  
+  console.log('🔄 Criando nova conexão com o banco de dados...');
   pool = await sql.connect(dbConfig);
+  console.log('✅ Conexão estabelecida com sucesso!');
   return pool;
 }
 

@@ -15,7 +15,9 @@ async function spUploadRoteirosInventarioInsert(req, res) {
 
         console.log(`✅ [spUploadRoteirosInventarioInsert] Executando stored procedure para grupo ${planoMidiaGrupo_pk} e data ${date_dh}`);
 
-        // Executar a stored procedure
+        // Executar a stored procedure original (como sempre funcionou)
+        console.log(`📅 [spUploadRoteirosInventarioInsert] Executando stored procedure original`);
+        
         const result = await pool.request()
             .input('planoMidiaGrupo_pk', sql.Int, planoMidiaGrupo_pk)
             .input('date_dh', sql.DateTime, new Date(date_dh))
