@@ -13,6 +13,7 @@ import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { CheckCircle } from "../../icons/CheckCircle";
 import { PinDrop } from "../../icons/PinDrop/PinDrop";
 import { Link, useNavigate } from "react-router-dom";
+import { useRoteirosRefresh } from "../../hooks/useRoteirosRefresh";
 
 // Definir a interface dos dados da view
 interface Roteiro {
@@ -55,6 +56,16 @@ export const MeusRoteiros: React.FC = () => {
   });
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  // Verificar se há roteiros em processamento
+  const hasProcessing = dados.some(roteiro => roteiro.inProgress_bl === 1);
+
+  // Hook de refresh automático
+  useRoteirosRefresh({
+    hasProcessing,
+    onRefresh: () => carregarDados(paginacao.currentPage),
+    interval: 5000 // 5 segundos
+  });
 
   const formatarData = (dataString: string) => {
     const data = new Date(dataString);
@@ -140,9 +151,17 @@ Email: suporte@be180.com.br`;
             className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`}
           />
           <div className="w-full overflow-x-auto pt-20 flex-1 overflow-auto">
-            <h1 className="text-lg font-bold text-[#222] tracking-wide mb-4 uppercase font-sans mt-4 pl-6">
-              Meus roteiros
-            </h1>
+            <div className="flex items-center justify-between pr-6">
+              <h1 className="text-lg font-bold text-[#222] tracking-wide mb-4 uppercase font-sans mt-4 pl-6">
+                Meus roteiros
+              </h1>
+              {hasProcessing && (
+                <div className="flex items-center gap-2 mb-4 mt-4 text-xs text-[#FF9800]">
+                  <div className="w-2 h-2 bg-[#FF9800] rounded-full animate-pulse"></div>
+                  <span className="font-medium">Atualizando automaticamente</span>
+                </div>
+              )}
+            </div>
 
             <div className="w-full">
               <table className="w-full border-separate border-spacing-0 font-sans">
