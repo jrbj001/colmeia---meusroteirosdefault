@@ -14,6 +14,12 @@ module.exports = async function handler(req, res) {
   try {
     const { cidade_st, estado_st } = req.body;
     
+    console.log('🔍 [cidades-ibge] Dados recebidos do frontend:', {
+      cidade_st,
+      estado_st,
+      tipo_estado: typeof estado_st
+    });
+    
     if (!cidade_st) {
       return res.status(400).json({ error: 'cidade_st é obrigatório' });
     }

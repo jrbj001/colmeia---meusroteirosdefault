@@ -66,9 +66,12 @@ async function roteiroSimulado(req, res) {
 
         // Só adicionar se houver contagem > 0
         if (contagem_vl > 0) {
+          // Usar grupo_st como código se grupoSub_st parecer ser descrição
+          const codigoGrupo = grupoSub_st.includes(' ') ? linha.grupo_st : grupoSub_st;
+          
           recordsJson.push({
             week_vl,
-            grupoSub_st,
+            grupoSub_st: codigoGrupo, // Garantir que seja código, não descrição
             contagem_vl
           });
         }
@@ -77,6 +80,25 @@ async function roteiroSimulado(req, res) {
 
     console.log(`📝 Registros processados: ${recordsJson.length}`);
     console.log('🔍 Primeiros 5 registros:', recordsJson.slice(0, 5));
+    
+    // DEBUG DETALHADO - Dados que serão enviados para a stored procedure
+    console.log('🔍 ===== DEBUG DETALHADO =====');
+    console.log('📊 planoMidiaDesc_pk:', planoMidiaDesc_pk);
+    console.log('📊 Tipo do planoMidiaDesc_pk:', typeof planoMidiaDesc_pk);
+    console.log('📊 recordsJson (string):', JSON.stringify(recordsJson));
+    console.log('📊 recordsJson (objeto):', recordsJson);
+    console.log('📊 Total de registros:', recordsJson.length);
+    
+    // Debug de cada registro individual
+    recordsJson.forEach((registro, index) => {
+      console.log(`📊 Registro ${index + 1}:`, {
+        week_vl: registro.week_vl,
+        grupoSub_st: registro.grupoSub_st,
+        contagem_vl: registro.contagem_vl,
+        tipo_grupoSub_st: typeof registro.grupoSub_st
+      });
+    });
+    console.log('🔍 ===== FIM DEBUG =====');
 
     if (recordsJson.length === 0) {
       return res.status(400).json({
@@ -89,6 +111,10 @@ async function roteiroSimulado(req, res) {
     const pool = await getPool();
     
     console.log('🚀 Executando sp_planoColmeiaSimuladoInsert...');
+    console.log('🔍 ===== PARÂMETROS ENVIADOS =====');
+    console.log('📊 Parâmetro 1 - planoMidiaDesc_pk:', planoMidiaDesc_pk);
+    console.log('📊 Parâmetro 2 - recordsJson (string):', JSON.stringify(recordsJson));
+    console.log('🔍 ===== FIM PARÂMETROS =====');
     
     const result = await pool.request()
       .input('planoMidiaDesc_pk', planoMidiaDesc_pk)

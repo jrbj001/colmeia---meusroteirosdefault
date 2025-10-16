@@ -458,21 +458,65 @@ export const CriarRoteiro: React.FC = () => {
       const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
       const cidadeFormatada = (pracaSelecionadaSimulado.nome_cidade || '').replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
       
-      // Buscar código IBGE dinamicamente do banco
-      let ibgeCode = pracaSelecionadaSimulado.id_cidade; // Fallback para o id_cidade original
+      // Buscar código IBGE correto por nome da cidade (API que funciona)
+      let ibgeCode = pracaSelecionadaSimulado.id_cidade; // Fallback
+      
+      console.log('🔍 DEBUG IBGE - Dados da praça:', {
+        nome_cidade: pracaSelecionadaSimulado.nome_cidade,
+        nome_estado: pracaSelecionadaSimulado.nome_estado,
+        id_cidade: pracaSelecionadaSimulado.id_cidade
+      });
+      
+      console.log('🔍 DEBUG IBGE - Estado específico:', pracaSelecionadaSimulado.nome_estado);
+      console.log('🔍 DEBUG IBGE - Tipo do estado:', typeof pracaSelecionadaSimulado.nome_estado);
+      
       try {
-        const ibgeResponse = await axios.post('/cidades', {
+        console.log('🔍 DEBUG IBGE - Fazendo chamada para /cidades-ibge...');
+        console.log('🔍 DEBUG IBGE - Dados enviados:', {
           cidade_st: pracaSelecionadaSimulado.nome_cidade,
-          estado_st: pracaSelecionadaSimulado.estado // assumindo que existe esta propriedade
+          estado_st: pracaSelecionadaSimulado.nome_estado
         });
         
-        if (ibgeResponse.data && ibgeResponse.data.ibgeCode) {
+        const ibgeResponse = await axios.post('/cidades-ibge', {
+          cidade_st: pracaSelecionadaSimulado.nome_cidade,
+          estado_st: pracaSelecionadaSimulado.nome_estado
+        });
+        
+        console.log('🔍 DEBUG IBGE - Resposta da API:', ibgeResponse.data);
+        
+        if (ibgeResponse.data.success && ibgeResponse.data.ibgeCode) {
           ibgeCode = ibgeResponse.data.ibgeCode;
-          console.log(`✅ ibgeCode encontrado para ${pracaSelecionadaSimulado.nome_cidade}: ${ibgeCode}`);
+          console.log(`✅ IBGE Code encontrado: ${ibgeCode} para ${pracaSelecionadaSimulado.nome_cidade}`);
+        } else {
+          console.warn(`⚠️ IBGE Code não encontrado, usando id_cidade: ${ibgeCode}`);
         }
       } catch (error: any) {
-        console.warn(`⚠️ Não foi possível buscar ibgeCode, usando id_cidade: ${ibgeCode}`, error.response?.data || error.message);
+        console.warn(`⚠️ Erro ao buscar IBGE Code, usando id_cidade: ${ibgeCode}`, error.response?.data || error.message);
+        
+        // Se for erro 400 (múltiplas cidades), tentar novamente com estado
+        if (error.response?.status === 400 && error.response?.data?.error?.includes('Múltiplas cidades')) {
+          console.log('🔄 Tentando novamente com estado específico...');
+          try {
+            const retryResponse = await axios.post('/cidades-ibge', {
+              cidade_st: pracaSelecionadaSimulado.nome_cidade,
+              estado_st: pracaSelecionadaSimulado.nome_estado
+            });
+            
+            if (retryResponse.data.success && retryResponse.data.ibgeCode) {
+              ibgeCode = retryResponse.data.ibgeCode;
+              console.log(`✅ IBGE Code encontrado na segunda tentativa: ${ibgeCode} para ${pracaSelecionadaSimulado.nome_cidade}`);
+            }
+          } catch (retryError) {
+            console.warn(`⚠️ Erro na segunda tentativa:`, retryError.response?.data || retryError.message);
+          }
+        }
       }
+      
+      console.log('🔍 DEBUG IBGE - Código final que será usado:', ibgeCode);
+      console.log('🔍 DEBUG IBGE - Tipo do código:', typeof ibgeCode);
+      console.log('🔍 DEBUG IBGE - É igual a 3550308?', ibgeCode === 3550308);
+      console.log('🔍 DEBUG IBGE - É igual a 750?', ibgeCode === 750);
+      console.log('🔍 DEBUG IBGE - Valor exato:', JSON.stringify(ibgeCode));
       
       const recordsJson = [{
         planoMidiaDesc_st: `${planoMidiaGrupo_st}_${cidadeFormatada}`,
