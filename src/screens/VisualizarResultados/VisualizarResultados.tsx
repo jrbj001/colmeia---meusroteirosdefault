@@ -3,8 +3,6 @@ import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { Topbar } from "../../components/Topbar/Topbar";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "../../config/axios";
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap, Polygon } from 'react-leaflet';
-import L from 'leaflet';
 
 interface RoteiroData {
   planoMidiaGrupo_pk: number;
@@ -52,20 +50,6 @@ interface TotaisData {
 }
 
 // Tipo para os dados dos hexágonos
-interface Hexagono {
-  hexagon_pk: number;
-  hex_centroid_lat: number;
-  hex_centroid_lon: number;
-  calculatedFluxoEstimado_vl: number;
-  fluxoEstimado_vl: number;
-  rgbColorR_vl: number;
-  rgbColorG_vl: number;
-  rgbColorB_vl: number;
-  hexColor_st: string;
-  planoMidiaDesc_st: string;
-  geometry_8: string;
-  grupoDesc_st: string;
-}
 
 export const VisualizarResultados: React.FC = () => {
   const location = useLocation();
@@ -78,11 +62,6 @@ export const VisualizarResultados: React.FC = () => {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   
-  // Estados para o mapa
-  const [mapaVisivel, setMapaVisivel] = useState(false);
-  const [pracaSelecionada, setPracaSelecionada] = useState<string | null>(null);
-  const [hexagonos, setHexagonos] = useState<Hexagono[]>([]);
-  const [carregandoMapa, setCarregandoMapa] = useState(false);
 
   useEffect(() => {
     if (location.state?.roteiroData) {
@@ -130,82 +109,7 @@ export const VisualizarResultados: React.FC = () => {
     return valor.toFixed(1);
   };
 
-  // Função auxiliar para converter WKT em coordenadas
-  const wktToLatLngs = (wkt: string): [number, number][] => {
-    const coords = wkt.replace(/POLYGON\(\(|\)\)/g, '').split(',');
-    return coords.map(coord => {
-      const [lng, lat] = coord.trim().split(' ').map(Number);
-      return [lat, lng] as [number, number];
-    }).filter((x): x is [number, number] => Array.isArray(x) && x.length === 2);
-  };
 
-  // Componente auxiliar para ajustar o centro do mapa
-  const AjustarMapa: React.FC<{ hexagonos: Hexagono[] }> = ({ hexagonos }) => {
-    const map = useMap();
-    
-    useEffect(() => {
-      if (hexagonos.length > 0) {
-        const bounds = L.latLngBounds(hexagonos.map(hex => [hex.hex_centroid_lat, hex.hex_centroid_lon]));
-        map.fitBounds(bounds, { padding: [20, 20] });
-      }
-    }, [hexagonos, map]);
-    
-    return null;
-  };
-
-  const carregarHexagonosMapa = async (cidade: string) => {
-    console.log(`🗺️ [DEBUG] Iniciando carregarHexagonosMapa para: ${cidade}`);
-    
-    if (!roteiroData) {
-      console.error(`❌ [DEBUG] roteiroData não disponível`);
-      return;
-    }
-    
-    try {
-      setCarregandoMapa(true);
-      console.log(`🗺️ [DEBUG] setCarregandoMapa(true) executado`);
-      console.log(`🗺️ Carregando hexágonos para ${cidade}`);
-      
-      const requestData = {
-        grupo: roteiroData.planoMidiaGrupo_pk,
-        cidade: cidade,
-        semana: '1' // Usar primeira semana por padrão
-      };
-      
-      console.log(`🗺️ [DEBUG] Dados da requisição:`, requestData);
-      
-      const response = await axios.post('/hexagonos', requestData);
-      
-      console.log(`🗺️ [DEBUG] Resposta da API:`, response.data);
-
-      if (response.data && Array.isArray(response.data)) {
-        setHexagonos(response.data);
-        console.log(`✅ ${response.data.length} hexágonos carregados para ${cidade}`);
-      } else {
-        console.warn('⚠️ Nenhum hexágono encontrado');
-        setHexagonos([]);
-      }
-    } catch (error) {
-      console.error('❌ Erro ao carregar hexágonos:', error);
-      setHexagonos([]);
-    } finally {
-      setCarregandoMapa(false);
-      console.log(`🗺️ [DEBUG] setCarregandoMapa(false) executado`);
-    }
-  };
-
-  const abrirMapa = async (cidade: string) => {
-    console.log(`🗺️ Abrindo mapa para cidade: ${cidade}`);
-    setPracaSelecionada(cidade);
-    setMapaVisivel(true);
-    await carregarHexagonosMapa(cidade);
-  };
-
-  const fecharMapa = () => {
-    setMapaVisivel(false);
-    setPracaSelecionada(null);
-    setHexagonos([]);
-  };
 
   if (!roteiroData) {
     return (
@@ -337,16 +241,25 @@ export const VisualizarResultados: React.FC = () => {
                               {item.grp_vl?.toFixed(3) || '0.000'}
                             </td>
                             <td className="border border-gray-300 px-4 py-2 text-center">
-                              <button
-                                onClick={() => {
-                                  console.log('🔴 CLIQUE DETECTADO! cidade_st:', item.cidade_st);
-                                  alert(`🔴 CLIQUE! Cidade: ${item.cidade_st}`);
-                                  abrirMapa(item.cidade_st);
+                              <a 
+                                href="#"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  alert('🔴 CLIQUE DETECTADO! Cidade: ' + item.cidade_st);
+                                  console.log('🗺️ [DEBUG] Navegando para Mapa com cidade:', item.cidade_st);
+                                  console.log('🗺️ [DEBUG] RoteiroData:', roteiroData);
+                                  navigate('/mapa', {
+                                    state: {
+                                      cidadePreSelecionada: item.cidade_st,
+                                      semanaPreSelecionada: '1', // Semana padrão
+                                      roteiroData: roteiroData
+                                    }
+                                  });
                                 }}
-                                className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors"
+                                className="text-blue-600 hover:text-blue-800 underline cursor-pointer"
                               >
                                 View mapa
-                              </button>
+                              </a>
                             </td>
                           </tr>
                         ))}
@@ -381,77 +294,6 @@ export const VisualizarResultados: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Mapa */}
-                {mapaVisivel && (
-                  <div className="mt-8">
-                    <div className="flex justify-between items-center mb-4">
-                      <h4 className="text-lg font-bold text-[#3a3a3a]">
-                        Mapa de Hexágonos - {pracaSelecionada}
-                      </h4>
-                      <button
-                        onClick={fecharMapa}
-                        className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                      >
-                        Fechar Mapa
-                      </button>
-                    </div>
-                    
-                    <div className="border border-gray-300 rounded-lg overflow-hidden">
-                      {carregandoMapa ? (
-                        <div className="h-96 flex items-center justify-center bg-gray-50">
-                          <div className="text-center">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto mb-4"></div>
-                            <p className="text-gray-600">Carregando hexágonos do mapa...</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div style={{ height: '500px', width: '100%' }}>
-                          <MapContainer
-                            center={hexagonos.length > 0 ? [hexagonos[0].hex_centroid_lat, hexagonos[0].hex_centroid_lon] : [-15.7801, -47.9292]}
-                            zoom={12}
-                            style={{ height: '100%', width: '100%' }}
-                          >
-                            <TileLayer
-                              url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-                              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                            />
-                            <AjustarMapa hexagonos={hexagonos} />
-                            {hexagonos.map((hex, idx) => (
-                              <Polygon
-                                key={"poly-" + idx}
-                                positions={wktToLatLngs(hex.geometry_8)}
-                                pathOptions={{
-                                  color: hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`,
-                                  fillOpacity: 0.4
-                                }}
-                              >
-                                <Popup>
-                                  <div style={{ minWidth: 200 }}>
-                                    <h4><strong>Hexágono {hex.hexagon_pk}</strong></h4>
-                                    <p><strong>Grupo:</strong> {hex.grupoDesc_st}</p>
-                                    <p><strong>Fluxo Estimado:</strong> {hex.fluxoEstimado_vl?.toLocaleString('pt-BR')}</p>
-                                    <p><strong>Fluxo Calculado:</strong> {hex.calculatedFluxoEstimado_vl?.toLocaleString('pt-BR')}</p>
-                                    <p><strong>Coordenadas:</strong> {hex.hex_centroid_lat.toFixed(6)}, {hex.hex_centroid_lon.toFixed(6)}</p>
-                                  </div>
-                                </Popup>
-                              </Polygon>
-                            ))}
-                          </MapContainer>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {!carregandoMapa && hexagonos.length > 0 && (
-                      <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-600">
-                          <strong>Total de hexágonos:</strong> {hexagonos.length} | 
-                          <strong> Praça:</strong> {pracaSelecionada} |
-                          <strong> Fluxo total estimado:</strong> {hexagonos.reduce((sum, hex) => sum + (hex.fluxoEstimado_vl || 0), 0).toLocaleString('pt-BR')}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 {/* Botão de voltar */}
                 <div className="flex justify-end">

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { Topbar } from "../../components/Topbar/Topbar";
 import { useAuth } from "../../contexts/AuthContext";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import axios from "../../config/axios";
 import * as XLSX from 'xlsx';
 
@@ -43,6 +43,7 @@ interface TargetFaixaEtaria {
 export const CriarRoteiro: React.FC = () => {
   const { user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [menuReduzido, setMenuReduzido] = useState(false);
   
   // Estados para modo visualização
@@ -4001,7 +4002,23 @@ export const CriarRoteiro: React.FC = () => {
                                       <div className="flex items-center">
                                         <span className="text-lg font-bold text-[#3a3a3a]">• {cidade}</span>
                                       </div>
-                                      <button className="px-4 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700">
+                                      <button 
+                                        onClick={() => {
+                                          console.log('🗺️ [DEBUG] Navegando para Mapa com cidade:', cidade);
+                                          console.log('🗺️ [DEBUG] RoteiroData:', roteiroData);
+                                          console.log('🗺️ [DEBUG] planoMidiaGrupo_pk:', roteiroData?.planoMidiaGrupo_pk);
+                                          
+                                          // Navegar com grupo na URL
+                                          navigate(`/mapa?grupo=${roteiroData?.planoMidiaGrupo_pk}`, {
+                                            state: {
+                                              cidadePreSelecionada: cidade,
+                                              semanaPreSelecionada: '1',
+                                              roteiroData: roteiroData
+                                            }
+                                          });
+                                        }}
+                                        className="px-4 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
+                                      >
                                         View mapa
                                       </button>
                                     </div>

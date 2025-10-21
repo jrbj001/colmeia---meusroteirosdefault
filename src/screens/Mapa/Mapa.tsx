@@ -2,7 +2,7 @@ import React from "react";
 import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { Topbar } from "../../components/Topbar/Topbar";
 import { Pagination } from "../MeusRoteiros/sections/Pagination";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useLocation } from "react-router-dom";
 import api from "../../config/axios";
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap, Polygon } from 'react-leaflet';
 import L from 'leaflet';
@@ -51,6 +51,7 @@ function wktToLatLngs(wkt: string) {
 export const Mapa: React.FC = () => {
   const [menuReduzido, setMenuReduzido] = React.useState(false);
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const grupo = searchParams.get("grupo");
   const [cidades, setCidades] = React.useState<string[]>([]);
   const [cidadeSelecionada, setCidadeSelecionada] = React.useState("");
@@ -100,6 +101,28 @@ export const Mapa: React.FC = () => {
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} horas atrás`;
     return `${Math.floor(diffInSeconds / 86400)} dias atrás`;
   };
+
+  // useEffect para processar dados pré-selecionados vindos da tela de resultados
+  React.useEffect(() => {
+    if (location.state?.cidadePreSelecionada || location.state?.semanaPreSelecionada) {
+      console.log('🗺️ [DEBUG] Dados pré-selecionados recebidos:', location.state);
+      
+      if (location.state.cidadePreSelecionada) {
+        setCidadeSelecionada(location.state.cidadePreSelecionada);
+        console.log('🗺️ [DEBUG] Cidade pré-selecionada:', location.state.cidadePreSelecionada);
+      }
+      
+      if (location.state.semanaPreSelecionada) {
+        setSemanaSelecionada(location.state.semanaPreSelecionada);
+        console.log('🗺️ [DEBUG] Semana pré-selecionada:', location.state.semanaPreSelecionada);
+      }
+      
+      // Se temos roteiroData, usar o grupo dele
+      if (location.state.roteiroData?.planoMidiaGrupo_pk) {
+        console.log('🗺️ [DEBUG] Usando grupo do roteiro:', location.state.roteiroData.planoMidiaGrupo_pk);
+      }
+    }
+  }, [location.state]);
 
   React.useEffect(() => {
     console.log("Mapa: grupo recebido:", grupo);
