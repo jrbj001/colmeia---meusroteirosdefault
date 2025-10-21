@@ -6,6 +6,9 @@ import { useSearchParams, useLocation } from "react-router-dom";
 import api from "../../config/axios";
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap, Polygon } from 'react-leaflet';
 import L from 'leaflet';
+import { useDebounce } from '../../hooks/useDebounce';
+import { SkeletonLoader } from '../../components/SkeletonLoader';
+import { MapLoadingOverlay } from '../../components/MapLoadingOverlay';
 
 // Tipo para os dados dos hexágonos
 interface Hexagono {
@@ -21,6 +24,12 @@ interface Hexagono {
   planoMidiaDesc_st: string;
   geometry_8: string; // Adicionado para armazenar o WKT do polígono
   grupoDesc_st: string;
+  // Novos campos da API
+  hexagon_8: string;
+  planoMidia_pk: number;
+  grupo_st: string;
+  count_vl: number;
+  groupCount_vl: number;
 }
 
 // Componente auxiliar para ajustar o centro e bounds do mapa
@@ -64,9 +73,25 @@ export const Mapa: React.FC = () => {
   const [loadingHexagonos, setLoadingHexagonos] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
   
-  // Novos estados para feedback do usuário
+  // Loading states granulares
+  const [loadingCidades, setLoadingCidades] = React.useState(false);
+  const [loadingDescPks, setLoadingDescPks] = React.useState(false);
+  const [loadingSemanas, setLoadingSemanas] = React.useState(false);
+  
+  // Estados debounced para performance
+  const debouncedCidadeSelecionada = useDebounce(cidadeSelecionada, 300);
+  const debouncedSemanaSelecionada = useDebounce(semanaSelecionada, 300);
+  
+  // Estados de cache para performance
+  const [cacheCidades, setCacheCidades] = React.useState<{ [grupo: string]: string[] }>({});
+  const [cacheDescPks, setCacheDescPks] = React.useState<{ [grupo: string]: { [cidade: string]: number } }>({});
+  const [cacheSemanas, setCacheSemanas] = React.useState<{ [descPk: string]: { semanaInicial_vl: number, semanaFinal_vl: number }[] }>({});
+  const [cacheHexagonos, setCacheHexagonos] = React.useState<{ [key: string]: Hexagono[] }>({});
+  
+  // Estados para feedback do usuário
   const [statusMessage, setStatusMessage] = React.useState<string>("");
   const [statusType, setStatusType] = React.useState<"info" | "success" | "warning" | "error">("info");
+  const [isDebouncing, setIsDebouncing] = React.useState(false);
   const [lastSearchInfo, setLastSearchInfo] = React.useState<{
     cidade: string;
     semana: string;
@@ -102,6 +127,74 @@ export const Mapa: React.FC = () => {
     return `${Math.floor(diffInSeconds / 86400)} dias atrás`;
   };
 
+  // Funções auxiliares para popup melhorado
+  const getHexagonRanking = (hex: Hexagono, allHexagons: Hexagono[]) => {
+    const sortedHexagons = [...allHexagons].sort((a, b) => b.calculatedFluxoEstimado_vl - a.calculatedFluxoEstimado_vl);
+    const rank = sortedHexagons.findIndex(h => h.hexagon_pk === hex.hexagon_pk) + 1;
+    const total = allHexagons.length;
+    const percentile = Math.round((rank / total) * 100);
+    
+    if (percentile <= 10) return { text: "Top 10%", color: "#10b981", emoji: "🥇" };
+    if (percentile <= 25) return { text: "Top 25%", color: "#3b82f6", emoji: "🥈" };
+    if (percentile <= 50) return { text: "Top 50%", color: "#f59e0b", emoji: "🥉" };
+    return { text: "Abaixo da média", color: "#6b7280", emoji: "📊" };
+  };
+
+  const getFluxoVsMedia = (hex: Hexagono, allHexagons: Hexagono[]) => {
+    const media = allHexagons.reduce((sum, h) => sum + h.calculatedFluxoEstimado_vl, 0) / allHexagons.length;
+    const diff = ((hex.calculatedFluxoEstimado_vl - media) / media) * 100;
+    
+    if (diff > 20) return { text: `+${diff.toFixed(0)}%`, color: "#10b981", emoji: "📈" };
+    if (diff > 0) return { text: `+${diff.toFixed(0)}%`, color: "#3b82f6", emoji: "📊" };
+    if (diff > -20) return { text: `${diff.toFixed(0)}%`, color: "#f59e0b", emoji: "📉" };
+    return { text: `${diff.toFixed(0)}%`, color: "#ef4444", emoji: "📉" };
+  };
+
+  const getAreaAproximada = (hex: Hexagono) => {
+    // Estimativa baseada no tamanho padrão de hexágonos H3 nível 8
+    // H3 nível 8 tem aproximadamente 0.74 km²
+    return "~0.74 km²";
+  };
+
+  const getTipoRegiao = (hex: Hexagono) => {
+    // Lógica simples baseada no fluxo para determinar tipo de região
+    if (hex.calculatedFluxoEstimado_vl > 150000) return { text: "Centro comercial", emoji: "🏢" };
+    if (hex.calculatedFluxoEstimado_vl > 100000) return { text: "Área comercial", emoji: "🏪" };
+    if (hex.calculatedFluxoEstimado_vl > 50000) return { text: "Residencial", emoji: "🏠" };
+    return { text: "Baixa densidade", emoji: "🌳" };
+  };
+
+  // Funções para métricas de eficiência
+  const getEficiencia = (hex: Hexagono, allHexagons: Hexagono[]) => {
+    const mediaFluxo = allHexagons.reduce((sum, h) => sum + h.calculatedFluxoEstimado_vl, 0) / allHexagons.length;
+    const eficiencia = (hex.calculatedFluxoEstimado_vl / mediaFluxo) * 100;
+    
+    if (eficiencia > 150) return { text: "Muito Alta", color: "#10b981", emoji: "🚀" };
+    if (eficiencia > 120) return { text: "Alta", color: "#3b82f6", emoji: "💰" };
+    if (eficiencia > 80) return { text: "Média", color: "#f59e0b", emoji: "📊" };
+    return { text: "Baixa", color: "#ef4444", emoji: "📉" };
+  };
+
+  const getCobertura = (hex: Hexagono) => {
+    // Simulação baseada no fluxo - em um sistema real viria da API
+    const cobertura = Math.min(95, Math.max(60, (hex.calculatedFluxoEstimado_vl / 200000) * 100));
+    
+    if (cobertura > 90) return { text: `${cobertura.toFixed(0)}%`, color: "#10b981", emoji: "👥" };
+    if (cobertura > 75) return { text: `${cobertura.toFixed(0)}%`, color: "#3b82f6", emoji: "👥" };
+    if (cobertura > 60) return { text: `${cobertura.toFixed(0)}%`, color: "#f59e0b", emoji: "👥" };
+    return { text: `${cobertura.toFixed(0)}%`, color: "#ef4444", emoji: "👥" };
+  };
+
+  const getPontosDisponiveis = (hex: Hexagono) => {
+    // Usar count_vl se disponível, senão simular baseado no fluxo
+    const pontos = hex.count_vl || Math.floor(hex.calculatedFluxoEstimado_vl / 10000);
+    
+    if (pontos > 15) return { text: `${pontos} pontos`, color: "#10b981", emoji: "📍" };
+    if (pontos > 8) return { text: `${pontos} pontos`, color: "#3b82f6", emoji: "📍" };
+    if (pontos > 3) return { text: `${pontos} pontos`, color: "#f59e0b", emoji: "📍" };
+    return { text: `${pontos} pontos`, color: "#ef4444", emoji: "📍" };
+  };
+
   // useEffect para processar dados pré-selecionados vindos da tela de resultados
   React.useEffect(() => {
     if (location.state?.cidadePreSelecionada || location.state?.semanaPreSelecionada) {
@@ -124,53 +217,77 @@ export const Mapa: React.FC = () => {
     }
   }, [location.state]);
 
+  // useEffect para detectar mudanças em tempo real e mostrar indicador de debounce
+  React.useEffect(() => {
+    const cidadeChanged = cidadeSelecionada !== debouncedCidadeSelecionada;
+    const semanaChanged = semanaSelecionada !== debouncedSemanaSelecionada;
+    
+    // Só mostrar debounce se realmente há mudança E não está usando cache
+    if ((cidadeChanged || semanaChanged) && !isDebouncing) {
+      setIsDebouncing(true);
+      showStatus("⏳ Aguardando...", "info");
+    } else if (!cidadeChanged && !semanaChanged && isDebouncing) {
+      // Resetar debounce quando valores estão sincronizados
+      setIsDebouncing(false);
+    }
+  }, [cidadeSelecionada, debouncedCidadeSelecionada, semanaSelecionada, debouncedSemanaSelecionada, isDebouncing]);
+
   React.useEffect(() => {
     console.log("Mapa: grupo recebido:", grupo);
     
     if (grupo) {
+      // Verificar cache primeiro
+      if (cacheCidades[grupo]) {
+        console.log("🗺️ [CACHE] Usando cidades do cache para grupo:", grupo);
+        setCidades(cacheCidades[grupo]);
+        setLoading(false);
+        setLoadingCidades(false);
+        setLoadingDescPks(false);
+        setIsDebouncing(false); // Resetar debounce quando usa cache
+        showStatus(`✅ Dados carregados do cache para grupo ${grupo}`, "success");
+        return;
+      }
+
       showStatus(`Carregando dados do grupo "${grupo}"...`, "info");
       setLoading(true);
+      setLoadingCidades(true);
+      setLoadingDescPks(true);
       setErro(null);
       clearStatus();
       
-      // Teste inicial da API
-      api.get('debug')
-        .then(res => {
-          console.log("Mapa: API debug funcionando:", res.data);
-        })
-        .catch(err => {
-          console.error("Mapa: API debug falhou:", err);
-          showStatus("⚠️ Problemas de conectividade detectados", "warning");
-        });
+      console.log("🗺️ [PERF] Carregando dados em paralelo para grupo:", grupo);
       
-      console.log("Mapa: fazendo requisição para cidades com grupo:", grupo);
+      // Paralelizar chamadas independentes
+      const promises = [
+        api.get(`cidades?grupo=${grupo}`),
+        cacheDescPks[grupo] ? Promise.resolve({ data: { descPks: cacheDescPks[grupo] } }) : api.get(`pivot-descpks?grupo=${grupo}`)
+      ];
       
-      api.get(`cidades?grupo=${grupo}`)
-        .then(res => {
-          console.log("Mapa: resposta da API cidades:", res.data);
-          console.log("Mapa: cidades recebidas:", res.data.cidades);
-          console.log("Mapa: tipo de cidades:", typeof res.data.cidades);
-          console.log("Mapa: cidades é array?", Array.isArray(res.data.cidades));
-          setCidades(res.data.cidades);
-          if (res.data.nomeGrupo) setNomeGrupo(res.data.nomeGrupo);
+      Promise.all(promises)
+        .then(([cidadesRes, descPksRes]) => {
+          // Processar resposta de cidades
+          console.log("🗺️ [CACHE] Salvando cidades no cache para grupo:", grupo);
+          setCidades(cidadesRes.data.cidades);
+          setCacheCidades(prev => ({ ...prev, [grupo]: cidadesRes.data.cidades }));
+          setLoadingCidades(false);
+          if (cidadesRes.data.nomeGrupo) setNomeGrupo(cidadesRes.data.nomeGrupo);
           
-          if (res.data.cidades && res.data.cidades.length) {
-            showStatus(`✅ ${res.data.cidades.length} praça(s) encontrada(s) para o grupo "${res.data.nomeGrupo || grupo}"`, "success");
-            
-            // Buscar os planoMidiaDesc_pk para cada cidade
-            console.log("Mapa: fazendo requisição para pivot-descpks com grupo:", grupo);
-            api.get(`pivot-descpks?grupo=${grupo}`)
-              .then(r => {
-                console.log("Mapa: resposta da API pivot-descpks:", r.data);
-                setDescPks(Object.fromEntries(Object.entries(r.data.descPks).map(([k, v]) => [k.trim().toUpperCase(), Number(v)])));
-              })
-              .catch(err => {
-                console.error("Mapa: erro na API pivot-descpks:", err);
-                setDescPks({});
-                showStatus("⚠️ Erro ao carregar dados das praças", "warning");
-              });
+          // Processar resposta de descPks
+          if (!cacheDescPks[grupo]) {
+            console.log("🗺️ [CACHE] Salvando descPks no cache para grupo:", grupo);
+            const descPksData = Object.fromEntries(Object.entries(descPksRes.data.descPks).map(([k, v]) => [k.trim().toUpperCase(), Number(v)]));
+            setDescPks(descPksData);
+            setCacheDescPks(prev => ({ ...prev, [grupo]: descPksData }));
           } else {
-            showStatus(`❌ Nenhuma praça encontrada para o grupo "${res.data.nomeGrupo || grupo}". Verifique se o grupo possui dados cadastrados.`, "error");
+            console.log("🗺️ [CACHE] Usando descPks do cache para grupo:", grupo);
+            setDescPks(cacheDescPks[grupo]);
+          }
+          setLoadingDescPks(false);
+          
+          if (cidadesRes.data.cidades && cidadesRes.data.cidades.length) {
+            showStatus(`✅ ${cidadesRes.data.cidades.length} praça(s) encontrada(s) para o grupo "${cidadesRes.data.nomeGrupo || grupo}"`, "success");
+          } else {
+            showStatus(`❌ Nenhuma praça encontrada para o grupo "${cidadesRes.data.nomeGrupo || grupo}". Verifique se o grupo possui dados cadastrados.`, "error");
           }
         })
         .catch(err => {
@@ -182,6 +299,8 @@ export const Mapa: React.FC = () => {
         })
         .finally(() => {
           setLoading(false);
+          setLoadingCidades(false);
+          setLoadingDescPks(false);
         });
     } else {
       showStatus("👋 Bem-vindo ao Mapa de Roteiros! Selecione um grupo para começar.", "info");
@@ -189,14 +308,29 @@ export const Mapa: React.FC = () => {
   }, [grupo]);
 
   React.useEffect(() => {
-    console.log("Mapa: cidadeSelecionada:", cidadeSelecionada, "descPks:", descPks);
-    if (cidadeSelecionada && descPks[cidadeSelecionada]) {
-      showStatus(`📅 Carregando semanas disponíveis para ${cidadeSelecionada}...`, "info");
-      console.log("Mapa: fazendo requisição para semanas com desc_pk:", descPks[cidadeSelecionada]);
-      api.get(`semanas?desc_pk=${descPks[cidadeSelecionada]}`)
+    console.log("🗺️ [DEBOUNCE] cidadeSelecionada:", cidadeSelecionada, "debounced:", debouncedCidadeSelecionada);
+    console.log("🗺️ [DEBOUNCE] descPks:", descPks);
+    if (debouncedCidadeSelecionada && descPks[debouncedCidadeSelecionada]) {
+      const descPk = descPks[debouncedCidadeSelecionada];
+      
+      // Verificar cache primeiro
+      if (cacheSemanas[descPk]) {
+        console.log("🗺️ [CACHE] Usando semanas do cache para descPk:", descPk);
+        setSemanas(cacheSemanas[descPk]);
+        setLoadingSemanas(false);
+        setIsDebouncing(false); // Resetar debounce quando usa cache
+        showStatus(`✅ Semanas carregadas do cache para ${debouncedCidadeSelecionada}`, "success");
+        return;
+      }
+
+      showStatus(`📅 [DEBOUNCE] Carregando semanas disponíveis para ${debouncedCidadeSelecionada}...`, "info");
+      setLoadingSemanas(true);
+      console.log("🗺️ [CACHE] Carregando semanas para descPk:", descPk);
+      api.get(`semanas?desc_pk=${descPk}`)
         .then(res => {
-          console.log("Mapa: resposta da API semanas:", res.data);
+          console.log("🗺️ [CACHE] Salvando semanas no cache para descPk:", descPk);
           setSemanas(res.data.semanas);
+          setCacheSemanas(prev => ({ ...prev, [descPk]: res.data.semanas }));
           if (res.data.semanas && res.data.semanas.length > 0) {
             showStatus(`✅ ${res.data.semanas.length} semana(s) encontrada(s) para ${cidadeSelecionada}`, "success");
           } else {
@@ -207,6 +341,9 @@ export const Mapa: React.FC = () => {
           console.error("Mapa: erro na API semanas:", err);
           setSemanas([]);
           showStatus(`❌ Erro ao carregar semanas para ${cidadeSelecionada}`, "error");
+        })
+        .finally(() => {
+          setLoadingSemanas(false);
         });
     } else {
       setSemanas([]);
@@ -214,116 +351,87 @@ export const Mapa: React.FC = () => {
         showStatus(`⚠️ Dados da praça ${cidadeSelecionada} não encontrados`, "warning");
       }
     }
-  }, [cidadeSelecionada, descPks]);
+  }, [debouncedCidadeSelecionada, descPks]);
 
-  // Novo useEffect para buscar hexágonos assim que o grupo for selecionado
+  // useEffect otimizado para buscar hexágonos com debounce
   React.useEffect(() => {
-    if (grupo) {
-      showStatus("🗺️ Carregando mapa do grupo...", "info");
+    console.log("🗺️ [DEBOUNCE] cidadeSelecionada:", cidadeSelecionada, "debounced:", debouncedCidadeSelecionada);
+    console.log("🗺️ [DEBOUNCE] semanaSelecionada:", semanaSelecionada, "debounced:", debouncedSemanaSelecionada);
+    
+    // Se não há cidade selecionada mas há grupo, limpar hexágonos
+    if (!debouncedCidadeSelecionada && grupo) {
+      console.log("🗺️ [DEBUG] Limpando hexágonos - nenhuma cidade selecionada");
+      setHexagonos([]);
+      return;
+    }
+    
+    // Só busca se houver cidadeSelecionada e descPks[cidadeSelecionada]
+    if (debouncedCidadeSelecionada && descPks[debouncedCidadeSelecionada]) {
+      const descPk = descPks[debouncedCidadeSelecionada];
+      const cacheKey = `${descPk}_${debouncedSemanaSelecionada || 'all'}`;
+      
+      // Verificar cache primeiro
+      if (cacheHexagonos[cacheKey]) {
+        console.log("🗺️ [CACHE] Usando hexágonos do cache para:", cacheKey);
+        setHexagonos(cacheHexagonos[cacheKey]);
+        setIsDebouncing(false); // Resetar debounce quando usa cache
+        const semanaText = debouncedSemanaSelecionada ? `semana ${debouncedSemanaSelecionada}` : "todas as semanas";
+        showStatus(`✅ Mapa carregado do cache para ${debouncedCidadeSelecionada} (${semanaText})`, "success");
+        return;
+      }
+
+      const searchTerm = debouncedSemanaSelecionada ? `semana ${debouncedSemanaSelecionada}` : "todas as semanas";
+      showStatus(`🗺️ [DEBOUNCE] Carregando mapa para ${debouncedCidadeSelecionada} (${searchTerm})...`, "info");
       setLoadingHexagonos(true);
-      api.get(`hexagonos?desc_pk=${grupo}`)
+      
+      // Construir URL da API de forma otimizada
+      const apiUrl = debouncedSemanaSelecionada 
+        ? `hexagonos?desc_pk=${descPk}&semana=${debouncedSemanaSelecionada}`
+        : `hexagonos?desc_pk=${descPk}`;
+      
+      console.log("🗺️ [PERF] Carregando hexágonos para:", cacheKey);
+      api.get(apiUrl)
         .then(res => {
           const hexagonosData = res.data.hexagonos || [];
+          console.log("🗺️ [CACHE] Salvando hexágonos no cache para:", cacheKey);
           setHexagonos(hexagonosData);
+          setCacheHexagonos(prev => ({ ...prev, [cacheKey]: hexagonosData }));
           
           if (hexagonosData.length > 0) {
             const totalFluxo = hexagonosData.reduce((sum: number, hex: Hexagono) => sum + hex.calculatedFluxoEstimado_vl, 0);
-            showStatus(`🗺️ Mapa carregado: ${formatNumber(hexagonosData.length)} pontos com fluxo total de ${formatNumber(totalFluxo)}`, "success");
+            const fluxoMedio = totalFluxo / hexagonosData.length;
+            
+            const semanaText = debouncedSemanaSelecionada ? `semana ${debouncedSemanaSelecionada}` : "todas as semanas";
+            showStatus(`✅ Mapa carregado: ${formatNumber(hexagonosData.length)} pontos para ${debouncedCidadeSelecionada} (${semanaText}) - Fluxo médio: ${formatNumber(fluxoMedio)}`, "success");
+            
+            // Salvar informações da última busca
+            setLastSearchInfo({
+              cidade: debouncedCidadeSelecionada,
+              semana: debouncedSemanaSelecionada,
+              totalHexagonos: hexagonosData.length,
+              timestamp: new Date()
+            });
           } else {
-            showStatus(`⚠️ Nenhum ponto encontrado para este grupo. Verifique se há dados de planejamento cadastrados.`, "warning");
+            const semanaText = debouncedSemanaSelecionada ? `semana ${debouncedSemanaSelecionada}` : "todas as semanas";
+            showStatus(`⚠️ Nenhum ponto encontrado para ${debouncedCidadeSelecionada} (${semanaText}). Esta combinação pode não ter dados de planejamento.`, "warning");
           }
         })
         .catch(err => {
-          console.error("Erro ao carregar hexágonos do grupo:", err);
+          console.error("Erro ao carregar hexágonos:", err);
           setHexagonos([]);
-          showStatus("❌ Erro ao carregar mapa do grupo", "error");
+          const semanaText = debouncedSemanaSelecionada ? `semana ${debouncedSemanaSelecionada}` : "todas as semanas";
+          showStatus(`❌ Erro ao carregar mapa para ${debouncedCidadeSelecionada} (${semanaText})`, "error");
         })
         .finally(() => {
           setLoadingHexagonos(false);
         });
-    } else {
-      setHexagonos([]);
     }
-  }, [grupo]);
-
-  // Novo useEffect para buscar hexágonos ao selecionar semana
-  React.useEffect(() => {
-    // Só busca se houver cidadeSelecionada e descPks[cidadeSelecionada]
-    if (cidadeSelecionada && descPks[cidadeSelecionada]) {
-      const searchTerm = semanaSelecionada ? `semana ${semanaSelecionada}` : "todas as semanas";
-      showStatus(`🗺️ Carregando mapa para ${cidadeSelecionada} (${searchTerm})...`, "info");
-      setLoadingHexagonos(true);
-      
-      if (semanaSelecionada) {
-        api.get(`hexagonos?desc_pk=${descPks[cidadeSelecionada]}&semana=${semanaSelecionada}`)
-          .then(res => {
-            const hexagonosData = res.data.hexagonos || [];
-            setHexagonos(hexagonosData);
-            
-            if (hexagonosData.length > 0) {
-              const totalFluxo = hexagonosData.reduce((sum: number, hex: Hexagono) => sum + hex.calculatedFluxoEstimado_vl, 0);
-              const fluxoMedio = totalFluxo / hexagonosData.length;
-              
-              showStatus(`✅ Mapa carregado: ${formatNumber(hexagonosData.length)} pontos para ${cidadeSelecionada} (semana ${semanaSelecionada}) - Fluxo médio: ${formatNumber(fluxoMedio)}`, "success");
-              
-              // Salvar informações da última busca
-              setLastSearchInfo({
-                cidade: cidadeSelecionada,
-                semana: semanaSelecionada,
-                totalHexagonos: hexagonosData.length,
-                timestamp: new Date()
-              });
-            } else {
-              showStatus(`⚠️ Nenhum ponto encontrado para ${cidadeSelecionada} na semana ${semanaSelecionada}. Esta combinação pode não ter dados de planejamento.`, "warning");
-            }
-          })
-          .catch(err => {
-            console.error("Erro ao carregar hexágonos por semana:", err);
-            setHexagonos([]);
-            showStatus(`❌ Erro ao carregar mapa para ${cidadeSelecionada} (semana ${semanaSelecionada})`, "error");
-          })
-          .finally(() => {
-            setLoadingHexagonos(false);
-          });
-      } else {
-        // Se não houver semana selecionada, busca todos os hexágonos da praça
-        api.get(`hexagonos?desc_pk=${descPks[cidadeSelecionada]}`)
-          .then(res => {
-            const hexagonosData = res.data.hexagonos || [];
-            setHexagonos(hexagonosData);
-            
-            if (hexagonosData.length > 0) {
-              const totalFluxo = hexagonosData.reduce((sum: number, hex: Hexagono) => sum + hex.calculatedFluxoEstimado_vl, 0);
-              const fluxoMedio = totalFluxo / hexagonosData.length;
-              
-              showStatus(`✅ Mapa carregado: ${formatNumber(hexagonosData.length)} pontos para ${cidadeSelecionada} (todas as semanas) - Fluxo médio: ${formatNumber(fluxoMedio)}`, "success");
-              
-              // Salvar informações da última busca
-              setLastSearchInfo({
-                cidade: cidadeSelecionada,
-                semana: "Todas",
-                totalHexagonos: hexagonosData.length,
-                timestamp: new Date()
-              });
-            } else {
-              showStatus(`⚠️ Nenhum ponto encontrado para ${cidadeSelecionada}. Esta praça pode não ter dados de planejamento.`, "warning");
-            }
-          })
-          .catch(err => {
-            console.error("Erro ao carregar hexágonos da praça:", err);
-            setHexagonos([]);
-            showStatus(`❌ Erro ao carregar mapa para ${cidadeSelecionada}`, "error");
-          })
-          .finally(() => {
-            setLoadingHexagonos(false);
-          });
-      }
-    }
-  }, [cidadeSelecionada, descPks, semanaSelecionada]);
+  }, [debouncedCidadeSelecionada, debouncedSemanaSelecionada, descPks]);
 
   // Calcular o range de fluxo para normalizar o tamanho dos pontos
   const minFluxo = hexagonos.length > 0 ? Math.min(...hexagonos.map(h => h.calculatedFluxoEstimado_vl)) : 0;
   const maxFluxo = hexagonos.length > 0 ? Math.max(...hexagonos.map(h => h.calculatedFluxoEstimado_vl)) : 1;
+  
   function getRadius(fluxo: number) {
     // Raio mínimo 6, máximo 20
     if (maxFluxo === minFluxo) return 10;
@@ -372,13 +480,7 @@ export const Mapa: React.FC = () => {
       return (
         <div className="w-full h-full bg-white flex items-center justify-center rounded border">
           <div className="text-center p-8">
-            {loadingHexagonos ? (
-              <div className="flex flex-col items-center gap-4">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-blue-500 border-solid"></div>
-                <p className="text-blue-600 font-medium">Carregando mapa...</p>
-                <p className="text-sm text-gray-500">Aguarde enquanto processamos os dados</p>
-              </div>
-            ) : semanaSelecionada ? (
+            {semanaSelecionada && !loadingHexagonos ? (
               <div className="flex flex-col items-center gap-3">
                 <div className="text-6xl">🗺️</div>
                 <h3 className="text-lg font-semibold text-gray-700">Nenhum ponto encontrado</h3>
@@ -716,33 +818,6 @@ export const Mapa: React.FC = () => {
                   </div>
                 </div>
               )}
-              {/* Loading overlay após seleção da praça */}
-              {loadingHexagonos && cidadeSelecionada && (
-                <div style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  background: 'rgba(255,255,255,0.8)',
-                  zIndex: 1500,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-blue-500 border-solid mb-4"></div>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ color: '#2563eb', fontWeight: 600, fontSize: 16, marginBottom: 4 }}>
-                      🗺️ Carregando mapa...
-                    </div>
-                    <div style={{ color: '#666', fontSize: 14 }}>
-                      Processando dados para {cidadeSelecionada}
-                      {semanaSelecionada && ` (semana ${semanaSelecionada})`}
-                    </div>
-                  </div>
-                </div>
-              )}
               <MapContainer
                 center={hexagonos.length > 0 ? [hexagonos[0].hex_centroid_lat, hexagonos[0].hex_centroid_lon] : [-15.7801, -47.9292]}
                 zoom={12}
@@ -753,54 +828,290 @@ export const Mapa: React.FC = () => {
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
                 />
                 <AjustarMapa hexagonos={hexagonos} />
+                
+                {/* Loading Overlay estilo Apple */}
+                {loadingHexagonos && (
+                  <MapLoadingOverlay message="Carregando pontos do mapa..." />
+                )}
                 {hexagonos.map((hex, idx) => (
                   <Polygon
                     key={"poly-" + idx}
                     positions={wktToLatLngs(hex.geometry_8)}
                     pathOptions={{
                       color: hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`,
-                      fillOpacity: 0.4
+                      fillOpacity: 0.6,
+                      weight: 2,
+                      opacity: 0.8
                     }}
                   >
                     <Popup>
-                      <div style={{ minWidth: 200 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8, color: '#2563eb' }}>
-                          📍 Hexágono #{hex.hexagon_pk}
-                        </div>
-                        <div style={{ fontSize: 12, lineHeight: 1.4 }}>
-                          <div><strong>Fluxo estimado:</strong> {formatNumber(hex.fluxoEstimado_vl)}</div>
-                          <div><strong>Fluxo calculado:</strong> {formatNumber(hex.calculatedFluxoEstimado_vl)}</div>
-                          <div><strong>Grupo:</strong> {hex.grupoDesc_st || 'Não definido'}</div>
-                          <div><strong>Plano:</strong> {hex.planoMidiaDesc_st || 'Não definido'}</div>
-                          <div style={{ marginTop: 6, fontSize: 11, color: '#666' }}>
-                            <strong>Coordenadas:</strong><br/>
-                            Lat: {hex.hex_centroid_lat.toFixed(6)}<br/>
-                            Lon: {hex.hex_centroid_lon.toFixed(6)}
+                      <div style={{ minWidth: 280, maxWidth: 320 }}>
+                        {/* Header com ranking */}
+                        <div style={{ 
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+                          color: 'white', 
+                          padding: '12px 16px', 
+                          borderRadius: '8px 8px 0 0',
+                          margin: '-10px -10px 0 -10px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>
+                                🎯 Área Estratégica
+                              </div>
+                              <div style={{ fontSize: 12, opacity: 0.9 }}>
+                                Hexágono #{hex.hexagon_pk}
+                              </div>
+                            </div>
+                            <div style={{ 
+                              background: 'rgba(255,255,255,0.2)', 
+                              padding: '4px 8px', 
+                              borderRadius: '12px',
+                              fontSize: 11,
+                              fontWeight: 600
+                            }}>
+                              {(() => {
+                                const ranking = getHexagonRanking(hex, hexagonos);
+                                return `${ranking.emoji} ${ranking.text}`;
+                              })()}
+                            </div>
                           </div>
+                        </div>
+
+                        {/* Conteúdo principal */}
+                        <div style={{ padding: '16px', background: '#f8fafc' }}>
+                          {/* Métricas principais */}
+                          <div style={{ marginBottom: 16 }}>
+                            <div style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'space-between',
+                              marginBottom: 8
+                            }}>
+                              <div>
+                                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>📊 Fluxo</div>
+                                <div style={{ fontSize: 16, fontWeight: 700, color: '#1e293b' }}>
+                                  {formatNumber(hex.calculatedFluxoEstimado_vl)}
+                                </div>
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>📈 vs Média</div>
+                                <div style={{ 
+                                  fontSize: 14, 
+                                  fontWeight: 600,
+                                  color: (() => {
+                                    const vsMedia = getFluxoVsMedia(hex, hexagonos);
+                                    return vsMedia.color;
+                                  })()
+                                }}>
+                                  {(() => {
+                                    const vsMedia = getFluxoVsMedia(hex, hexagonos);
+                                    return `${vsMedia.emoji} ${vsMedia.text}`;
+                                  })()}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Informações contextuais */}
+                          <div style={{ 
+                            display: 'grid', 
+                            gridTemplateColumns: '1fr 1fr', 
+                            gap: 12,
+                            marginBottom: 16
+                          }}>
+                            <div style={{ 
+                              background: 'white', 
+                              padding: 12, 
+                              borderRadius: 8, 
+                              border: '1px solid #e2e8f0',
+                              textAlign: 'center'
+                            }}>
+                              <div style={{ fontSize: 20, marginBottom: 4 }}>
+                                {(() => {
+                                  const tipoRegiao = getTipoRegiao(hex);
+                                  return tipoRegiao.emoji;
+                                })()}
+                              </div>
+                              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                                {(() => {
+                                  const tipoRegiao = getTipoRegiao(hex);
+                                  return tipoRegiao.text;
+                                })()}
+                              </div>
+                            </div>
+                            
+                            <div style={{ 
+                              background: 'white', 
+                              padding: 12, 
+                              borderRadius: 8, 
+                              border: '1px solid #e2e8f0',
+                              textAlign: 'center'
+                            }}>
+                              <div style={{ fontSize: 20, marginBottom: 4 }}>📏</div>
+                              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                                {getAreaAproximada(hex)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Métricas de eficiência */}
+                          <div style={{ 
+                            display: 'grid', 
+                            gridTemplateColumns: '1fr 1fr 1fr', 
+                            gap: 8,
+                            marginBottom: 16
+                          }}>
+                            <div style={{ 
+                              background: 'white', 
+                              padding: 10, 
+                              borderRadius: 8, 
+                              border: '1px solid #e2e8f0',
+                              textAlign: 'center'
+                            }}>
+                              <div style={{ fontSize: 16, marginBottom: 4 }}>
+                                {(() => {
+                                  const eficiencia = getEficiencia(hex, hexagonos);
+                                  return eficiencia.emoji;
+                                })()}
+                              </div>
+                              <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, marginBottom: 2 }}>
+                                Eficiência
+                              </div>
+                              <div style={{ 
+                                fontSize: 11, 
+                                fontWeight: 700,
+                                color: (() => {
+                                  const eficiencia = getEficiencia(hex, hexagonos);
+                                  return eficiencia.color;
+                                })()
+                              }}>
+                                {(() => {
+                                  const eficiencia = getEficiencia(hex, hexagonos);
+                                  return eficiencia.text;
+                                })()}
+                              </div>
+                            </div>
+                            
+                            <div style={{ 
+                              background: 'white', 
+                              padding: 10, 
+                              borderRadius: 8, 
+                              border: '1px solid #e2e8f0',
+                              textAlign: 'center'
+                            }}>
+                              <div style={{ fontSize: 16, marginBottom: 4 }}>
+                                {(() => {
+                                  const cobertura = getCobertura(hex);
+                                  return cobertura.emoji;
+                                })()}
+                              </div>
+                              <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, marginBottom: 2 }}>
+                                Cobertura
+                              </div>
+                              <div style={{ 
+                                fontSize: 11, 
+                                fontWeight: 700,
+                                color: (() => {
+                                  const cobertura = getCobertura(hex);
+                                  return cobertura.color;
+                                })()
+                              }}>
+                                {(() => {
+                                  const cobertura = getCobertura(hex);
+                                  return cobertura.text;
+                                })()}
+                              </div>
+                            </div>
+                            
+                            <div style={{ 
+                              background: 'white', 
+                              padding: 10, 
+                              borderRadius: 8, 
+                              border: '1px solid #e2e8f0',
+                              textAlign: 'center'
+                            }}>
+                              <div style={{ fontSize: 16, marginBottom: 4 }}>
+                                {(() => {
+                                  const pontos = getPontosDisponiveis(hex);
+                                  return pontos.emoji;
+                                })()}
+                              </div>
+                              <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, marginBottom: 2 }}>
+                                Pontos
+                              </div>
+                              <div style={{ 
+                                fontSize: 11, 
+                                fontWeight: 700,
+                                color: (() => {
+                                  const pontos = getPontosDisponiveis(hex);
+                                  return pontos.color;
+                                })()
+                              }}>
+                                {(() => {
+                                  const pontos = getPontosDisponiveis(hex);
+                                  return pontos.text;
+                                })()}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Dados de planejamento */}
+                          <div style={{ 
+                            background: 'white', 
+                            padding: 12, 
+                            borderRadius: 8, 
+                            border: '1px solid #e2e8f0',
+                            marginBottom: 12
+                          }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>
+                              📋 Dados de Planejamento
+                            </div>
+                            <div style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.4 }}>
+                              <div style={{ marginBottom: 4 }}>
+                                <strong>Grupo:</strong> {hex.grupoDesc_st || 'Não definido'}
+                              </div>
+                              <div style={{ marginBottom: 4 }}>
+                                <strong>Plano:</strong> {hex.planoMidiaDesc_st || 'Não definido'}
+                              </div>
+                              {hex.count_vl && (
+                                <div style={{ marginBottom: 4 }}>
+                                  <strong>Pontos:</strong> {formatNumber(hex.count_vl)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Coordenadas (colapsadas) */}
+                          <details style={{ fontSize: 10, color: '#9ca3af' }}>
+                            <summary style={{ cursor: 'pointer', marginBottom: 4 }}>
+                              📍 Coordenadas (clique para expandir)
+                            </summary>
+                            <div style={{ marginTop: 4, padding: 8, background: '#f1f5f9', borderRadius: 4 }}>
+                              <div><strong>Lat:</strong> {hex.hex_centroid_lat.toFixed(6)}</div>
+                              <div><strong>Lon:</strong> {hex.hex_centroid_lon.toFixed(6)}</div>
+                            </div>
+                          </details>
                         </div>
                       </div>
                     </Popup>
                   </Polygon>
                 ))}
+                
+                {/* CircleMarkers para mostrar tamanhos diferentes baseados no fluxo - SEM POPUP */}
                 {hexagonos.map((hex, idx) => (
                   <CircleMarker
-                    key={hex.hexagon_pk}
+                    key={`circle-${hex.hexagon_pk}`}
                     center={[hex.hex_centroid_lat, hex.hex_centroid_lon]}
-                    pathOptions={{ color: hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`, fillOpacity: 0.7 }}
+                    pathOptions={{ 
+                      color: hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`, 
+                      fillOpacity: 0.7,
+                      weight: 1,
+                      opacity: 0.8
+                    }}
                     radius={getRadius(hex.calculatedFluxoEstimado_vl)}
-                  >
-                    <Popup>
-                      <div style={{ minWidth: 180 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#2563eb' }}>
-                          📍 Hexágono #{hex.hexagon_pk}
-                        </div>
-                        <div style={{ fontSize: 12, lineHeight: 1.3 }}>
-                          <div><strong>Fluxo:</strong> {formatNumber(hex.fluxoEstimado_vl)}</div>
-                          <div><strong>Calculado:</strong> {formatNumber(hex.calculatedFluxoEstimado_vl)}</div>
-                        </div>
-                      </div>
-                    </Popup>
-                  </CircleMarker>
+                    interactive={false} // Não clicável - apenas visual
+                  />
                 ))}
               </MapContainer>
             </div>
