@@ -1,0 +1,2 @@
+export { SuggestionsModal } from './SuggestionsModal';
+

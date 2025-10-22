@@ -9,6 +9,8 @@ import L from 'leaflet';
 import { useDebounce } from '../../hooks/useDebounce';
 import { SkeletonLoader } from '../../components/SkeletonLoader';
 import { MapLoadingOverlay } from '../../components/MapLoadingOverlay';
+import { usePlanoOptimizer } from '../../hooks/usePlanoOptimizer';
+import { SuggestionsModal } from '../../components/SuggestionsModal';
 
 // Tipo para os dados dos hexágonos
 interface Hexagono {
@@ -71,6 +73,11 @@ export const Mapa: React.FC = () => {
   const [hexagonos, setHexagonos] = React.useState<Hexagono[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [loadingHexagonos, setLoadingHexagonos] = React.useState(false);
+  const [mostrarSugestoes, setMostrarSugestoes] = React.useState(false);
+  const [mostrarModalDetalhes, setMostrarModalDetalhes] = React.useState(false);
+  
+  // Hook de otimização do plano
+  const { analise, isAnalyzing, analisar, temDados } = usePlanoOptimizer(hexagonos);
   const [erro, setErro] = React.useState<string | null>(null);
   
   // Loading states granulares
@@ -686,6 +693,64 @@ export const Mapa: React.FC = () => {
                 </select>
               </div>
               
+              {/* Botão de Otimização - Low Profile */}
+              {hexagonos.length > 0 && temDados && (
+                <div className="mb-6">
+                  <button
+                    onClick={() => {
+                      analisar();
+                      setMostrarSugestoes(true);
+                      console.log('🎯 Análise:', analise);
+                    }}
+                    disabled={isAnalyzing}
+                    className="w-full bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg px-4 py-3 text-sm font-medium hover:from-purple-600 hover:to-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      boxShadow: '0 4px 6px -1px rgba(139, 92, 246, 0.3)'
+                    }}
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                        <span>Analisando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-lg">💡</span>
+                        <span>Otimizar Plano</span>
+                        <span className="text-xs opacity-80">(Beta)</span>
+                      </>
+                    )}
+                  </button>
+                  <p className="text-xs text-gray-500 mt-2 text-center">
+                    Sugestões inteligentes para melhorar seu plano de mídia
+                  </p>
+                  
+                  {/* Preview rápido dos insights quando disponível */}
+                  {analise && mostrarSugestoes && (
+                    <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span>📊</span>
+                        <span className="font-bold text-purple-900">Quick Insights:</span>
+                      </div>
+                      <div className="space-y-1 text-purple-800">
+                        <div>• {analise.planoAtual.totalHexagonos} hexágonos analisados</div>
+                        <div>• {analise.planoOtimizado.sugestoes.length} sugestões de melhoria</div>
+                        <div>• Ganho estimado: <span className="font-bold text-green-600">+{analise.planoOtimizado.ganhoPercentual.toFixed(1)}%</span></div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setMostrarModalDetalhes(true);
+                          setMostrarSugestoes(false);
+                        }}
+                        className="mt-2 text-purple-600 hover:text-purple-800 underline text-xs"
+                      >
+                        Ver detalhes completos →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              
               {/* Informações dos hexágonos */}
               {hexagonos.length > 0 && (
                 (() => {
@@ -1174,6 +1239,13 @@ export const Mapa: React.FC = () => {
           </footer>
         </div>
       </div>
+      
+      {/* Modal de Sugestões Detalhadas */}
+      <SuggestionsModal 
+        analise={analise}
+        isOpen={mostrarModalDetalhes}
+        onClose={() => setMostrarModalDetalhes(false)}
+      />
     </div>
   );
 }; 
