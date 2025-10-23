@@ -182,6 +182,7 @@ export const CriarRoteiro: React.FC = () => {
   const [salvandoAba2, setSalvandoAba2] = useState(false);
   const [salvandoAba3, setSalvandoAba3] = useState(false);
   const [salvandoAba4, setSalvandoAba4] = useState(false);
+  const [roteiroSimuladoSalvo, setRoteiroSimuladoSalvo] = useState(false);
   
   // 📊 LOADING EM TEMPO REAL - Aba 4
   const [loadingAba4, setLoadingAba4] = useState({
@@ -382,7 +383,11 @@ export const CriarRoteiro: React.FC = () => {
           semanas: Array.from({ length: semanas }, (_, index) => ({
             semana: `W${index + 1}`,
             insercaoComprada: 0,
-            insercaoOferecida: 0
+            insercaoOferecida: 0,
+            // 🆕 Novos campos adicionados
+            seDigitalInsercoes_vl: 0,
+            seDigitalMaximoInsercoes_vl: 0,
+            seEstaticoVisibilidade_vl: 100
           }))
         }));
         
@@ -405,26 +410,31 @@ export const CriarRoteiro: React.FC = () => {
       // Validações básicas
       if (!planoMidiaGrupo_pk) {
         alert('É necessário salvar a Aba 1 primeiro');
+        setSalvandoAba4(false);
         return;
       }
 
       if (!targetSalvoLocal?.salvo) {
         alert('É necessário salvar a Aba 2 primeiro');
+        setSalvandoAba4(false);
         return;
       }
 
       if (cidadesSalvas.length === 0) {
         alert('É necessário configurar as praças na Aba 3 primeiro');
+        setSalvandoAba4(false);
         return;
       }
 
       if (!pracaSelecionadaSimulado) {
         alert('Selecione uma praça para configurar');
+        setSalvandoAba4(false);
         return;
       }
 
       if (tabelaSimulado.length === 0) {
         alert('Configure a tabela de vias públicas primeiro');
+        setSalvandoAba4(false);
         return;
       }
 
@@ -434,13 +444,29 @@ export const CriarRoteiro: React.FC = () => {
         const linhaDOM = document.querySelectorAll('tbody tr')[index];
         const inputsSemanas = linhaDOM?.querySelectorAll('input[type="number"]');
         
+        // Coletar valores dos novos campos (inputs 2-4 são os novos campos)
+        let seDigitalInsercoes_vl = 0;
+        let seDigitalMaximoInsercoes_vl = 0;
+        let seEstaticoVisibilidade_vl = 100;
+        
+        if (inputsSemanas && inputsSemanas.length >= 5) {
+          seDigitalInsercoes_vl = parseInt((inputsSemanas[2] as HTMLInputElement).value) || 0;
+          seDigitalMaximoInsercoes_vl = parseInt((inputsSemanas[3] as HTMLInputElement).value) || 0;
+          seEstaticoVisibilidade_vl = parseFloat((inputsSemanas[4] as HTMLInputElement).value) || 100;
+        }
+        
         const semanasData = [];
         if (inputsSemanas) {
-          // Os primeiros 2 inputs são inserção comprada/oferecida, depois vêm as semanas
-          for (let i = 2; i < inputsSemanas.length; i++) {
+          // Os primeiros 2 inputs são inserção comprada/oferecida, depois vêm os novos campos, depois as semanas
+          const inicioSemanas = 5; // Começar após os novos campos
+          for (let i = inicioSemanas; i < inputsSemanas.length; i++) {
             semanasData.push({
               insercaoComprada: parseInt((inputsSemanas[i] as HTMLInputElement).value) || 0,
-              insercaoOferecida: 0 // Por enquanto só inserção comprada
+              insercaoOferecida: 0, // Por enquanto só inserção comprada
+              // 🆕 Novos campos coletados dos inputs
+              seDigitalInsercoes_vl,
+              seDigitalMaximoInsercoes_vl,
+              seEstaticoVisibilidade_vl
             });
           }
         }
@@ -586,6 +612,9 @@ export const CriarRoteiro: React.FC = () => {
           mensagemSucesso += `🎯 ROTEIRO SIMULADO PRONTO PARA VISUALIZAÇÃO!`;
 
           alert(mensagemSucesso);
+          
+          // Marcar roteiro simulado como salvo
+          setRoteiroSimuladoSalvo(true);
           
           // Ativar Aba 6 para visualizar resultados
           setAba6Habilitada(true);
@@ -3249,6 +3278,9 @@ export const CriarRoteiro: React.FC = () => {
                                     <th className="px-3 py-2 text-left font-medium text-sm">Visibilidade</th>
                                     <th className="px-3 py-2 text-center font-medium text-sm">Inserção comprada</th>
                                     <th className="px-3 py-2 text-center font-medium text-sm">Inserção oferecida</th>
+                                    <th className="px-3 py-2 text-center font-medium text-sm">Digital Inserções</th>
+                                    <th className="px-3 py-2 text-center font-medium text-sm">Digital Máx. Inserções</th>
+                                    <th className="px-3 py-2 text-center font-medium text-sm">Estático Visibilidade</th>
                                     {Array.from({ length: quantidadeSemanas }, (_, i) => (
                                       <th key={i} className="px-3 py-2 text-center font-medium text-sm">
                                         W{i + 1}
@@ -3291,6 +3323,35 @@ export const CriarRoteiro: React.FC = () => {
                                           className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded"
                                         />
                                       </td>
+                                      {/* 🆕 Novos campos */}
+                                      <td className="px-3 py-2">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          defaultValue="0"
+                                          className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded"
+                                          placeholder="Digital"
+                                        />
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          defaultValue="0"
+                                          className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded"
+                                          placeholder="Máx. Digital"
+                                        />
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="100"
+                                          defaultValue="100"
+                                          className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded"
+                                          placeholder="Visibilidade"
+                                        />
+                                      </td>
                                       {Array.from({ length: quantidadeSemanas }, (_, semanaIndex) => (
                                         <td key={semanaIndex} className="px-3 py-2">
                                           <input
@@ -3315,13 +3376,24 @@ export const CriarRoteiro: React.FC = () => {
                             <button
                               type="button"
                               onClick={salvarRoteiroSimulado}
-                              className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400"
-                              disabled={salvandoAba4}
+                              className={`px-6 py-3 rounded-lg transition-colors ${
+                                roteiroSimuladoSalvo 
+                                  ? 'bg-green-500 text-white cursor-default' 
+                                  : 'bg-green-600 text-white hover:bg-green-700 disabled:bg-gray-400'
+                              }`}
+                              disabled={salvandoAba4 || roteiroSimuladoSalvo}
                             >
                               {salvandoAba4 ? (
                                 <div className="flex items-center justify-center">
                                   <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
                                   Salvando roteiro simulado...
+                                </div>
+                              ) : roteiroSimuladoSalvo ? (
+                                <div className="flex items-center justify-center">
+                                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  ✓ Roteiro Simulado Salvo
                                 </div>
                               ) : 'Salvar Roteiro Simulado'}
                             </button>

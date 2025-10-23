@@ -1,0 +1,65 @@
+{
+  "exemplo_dados_roteiro_simulado": {
+    "descricao": "Exemplo de dados para o roteiro simulado com os 3 novos campos implementados",
+    "planoMidiaDesc_pk": 12345,
+    "dadosTabela": [
+      {
+        "grupo_st": "G2D",
+        "grupoSub_st": "G2D",
+        "grupoDesc_st": "Grupo Digital 2D",
+        "visibilidade": "Selecionável",
+        "semanas": [
+          {
+            "semana": "W1",
+            "insercaoComprada": 40,
+            "insercaoOferecida": 0,
+            "seDigitalInsercoes_vl": 100,
+            "seDigitalMaximoInsercoes_vl": 200,
+            "seEstaticoVisibilidade_vl": 50
+          },
+          {
+            "semana": "W2",
+            "insercaoComprada": 50,
+            "insercaoOferecida": 0,
+            "seDigitalInsercoes_vl": 150,
+            "seDigitalMaximoInsercoes_vl": 250,
+            "seEstaticoVisibilidade_vl": 75
+          }
+        ]
+      }
+    ],
+    "pracasSelecionadas": ["São Paulo", "Rio de Janeiro"],
+    "quantidadeSemanas": 2
+  },
+  "exemplo_json_enviado_para_stored_procedure": {
+    "planoMidiaDesc_pk": 12345,
+    "recordsJson": [
+      {
+        "week_vl": 1,
+        "grupoSub_st": "G2D",
+        "contagem_vl": 40,
+        "seDigitalInsercoes_vl": 100,
+        "seDigitalMaximoInsercoes_vl": 200,
+        "seEstaticoVisibilidade_vl": 50
+      },
+      {
+        "week_vl": 2,
+        "grupoSub_st": "G2D",
+        "contagem_vl": 50,
+        "seDigitalInsercoes_vl": 150,
+        "seDigitalMaximoInsercoes_vl": 250,
+        "seEstaticoVisibilidade_vl": 75
+      }
+    ]
+  },
+  "novos_campos_explicacao": {
+    "seDigitalInsercoes_vl": "Número de inserções digitais planejadas",
+    "seDigitalMaximoInsercoes_vl": "Número máximo de inserções digitais permitidas",
+    "seEstaticoVisibilidade_vl": "Percentual de visibilidade estática (0-100)"
+  },
+  "campos_existentes": {
+    "week_vl": "Número da semana (1-53)",
+    "grupoSub_st": "Código do grupo de mídia",
+    "contagem_vl": "Quantidade/contagem de inserções"
+  }
+}

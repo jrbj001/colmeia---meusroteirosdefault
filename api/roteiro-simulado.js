@@ -72,7 +72,11 @@ async function roteiroSimulado(req, res) {
           recordsJson.push({
             week_vl,
             grupoSub_st: codigoGrupo, // Garantir que seja código, não descrição
-            contagem_vl
+            contagem_vl,
+            // 🆕 Novos campos adicionados
+            seDigitalInsercoes_vl: parseInt(semana.seDigitalInsercoes_vl) || 0,
+            seDigitalMaximoInsercoes_vl: parseInt(semana.seDigitalMaximoInsercoes_vl) || 0,
+            seEstaticoVisibilidade_vl: parseFloat(semana.seEstaticoVisibilidade_vl) || 0
           });
         }
       });
@@ -95,6 +99,9 @@ async function roteiroSimulado(req, res) {
         week_vl: registro.week_vl,
         grupoSub_st: registro.grupoSub_st,
         contagem_vl: registro.contagem_vl,
+        seDigitalInsercoes_vl: registro.seDigitalInsercoes_vl,
+        seDigitalMaximoInsercoes_vl: registro.seDigitalMaximoInsercoes_vl,
+        seEstaticoVisibilidade_vl: registro.seEstaticoVisibilidade_vl,
         tipo_grupoSub_st: typeof registro.grupoSub_st
       });
     });
@@ -135,6 +142,9 @@ async function roteiroSimulado(req, res) {
         gruposConfigurados: [...new Set(recordsJson.map(r => r.grupoSub_st))].length,
         detalhes: {
           totalInsecoesCompradas: recordsJson.reduce((sum, r) => sum + r.contagem_vl, 0),
+          totalDigitalInsercoes: recordsJson.reduce((sum, r) => sum + r.seDigitalInsercoes_vl, 0),
+          totalDigitalMaximoInsercoes: recordsJson.reduce((sum, r) => sum + r.seDigitalMaximoInsercoes_vl, 0),
+          totalEstaticoVisibilidade: recordsJson.reduce((sum, r) => sum + r.seEstaticoVisibilidade_vl, 0),
           gruposAtivos: [...new Set(recordsJson.map(r => r.grupoSub_st))],
           distribuicaoSemanal: recordsJson.reduce((acc, r) => {
             acc[`W${r.week_vl}`] = (acc[`W${r.week_vl}`] || 0) + r.contagem_vl;
