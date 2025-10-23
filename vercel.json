@@ -6,6 +6,26 @@
   },
   "rewrites": [
     {
+      "source": "/callback",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/login",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/mapa",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/criar-roteiro",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/visualizar-resultados",
+      "destination": "/index.html"
+    },
+    {
       "source": "/upload-roteiros-plano-midia",
       "destination": "/api/upload-roteiros-plano-midia.js"
     },
