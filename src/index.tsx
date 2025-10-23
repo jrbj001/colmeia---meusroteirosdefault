@@ -20,8 +20,9 @@ createRoot(document.getElementById("app") as HTMLElement).render(
       clientId={import.meta.env.VITE_AUTH0_CLIENT_ID}
       authorizationParams={{
         redirect_uri: import.meta.env.VITE_AUTH0_CALLBACK_URL,
-        logout_uri: import.meta.env.VITE_AUTH0_LOGOUT_URL,
       }}
+      cacheLocation="localstorage"
+      useRefreshTokens={true}
     >
       <AuthProvider>
         <BrowserRouter>
