@@ -44,7 +44,7 @@ export const Topbar: React.FC<TopbarProps> = ({ menuReduzido, breadcrumb }) => {
         // Logout do Auth0
         await logoutWithRedirect({
           logoutParams: {
-            returnTo: window.location.origin
+            returnTo: import.meta.env.VITE_AUTH0_LOGOUT_URL
           }
         });
       } else {
