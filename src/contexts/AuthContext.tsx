@@ -5,6 +5,7 @@ interface User {
   id: string;
   email: string;
   name: string;
+  picture?: string;
 }
 
 interface AuthContextType {
@@ -39,6 +40,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         id: auth0User.sub || '',
         email: auth0User.email || '',
         name: auth0User.name || auth0User.nickname || '',
+        picture: auth0User.picture || undefined,
       };
       setUser(localUser);
     } else {
