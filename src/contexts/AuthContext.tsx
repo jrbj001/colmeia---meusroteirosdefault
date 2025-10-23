@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useAuth0 } from '@auth0/auth0-react';
 
 interface User {
   id: string;
@@ -23,25 +24,48 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { user: auth0User, isAuthenticated: auth0IsAuthenticated, isLoading: auth0IsLoading } = useAuth0();
 
-  // Verificar se há um usuário logado no localStorage
+  // Sincronizar Auth0 com o estado local
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
-    const userData = localStorage.getItem('user_data');
-    
-    if (token && userData) {
-      try {
-        const user = JSON.parse(userData);
-        setUser(user);
-      } catch (error) {
-        console.error('Erro ao carregar dados do usuário:', error);
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('user_data');
-      }
+    if (auth0IsLoading) {
+      setIsLoading(true);
+      return;
+    }
+
+    if (auth0IsAuthenticated && auth0User) {
+      // Converter usuário do Auth0 para o formato local
+      const localUser: User = {
+        id: auth0User.sub || '',
+        email: auth0User.email || '',
+        name: auth0User.name || auth0User.nickname || '',
+      };
+      setUser(localUser);
+    } else {
+      setUser(null);
     }
     
     setIsLoading(false);
-  }, []);
+  }, [auth0User, auth0IsAuthenticated, auth0IsLoading]);
+
+  // Fallback: verificar localStorage para login local
+  useEffect(() => {
+    if (!auth0IsAuthenticated && !auth0IsLoading) {
+      const token = localStorage.getItem('auth_token');
+      const userData = localStorage.getItem('user_data');
+      
+      if (token && userData) {
+        try {
+          const user = JSON.parse(userData);
+          setUser(user);
+        } catch (error) {
+          console.error('Erro ao carregar dados do usuário:', error);
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('user_data');
+        }
+      }
+    }
+  }, [auth0IsAuthenticated, auth0IsLoading]);
 
   const login = async (email: string, password: string): Promise<void> => {
     try {
@@ -70,9 +94,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = (): void => {
+    console.log('AuthContext logout chamado');
+    // Limpar dados locais
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_data');
     setUser(null);
+    
+    // Se estiver usando Auth0, redirecionar para logout do Auth0
+    if (auth0IsAuthenticated) {
+      console.log('Auth0 autenticado, logout será feito pelo componente');
+      // O logout do Auth0 será feito pelo componente que chama esta função
+      // usando logoutWithRedirect do useAuth0
+    } else {
+      console.log('Logout local realizado');
+    }
   };
 
   const value: AuthContextType = {

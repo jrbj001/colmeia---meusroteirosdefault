@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { useAuth0 } from "@auth0/auth0-react";
 import { Avatar } from "../Avatar";
 import { ExitToApp } from "../../icons/ExitToApp";
 import { useAuth } from "../../contexts/AuthContext";
@@ -16,6 +17,7 @@ interface TopbarProps {
 
 export const Topbar: React.FC<TopbarProps> = ({ menuReduzido, breadcrumb }) => {
   const { logout, user } = useAuth();
+  const { logoutWithRedirect, isAuthenticated: auth0IsAuthenticated, isLoading: auth0IsLoading } = useAuth0();
   
   const defaultBreadcrumb = [
     { label: "Home", path: "/" },
@@ -24,8 +26,31 @@ export const Topbar: React.FC<TopbarProps> = ({ menuReduzido, breadcrumb }) => {
 
   const breadcrumbItems = breadcrumb?.items || defaultBreadcrumb;
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    console.log('Logout iniciado. Auth0 autenticado:', auth0IsAuthenticated);
+    
+    try {
+      if (auth0IsAuthenticated) {
+        console.log('Fazendo logout do Auth0...');
+        // Logout do Auth0
+        await logoutWithRedirect({
+          logoutParams: {
+            returnTo: window.location.origin
+          }
+        });
+      } else {
+        console.log('Fazendo logout local...');
+        // Logout local
+        logout();
+        // Redirecionar para login após logout local
+        window.location.href = '/login';
+      }
+    } catch (error) {
+      console.error('Erro no logout:', error);
+      // Fallback: logout local
+      logout();
+      window.location.href = '/login';
+    }
   };
 
   return (
