@@ -77,6 +77,12 @@ export const CriarRoteiro: React.FC = () => {
   // Estados para as abas
   const [abaAtiva, setAbaAtiva] = useState(1);
   
+  // Estados para controle de abas preenchidas
+  const [aba1Preenchida, setAba1Preenchida] = useState(false);
+  const [aba2Preenchida, setAba2Preenchida] = useState(false);
+  const [aba3Preenchida, setAba3Preenchida] = useState(false);
+  const [aba4Preenchida, setAba4Preenchida] = useState(false);
+  
   // Estados para aba 6 - Resultados
   const [dadosResultados, setDadosResultados] = useState<any[]>([]);
   const [totaisResultados, setTotaisResultados] = useState<any>(null);
@@ -1627,6 +1633,7 @@ export const CriarRoteiro: React.FC = () => {
 
       setDadosUpload(uploadData);
       setUploadCompleto(true);
+      setAba4Preenchida(true); // Marcar Aba 4 como preenchida
       setUploadRoteiros_pks(uploadResponse.data.roteiros.map((r: any) => r.pk));
       setRoteirosSalvos([...roteirosCarregados]);
 
@@ -2087,6 +2094,7 @@ export const CriarRoteiro: React.FC = () => {
       if (response.data && response.data[0]?.new_pk) {
         const newPk = response.data[0].new_pk;
         setPlanoMidiaGrupo_pk(newPk);
+        setAba1Preenchida(true); // Marcar Aba 1 como preenchida
         alert(`Roteiro criado com sucesso! PK: ${newPk}`);
       } else {
         throw new Error('Resposta inválida do servidor');
@@ -2125,6 +2133,8 @@ export const CriarRoteiro: React.FC = () => {
         faixaEtaria,
         salvo: true
       });
+      
+      setAba2Preenchida(true); // Marcar Aba 2 como preenchida
       
       let mensagemSucesso = `💾 TARGET CONFIGURADO LOCALMENTE!\n\n`;
       mensagemSucesso += `📊 CONFIGURAÇÃO:\n`;
@@ -2166,6 +2176,8 @@ export const CriarRoteiro: React.FC = () => {
       // Salvar as cidades selecionadas para controle de estado
       setCidadesSalvas([...cidadesSelecionadas]);
       
+      setAba3Preenchida(true); // Marcar Aba 3 como preenchida
+      
       // Simular um plano mídia PK temporário para ativar a Aba 4
       setPlanoMidia_pks([999999]); // PK temporário, será substituído na Aba 4
       
@@ -2192,6 +2204,60 @@ export const CriarRoteiro: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     // Esta função não será mais utilizada, cada aba tem seu próprio botão salvar
+  };
+
+  // Função para validar se o tipo de roteiro foi selecionado
+  const validarTipoRoteiro = () => {
+    if (!tipoRoteiro || (tipoRoteiro !== 'completo' && tipoRoteiro !== 'simulado')) {
+      alert('É necessário selecionar o tipo de roteiro (Completo ou Simulado) antes de prosseguir.');
+      return false;
+    }
+    return true;
+  };
+
+  // Função para navegar entre abas com validação sequencial
+  const navegarParaAba = (numeroAba: number) => {
+    // Validação do tipo de roteiro (obrigatório para todas as abas exceto 1)
+    if (numeroAba !== 1 && !validarTipoRoteiro()) {
+      return; // Não permite navegação se não passou na validação
+    }
+
+    // Lógica sequencial das abas
+    switch (numeroAba) {
+      case 1:
+        setAbaAtiva(1);
+        break;
+      case 2:
+        if (aba1Preenchida) {
+          setAbaAtiva(2);
+        } else {
+          alert('É necessário preencher a Aba 1 antes de prosseguir para a Aba 2.');
+        }
+        break;
+      case 3:
+        if (aba2Preenchida) {
+          setAbaAtiva(3);
+        } else {
+          alert('É necessário preencher a Aba 2 antes de prosseguir para a Aba 3.');
+        }
+        break;
+      case 4:
+        if (aba3Preenchida) {
+          setAbaAtiva(4);
+        } else {
+          alert('É necessário preencher a Aba 3 antes de prosseguir para a Aba 4.');
+        }
+        break;
+      case 6:
+        if (aba4Preenchida) {
+          setAbaAtiva(6);
+        } else {
+          alert('É necessário preencher a Aba 4 antes de prosseguir para a Aba 6.');
+        }
+        break;
+      default:
+        setAbaAtiva(numeroAba);
+    }
   };
 
 
@@ -2236,7 +2302,7 @@ export const CriarRoteiro: React.FC = () => {
               {/* Tipo de roteiro */}
               <div className="w-[500px] mb-8">
                 <label className="block text-base text-[#3a3a3a] mb-2">
-                  Tipo de roteiro
+                  Tipo de roteiro <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <select
@@ -2245,9 +2311,6 @@ export const CriarRoteiro: React.FC = () => {
                     className="w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal"
                   >
                     <option value="">Selecione qual tipo do roteiro irá criar</option>
-                    <option value="campanha">Campanha</option>
-                    <option value="roteiro">Roteiro</option>
-                    <option value="planejamento">Planejamento</option>
                     <option value="completo">Roteiro Completo</option>
                     <option value="simulado">Roteiro Simulado</option>
                   </select>
@@ -2270,7 +2333,7 @@ export const CriarRoteiro: React.FC = () => {
                       ? 'bg-white border-2 border-blue-500 rounded-lg' 
                       : 'hover:bg-gray-50 rounded-lg'
                   }`}
-                  onClick={() => setAbaAtiva(1)}
+                  onClick={() => navegarParaAba(1)}
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 1 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>01</span>
                   <span className={`font-medium ${abaAtiva === 1 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Nomear roteiro</span>
@@ -2284,7 +2347,7 @@ export const CriarRoteiro: React.FC = () => {
                       ? 'bg-white border-2 border-blue-500 rounded-lg' 
                       : 'hover:bg-gray-50 rounded-lg'
                   }`}
-                  onClick={() => setAbaAtiva(2)}
+                  onClick={() => navegarParaAba(2)}
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 2 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>02</span>
                   <span className={`font-medium ${abaAtiva === 2 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Configurar target</span>
@@ -2298,7 +2361,7 @@ export const CriarRoteiro: React.FC = () => {
                       ? 'bg-white border-2 border-blue-500 rounded-lg' 
                       : 'hover:bg-gray-50 rounded-lg'
                   }`}
-                  onClick={() => setAbaAtiva(3)}
+                  onClick={() => navegarParaAba(3)}
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 3 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>03</span>
                   <span className={`font-medium ${abaAtiva === 3 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Configurar praça</span>
@@ -2311,7 +2374,7 @@ export const CriarRoteiro: React.FC = () => {
                       ? 'bg-white border-2 border-blue-500 rounded-lg' 
                       : 'hover:bg-gray-50 rounded-lg'
                   }`}
-                  onClick={() => setAbaAtiva(4)}
+                  onClick={() => navegarParaAba(4)}
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 4 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>04</span>
                   <span className={`font-medium ${abaAtiva === 4 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Definir vias públicas</span>
@@ -2330,7 +2393,7 @@ export const CriarRoteiro: React.FC = () => {
                         ? 'bg-white border-2 border-blue-500 rounded-lg' 
                         : 'hover:bg-gray-50 rounded-lg'
                     }`}
-                    onClick={() => setAbaAtiva(6)}
+                    onClick={() => navegarParaAba(6)}
                   >
                     <span className={`font-bold text-sm mr-2 ${abaAtiva === 6 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>06</span>
                     <span className={`font-medium ${abaAtiva === 6 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Resultados</span>
