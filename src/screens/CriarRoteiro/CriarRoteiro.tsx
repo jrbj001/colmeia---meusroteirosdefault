@@ -211,7 +211,6 @@ export const CriarRoteiro: React.FC = () => {
   const [cidadesSalvas, setCidadesSalvas] = useState<Cidade[]>([]);
   
   // Estados para Aba 4 - Definir vias públicas
-  const [tipoRoteiroAba4, setTipoRoteiroAba4] = useState<'completo' | 'simulado'>('completo');
   const [arquivoExcel, setArquivoExcel] = useState<File | null>(null);
   const [roteirosCarregados, setRoteirosCarregados] = useState<any[]>([]);
   const [roteirosSalvos, setRoteirosSalvos] = useState<any[]>([]);
@@ -378,7 +377,7 @@ export const CriarRoteiro: React.FC = () => {
           grupo_st: grupo.grupo_st,
           grupoSub_st: grupo.grupoSub_st,
           grupoDesc_st: grupo.grupoDesc_st,
-          visibilidade: 'Selecionável', // Valor padrão
+          visibilidade: '100', // Valor padrão - Alta
           // Criar colunas para cada semana
           semanas: Array.from({ length: semanas }, (_, index) => ({
             semana: `W${index + 1}`,
@@ -2249,6 +2248,8 @@ export const CriarRoteiro: React.FC = () => {
                     <option value="campanha">Campanha</option>
                     <option value="roteiro">Roteiro</option>
                     <option value="planejamento">Planejamento</option>
+                    <option value="completo">Roteiro Completo</option>
+                    <option value="simulado">Roteiro Simulado</option>
                   </select>
                   <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                     <svg className="w-4 h-4 text-[#3A3A3A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2365,7 +2366,7 @@ export const CriarRoteiro: React.FC = () => {
                             onChange={(e) => setNomeRoteiro(e.target.value)}
                             placeholder="Ex.: J6574_carnaval_sao_paulo"
                             disabled={modoVisualizacao}
-                            className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-[#b3b3b3] text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                            className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-[#b3b3b3] text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
                           />
                         </div>
 
@@ -2379,7 +2380,7 @@ export const CriarRoteiro: React.FC = () => {
                               <select
                                 value={agencia}
                                 onChange={(e) => setAgencia(e.target.value)}
-                                className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
                                 disabled={loadingAgencias || modoVisualizacao}
                               >
                                 <option value="">
@@ -2445,7 +2446,7 @@ export const CriarRoteiro: React.FC = () => {
                             }}
                             placeholder="Ex.: R$ 10.000,00"
                             disabled={modoVisualizacao}
-                            className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-[#b3b3b3] text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                            className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-[#b3b3b3] text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
                           />
                         </div>
                       </div>
@@ -2462,7 +2463,7 @@ export const CriarRoteiro: React.FC = () => {
                               <select
                                 value={marca}
                                 onChange={(e) => setMarca(e.target.value)}
-                                className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
                                 disabled={loadingMarcas || modoVisualizacao}
                               >
                                 <option value="">
@@ -2502,7 +2503,7 @@ export const CriarRoteiro: React.FC = () => {
                               <select
                                 value={categoria}
                                 onChange={(e) => setCategoria(e.target.value)}
-                                className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
                                 disabled={loadingCategorias || modoVisualizacao}
                               >
                                 <option value="">
@@ -2577,7 +2578,7 @@ export const CriarRoteiro: React.FC = () => {
                           <select
                             value={genero}
                             onChange={(e) => setGenero(e.target.value)}
-                            className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                            className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
                             disabled={loadingGeneros || modoVisualizacao}
                           >
                             <option value="">
@@ -2606,7 +2607,7 @@ export const CriarRoteiro: React.FC = () => {
                           <select
                             value={classe}
                             onChange={(e) => setClasse(e.target.value)}
-                            className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                            className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
                             disabled={loadingClasses || modoVisualizacao}
                           >
                             <option value="">
@@ -2636,7 +2637,7 @@ export const CriarRoteiro: React.FC = () => {
                             <select
                               value={faixaEtaria}
                               onChange={(e) => setFaixaEtaria(e.target.value)}
-                              className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                              className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
                               disabled={loadingFaixasEtarias || modoVisualizacao}
                             >
                               <option value="">
@@ -2720,7 +2721,7 @@ export const CriarRoteiro: React.FC = () => {
                           }}
                           placeholder="Ex.: Sorocaba - SP"
                           disabled={loadingCidades || modoVisualizacao}
-                          className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-[#b3b3b3] text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                          className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-[#b3b3b3] text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
                         />
                         
                         {/* Tags de cidades selecionadas */}
@@ -2784,7 +2785,7 @@ export const CriarRoteiro: React.FC = () => {
                           {cidadesSelecionadas.map((cidade) => (
                             <div
                               key={cidade.id_cidade}
-                              className="flex items-center bg-gray-100 text-[#3a3a3a] px-3 py-1 rounded-full text-sm"
+                              className="flex items-center bg-gray-50 text-[#3a3a3a] px-3 py-1 rounded-full text-sm"
                             >
                               <span>{cidade.nome_cidade} - {cidade.nome_estado}</span>
                               <button
@@ -2896,7 +2897,7 @@ export const CriarRoteiro: React.FC = () => {
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
                       {modoVisualizacao 
                         ? 'Vias públicas do roteiro' 
-                        : tipoRoteiroAba4 === 'simulado' 
+                        : tipoRoteiro === 'simulado' 
                           ? 'Adicione as mídias de via pública ao seu roteiro ou faça upload de seu plano pronto.'
                           : 'Faça o upload do seu plano.'
                       }
@@ -3024,42 +3025,10 @@ export const CriarRoteiro: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Seletor de tipo de roteiro */}
-                  {!modoVisualizacao && (
-                    <div className="mb-8">
-                      <label className="block text-base text-[#3a3a3a] mb-3">
-                        Tipo de roteiro
-                      </label>
-                      <div className="flex gap-4">
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name="tipoRoteiro"
-                            value="completo"
-                            checked={tipoRoteiroAba4 === 'completo'}
-                            onChange={(e) => setTipoRoteiroAba4(e.target.value as 'completo' | 'simulado')}
-                            className="mr-2"
-                          />
-                          <span>Roteiro completo</span>
-                        </label>
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name="tipoRoteiro"
-                            value="simulado"
-                            checked={tipoRoteiroAba4 === 'simulado'}
-                            onChange={(e) => setTipoRoteiroAba4(e.target.value as 'completo' | 'simulado')}
-                            className="mr-2"
-                          />
-                          <span>Roteiro simulado</span>
-                        </label>
-                      </div>
-                    </div>
-                  )}
                   
                   <form onSubmit={handleSubmit}>
                     {/* Roteiro Completo - Upload de arquivo */}
-                    {tipoRoteiroAba4 === 'completo' && (
+                    {tipoRoteiro === 'completo' && (
                       <>
                     {/* Download do template */}
                     <div className="mb-8">
@@ -3083,35 +3052,46 @@ export const CriarRoteiro: React.FC = () => {
                       <label className="block text-base text-[#3a3a3a] mb-2">
                         Upload do arquivo Excel
                       </label>
-                      <div className="flex items-center gap-4">
-                        <input
-                          type="file"
-                          accept=".xlsx,.xls"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file && !processandoExcel) {
-                              processarArquivoExcel(file);
-                            }
-                          }}
-                          className="hidden"
-                          id="excel-upload"
-                          disabled={processandoExcel}
-                        />
-                        <label
-                          htmlFor="excel-upload"
-                          className={`px-6 py-3 rounded-lg transition-colors ${
-                            processandoExcel 
-                              ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
-                              : 'bg-[#ff4600] text-white hover:bg-orange-600 cursor-pointer'
-                          }`}
-                        >
-                          {processandoExcel ? 'Processando...' : 'Upload Excel'}
-                        </label>
-                        {arquivoExcel && !processandoExcel && (
-                          <span className="text-sm text-green-600">
-                            ✓ {arquivoExcel.name}
-                          </span>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-4">
+                          <input
+                            type="file"
+                            accept=".xlsx,.xls"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file && !processandoExcel && !uploadCompleto) {
+                                processarArquivoExcel(file);
+                              }
+                            }}
+                            className="hidden"
+                            id="excel-upload"
+                            disabled={processandoExcel || uploadCompleto}
+                          />
+                          <label
+                            htmlFor="excel-upload"
+                            className={`px-6 py-3 rounded-lg transition-colors ${
+                              processandoExcel
+                                ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
+                                : uploadCompleto
+                                ? 'bg-green-500 text-white cursor-not-allowed'
+                                : 'bg-[#ff4600] text-white hover:bg-orange-600 cursor-pointer'
+                            }`}
+                          >
+                            {processandoExcel ? 'Processando...' : uploadCompleto ? 'Arquivo já enviado' : 'Upload Excel'}
+                          </label>
+                          {arquivoExcel && !processandoExcel && (
+                            <span className="text-sm text-green-600">
+                              ✓ {arquivoExcel.name}
+                            </span>
+                          )}
+                        </div>
+                        
+                        {uploadCompleto && (
+                          <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                            <p>Arquivo já enviado. Para enviar outro arquivo, crie um novo plano.</p>
+                          </div>
                         )}
+                        
                         {processandoExcel && (
                           <div className="flex items-center gap-2">
                             <div className="animate-spin h-4 w-4 border-2 border-[#ff4600] border-t-transparent rounded-full"></div>
@@ -3137,7 +3117,7 @@ export const CriarRoteiro: React.FC = () => {
                     )}
 
                     {/* Roteiro Simulado - Seleção manual */}
-                    {tipoRoteiroAba4 === 'simulado' && (
+                    {tipoRoteiro === 'simulado' && (
                       <>
                         {/* Praças da Aba 3 */}
                         <div className="mb-8">
@@ -3303,8 +3283,10 @@ export const CriarRoteiro: React.FC = () => {
                                           }}
                                           className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
                                         >
-                                          <option value="Selecionável">Selecionável</option>
-                                          <option value="Não">Não</option>
+                                          <option value="25">Baixa</option>
+                                          <option value="50">Média</option>
+                                          <option value="75">Moderada</option>
+                                          <option value="100">Alta</option>
                                         </select>
                                       </td>
                                       <td className="px-3 py-2">
@@ -3403,7 +3385,7 @@ export const CriarRoteiro: React.FC = () => {
                     )}
 
                     {/* Continuação do conteúdo para roteiro completo */}
-                    {tipoRoteiroAba4 === 'completo' && (
+                    {tipoRoteiro === 'completo' && (
                       <>
 
                     {/* Validação de consistência de cidades */}
@@ -3560,7 +3542,7 @@ export const CriarRoteiro: React.FC = () => {
                               return (
                                 <div key={pracaIndex} className="bg-white border border-gray-300 rounded-lg overflow-hidden">
                                   {/* Header da Praça */}
-                                  <div className="bg-gray-100 px-6 py-4 border-b border-gray-300">
+                                  <div className="bg-gray-50 px-6 py-4 border-b border-gray-300">
                                     <div className="flex items-center justify-between">
                                       <div>
                                         <h4 className="text-lg font-bold text-[#3a3a3a]">
@@ -3640,29 +3622,11 @@ export const CriarRoteiro: React.FC = () => {
                                                 {grupo.grupoDesc_st}
                                               </td>
                                               <td className="px-4 py-3">
-                                                <select 
-                                                  className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] bg-white"
-                                                  defaultValue="Selecionar"
-                                                >
-                                                  <option value="Selecionar">Selecionar</option>
-                                                  <option value="Alta">Alta</option>
-                                                  <option value="Média">Média</option>
-                                                  <option value="Baixa">Baixa</option>
-                                                  <option value="N/A">N/A</option>
-                                                </select>
-                                              </td>
-                                              <td className="px-4 py-3">
                                                 <input 
-                                                  type="number" 
-                                                  step="1"
-                                                  min="0"
-                                                  className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right"
-                                                  value={insercaoComprada}
-                                                  onChange={(e) => {
-                                                    // Garantir que sempre seja inteiro
-                                                    const valor = Math.round(Number(e.target.value) || 0);
-                                                    e.target.value = valor.toString();
-                                                  }}
+                                                  type="text" 
+                                                  className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] bg-gray-50"
+                                                  value="Selecionar"
+                                                  readOnly={true}
                                                 />
                                               </td>
                                               <td className="px-4 py-3">
@@ -3670,13 +3634,19 @@ export const CriarRoteiro: React.FC = () => {
                                                   type="number" 
                                                   step="1"
                                                   min="0"
-                                                  className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right"
+                                                  className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right bg-gray-50"
+                                                  value={insercaoComprada}
+                                                  readOnly={true}
+                                                />
+                                              </td>
+                                              <td className="px-4 py-3">
+                                                <input 
+                                                  type="number" 
+                                                  step="1"
+                                                  min="0"
+                                                  className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right bg-gray-50"
                                                   value={insercaoOferecida}
-                                                  onChange={(e) => {
-                                                    // Garantir que sempre seja inteiro
-                                                    const valor = Math.round(Number(e.target.value) || 0);
-                                                    e.target.value = valor.toString();
-                                                  }}
+                                                  readOnly={true}
                                                 />
                                               </td>
                                               {semanasPraca.map((semana, semanaIndex) => {
@@ -3701,13 +3671,9 @@ export const CriarRoteiro: React.FC = () => {
                                                       type="number" 
                                                       step="1"
                                                       min="0"
-                                                      className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right"
+                                                      className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] text-right bg-gray-50"
                                                       value={valorSemana}
-                                                      onChange={(e) => {
-                                                        // Garantir que sempre seja inteiro
-                                                        const valor = Math.round(Number(e.target.value) || 0);
-                                                        e.target.value = valor.toString();
-                                                      }}
+                                                      readOnly={true}
                                                     />
                                                   </td>
                                                 );
@@ -3876,7 +3842,7 @@ export const CriarRoteiro: React.FC = () => {
                         <div className="overflow-x-auto">
                           <table className="w-full border-collapse border border-gray-300">
                             <thead>
-                              <tr className="bg-gray-100">
+                              <tr className="bg-gray-50">
                                 <th className="border border-gray-300 px-4 py-2 text-left font-medium text-[#3a3a3a]">Praça</th>
                                 <th className="border border-gray-300 px-4 py-2 text-right font-medium text-[#3a3a3a]">Impactos</th>
                                 <th className="border border-gray-300 px-4 py-2 text-right font-medium text-[#3a3a3a]">Cobertura (pessoas)</th>
@@ -4098,7 +4064,7 @@ export const CriarRoteiro: React.FC = () => {
                                     <div className="overflow-x-auto">
                                       <table className="w-full border-collapse border border-gray-300">
                                         <thead>
-                                          <tr className="bg-gray-100">
+                                          <tr className="bg-gray-50">
                                             <th className="border border-gray-300 px-4 py-2 text-left font-medium text-[#3a3a3a]">Itens</th>
                                             {Array.from({ length: 12 }, (_, i) => (
                                               <th key={i} className="border border-gray-300 px-4 py-2 text-center font-medium text-[#3a3a3a]">
