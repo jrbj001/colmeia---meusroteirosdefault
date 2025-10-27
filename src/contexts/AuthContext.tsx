@@ -42,6 +42,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         name: auth0User.name || auth0User.nickname || '',
         picture: auth0User.picture || undefined,
       };
+      
       setUser(localUser);
     } else {
       setUser(null);

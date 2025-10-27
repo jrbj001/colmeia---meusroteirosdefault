@@ -186,9 +186,20 @@ export const VisualizarResultados: React.FC = () => {
 
             {/* Resultados */}
             {carregando ? (
-              <div className="text-center py-8">
-                <div className="animate-spin h-8 w-8 border-2 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                <p className="text-gray-500">Carregando dados dos resultados...</p>
+              <div className="text-center py-12">
+                <style>{`
+                  @keyframes apple-spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                  }
+                `}</style>
+                <div className="mx-auto mb-6" style={{ width: 56, height: 56 }}>
+                  <svg width="56" height="56" viewBox="0 0 24 24" style={{ animation: 'apple-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}>
+                    <circle cx="12" cy="12" r="10" fill="none" stroke="#ff4600" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="60 158" />
+                  </svg>
+                </div>
+                <p className="text-gray-600 font-medium">Carregando dados dos resultados...</p>
+                <p className="text-sm text-gray-400 mt-2">Isso pode levar alguns segundos</p>
               </div>
             ) : erro ? (
               <div className="text-center py-8">

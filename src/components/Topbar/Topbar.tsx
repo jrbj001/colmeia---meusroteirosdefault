@@ -31,7 +31,13 @@ export const Topbar: React.FC<TopbarProps> = ({ menuReduzido, breadcrumb }) => {
     if (auth0IsAuthenticated && auth0User?.picture) {
       return auth0User.picture;
     }
-    // Fallback para avatar genérico ou foto local se houver
+    
+    // Fallback para foto do usuário local (se houver)
+    if (user?.picture) {
+      return user.picture;
+    }
+
+    // Retornar null para mostrar avatar genérico
     return null;
   };
 
@@ -101,7 +107,6 @@ export const Topbar: React.FC<TopbarProps> = ({ menuReduzido, breadcrumb }) => {
             alt={user?.name || 'Usuário'}
             name={user?.name}
             size="large"
-            className="!relative"
           />
           
           <button
