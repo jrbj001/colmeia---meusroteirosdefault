@@ -8,9 +8,12 @@ import { Difference4 } from "../../icons/Difference4";
 import { Delete4 } from "../../icons/Delete4";
 import { Pagination } from "./sections/Pagination";
 import api from "../../config/axios";
-import { LoadingColmeia } from "./components/LoadingColmeia";
+import { TableSkeleton } from "./components/TableSkeleton";
+import { LoadingSpinner } from "../../components/LoadingSpinner";
+import { CheckCircle } from "../../icons/CheckCircle";
 import { PinDrop } from "../../icons/PinDrop/PinDrop";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useRoteirosRefresh } from "../../hooks/useRoteirosRefresh";
 
 // Definir a interface dos dados da view
 interface Roteiro {
@@ -27,6 +30,11 @@ interface Roteiro {
   cidadeUpper_st_concat: string;
   semanasMax_vl: number;
   date_dh: string;
+  inProgress_bl: number;
+  inProgress_st: string;
+  active_bl: number;
+  active_st: string;
+  delete_bl: number;
 }
 
 interface PaginationInfo {
@@ -37,6 +45,7 @@ interface PaginationInfo {
 }
 
 export const MeusRoteiros: React.FC = () => {
+  const navigate = useNavigate();
   const [menuReduzido, setMenuReduzido] = useState(false);
   const [dados, setDados] = useState<Roteiro[]>([]);
   const [paginacao, setPaginacao] = useState<PaginationInfo>({
@@ -47,6 +56,16 @@ export const MeusRoteiros: React.FC = () => {
   });
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  // Verificar se há roteiros em processamento
+  const hasProcessing = dados.some(roteiro => roteiro.inProgress_bl === 1);
+
+  // Hook de refresh automático
+  useRoteirosRefresh({
+    hasProcessing,
+    onRefresh: () => carregarDados(paginacao.currentPage),
+    interval: 5000 // 5 segundos
+  });
 
   const formatarData = (dataString: string) => {
     const data = new Date(dataString);
@@ -87,6 +106,30 @@ export const MeusRoteiros: React.FC = () => {
     carregarDados(novaPagina);
   };
 
+  const handleActionRestricted = (action: string) => {
+    const message = `🚧 Funcionalidade em Desenvolvimento
+
+A ação "${action}" ainda não está disponível.
+
+Para solicitar acesso ou reportar problemas, entre em contato com o administrador do sistema.
+
+Email: suporte@be180.com.br`;
+
+    alert(message);
+  };
+
+  const handleVisualizarResultados = (roteiro: Roteiro) => {
+    console.log('👁️ Visualizando resultados do roteiro:', roteiro);
+    // Navegar para CriarRoteiro na Aba 6 com os dados do roteiro
+    navigate('/criar-roteiro', { 
+      state: { 
+        modoVisualizacao: true,
+        roteiroData: roteiro,
+        abaInicial: 6
+      } 
+    });
+  };
+
   return (
     <>
       <div className="min-h-screen bg-white flex font-sans">
@@ -108,9 +151,17 @@ export const MeusRoteiros: React.FC = () => {
             className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`}
           />
           <div className="w-full overflow-x-auto pt-20 flex-1 overflow-auto">
-            <h1 className="text-lg font-bold text-[#222] tracking-wide mb-4 uppercase font-sans mt-12 pl-6">
-              Meus roteiros
-            </h1>
+            <div className="flex items-center justify-between pr-6">
+              <h1 className="text-lg font-bold text-[#222] tracking-wide mb-4 uppercase font-sans mt-4 pl-6">
+                Meus roteiros
+              </h1>
+              {hasProcessing && (
+                <div className="flex items-center gap-2 mb-4 mt-4 text-xs text-[#FF9800]">
+                  <div className="w-2 h-2 bg-[#FF9800] rounded-full animate-pulse"></div>
+                  <span className="font-medium">Atualizando automaticamente</span>
+                </div>
+              )}
+            </div>
 
             <div className="w-full">
               <table className="w-full border-separate border-spacing-0 font-sans">
@@ -135,7 +186,7 @@ export const MeusRoteiros: React.FC = () => {
                       tabIndex={0}
                       role="button"
                     >
-                      Tipo de roteiro
+                      Status do roteiro
                     </th>
                     <th
                       className="text-white text-xs font-bold uppercase text-left px-6 py-2 tracking-wider font-sans cursor-pointer hover:text-[#FF9800] transition-colors duration-200"
@@ -149,11 +200,7 @@ export const MeusRoteiros: React.FC = () => {
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr>
-                      <td colSpan={5} className="py-16">
-                        <LoadingColmeia />
-                      </td>
-                    </tr>
+                    <TableSkeleton />
                   ) : erro ? (
                     <tr>
                       <td colSpan={5} className="text-center py-4 text-red-500">{erro}</td>
@@ -170,7 +217,19 @@ export const MeusRoteiros: React.FC = () => {
                       >
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans max-w-xs truncate">{item.planoMidiaGrupo_st}</td>
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{formatarData(item.date_dh)}</td>
-                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.planoMidiaType_st}</td>
+                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">
+                          {item.inProgress_bl === 1 ? (
+                            <div className="flex items-center gap-2">
+                              <LoadingSpinner size="sm" />
+                              <span className="text-xs text-[#FF9800] font-medium">Processando</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <CheckCircle size={16} color="#3a3a3a" />
+                              <span className="text-[#3a3a3a] font-medium">Finalizado</span>
+                            </div>
+                          )}
+                        </td>
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.semanasMax_vl} {item.semanasMax_vl === 1 ? 'semana' : 'semanas'}</td>
                         <td className="text-[#222] text-xs px-6 py-4 whitespace-nowrap text-right flex items-center gap-4 justify-end font-sans">
                           <Link to={`/mapa?grupo=${item.planoMidiaGrupo_pk}`}>
@@ -178,8 +237,19 @@ export const MeusRoteiros: React.FC = () => {
                               className="w-6 h-6 transition-transform duration-200 hover:scale-110 cursor-pointer text-[#3A3A3A] hover:text-[#FF9800]"
                             />
                           </Link>
-                          <Difference4 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
-                          <Delete4 className="w-6 h-6 transition-transform duration-200 hover:scale-110 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
+                          <button
+                            onClick={() => handleVisualizarResultados(item)}
+                            className="transition-transform duration-200 hover:scale-110"
+                            title="Visualizar resultados"
+                          >
+                            <Difference4 className="w-6 h-6 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
+                          </button>
+                          <button
+                            onClick={() => handleActionRestricted("Excluir roteiro")}
+                            className="transition-transform duration-200 hover:scale-110"
+                          >
+                            <Delete4 className="w-6 h-6 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
+                          </button>
                         </td>
                       </tr>
                     ))

@@ -1,1 +1,189 @@
-{} 
+{
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 600
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/callback",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/login",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/mapa",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/criar-roteiro",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/visualizar-resultados",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/upload-roteiros-plano-midia",
+      "destination": "/api/upload-roteiros-plano-midia.js"
+    },
+    {
+      "source": "/sp-plano-midia-insert",
+      "destination": "/api/sp-plano-midia-insert.js"
+    },
+    {
+      "source": "/upload-pontos-unicos",
+      "destination": "/api/upload-pontos-unicos.js"
+    },
+    {
+      "source": "/sp-upload-roteiros-inventario-insert",
+      "destination": "/api/sp-upload-roteiros-inventario-insert.js"
+    },
+    {
+      "source": "/databricks-run-job",
+      "destination": "/api/databricks-run-job.js"
+    },
+    {
+      "source": "/upload-roteiros",
+      "destination": "/api/upload-roteiros.js"
+    },
+    {
+      "source": "/plano-midia-grupo",
+      "destination": "/api/plano-midia-grupo.js"
+    },
+    {
+      "source": "/plano-midia-desc",
+      "destination": "/api/plano-midia-desc.js"
+    },
+    {
+      "source": "/plano-midia",
+      "destination": "/api/plano-midia.js"
+    },
+    {
+      "source": "/cidades",
+      "destination": "/api/cidades.js"
+    },
+    {
+      "source": "/cidades-praca",
+      "destination": "/api/cidades-praca.js"
+    },
+    {
+      "source": "/semanas",
+      "destination": "/api/semanas.js"
+    },
+    {
+      "source": "/pivot-descpks",
+      "destination": "/api/pivot-descpks.js"
+    },
+    {
+      "source": "/inventario-cidade",
+      "destination": "/api/inventario-cidade.js"
+    },
+    {
+      "source": "/agencia",
+      "destination": "/api/agencia.js"
+    },
+    {
+      "source": "/marca",
+      "destination": "/api/marca.js"
+    },
+    {
+      "source": "/categoria",
+      "destination": "/api/categoria.js"
+    },
+    {
+      "source": "/target-genero",
+      "destination": "/api/target-genero.js"
+    },
+    {
+      "source": "/target-classe",
+      "destination": "/api/target-classe.js"
+    },
+    {
+      "source": "/target-faixa-etaria",
+      "destination": "/api/target-faixa-etaria.js"
+    },
+    {
+      "source": "/debug-grupo",
+      "destination": "/api/debug-grupo.js"
+    },
+    {
+      "source": "/hexagonos",
+      "destination": "/api/hexagonos.js"
+    },
+    {
+      "source": "/debug",
+      "destination": "/api/debug.js"
+    },
+    {
+      "source": "/plano-midia-desc-cleanup",
+      "destination": "/api/plano-midia-desc-cleanup.js"
+    },
+    {
+      "source": "/matrix-data-query",
+      "destination": "/api/matrix-data-query.js"
+    },
+    {
+      "source": "/matrix-data-row-query",
+      "destination": "/api/matrix-data-row-query.js"
+    },
+    {
+      "source": "/grupo-sub-distinct",
+      "destination": "/api/grupo-sub-distinct.js"
+    },
+    {
+      "source": "/report-indicadores-vias-publicas",
+      "destination": "/api/report-indicadores-vias-publicas.js"
+    },
+    {
+      "source": "/report-indicadores-summary",
+      "destination": "/api/report-indicadores-summary.js"
+    },
+    {
+      "source": "/report-indicadores-week",
+      "destination": "/api/report-indicadores-week.js"
+    },
+    {
+      "source": "/report-indicadores-week-summary",
+      "destination": "/api/report-indicadores-week-summary.js"
+    },
+    {
+      "source": "/roteiro-completo",
+      "destination": "/api/roteiro-completo.js"
+    },
+    {
+      "source": "/report-indicadores-target",
+      "destination": "/api/report-indicadores-target.js"
+    },
+    {
+      "source": "/report-indicadores-target-summary",
+      "destination": "/api/report-indicadores-target-summary.js"
+    },
+    {
+      "source": "/report-indicadores-week-target",
+      "destination": "/api/report-indicadores-week-target.js"
+    },
+    {
+      "source": "/report-indicadores-week-target-summary",
+      "destination": "/api/report-indicadores-week-target-summary.js"
+    },
+    {
+      "source": "/roteiro-simulado",
+      "destination": "/api/roteiro-simulado.js"
+    },
+    {
+      "source": "/databricks-roteiro-simulado",
+      "destination": "/api/databricks-roteiro-simulado.js"
+    },
+    {
+      "source": "/teste-rapido",
+      "destination": "/api/teste-rapido.js"
+    },
+    {
+      "source": "/banco-ativos-controle",
+      "destination": "/api/banco-ativos-controle.js"
+    }
+  ]
+} 

@@ -1,7 +1,9 @@
 import React from "react";
-import { Avatar } from "../Avatar";
-import { ExitToApp } from "../../icons/ExitToApp";
 import { Link } from "react-router-dom";
+import { useAuth0 } from "@auth0/auth0-react";
+import { UserAvatar } from "../UserAvatar";
+import { ExitToApp } from "../../icons/ExitToApp";
+import { useAuth } from "../../contexts/AuthContext";
 
 interface TopbarProps {
   menuReduzido: boolean;
@@ -14,12 +16,51 @@ interface TopbarProps {
 }
 
 export const Topbar: React.FC<TopbarProps> = ({ menuReduzido, breadcrumb }) => {
+  const { logout, user } = useAuth();
+  const { logoutWithRedirect, isAuthenticated: auth0IsAuthenticated, isLoading: auth0IsLoading, user: auth0User } = useAuth0();
+  
   const defaultBreadcrumb = [
     { label: "Home", path: "/" },
     { label: "Meus roteiros", path: "/" }
   ];
 
   const breadcrumbItems = breadcrumb?.items || defaultBreadcrumb;
+
+  // Obter foto do usuário (Auth0 ou local)
+  const getUserPhoto = () => {
+    if (auth0IsAuthenticated && auth0User?.picture) {
+      return auth0User.picture;
+    }
+    // Fallback para avatar genérico ou foto local se houver
+    return null;
+  };
+
+  const handleLogout = async () => {
+    console.log('Logout iniciado. Auth0 autenticado:', auth0IsAuthenticated);
+    
+    try {
+      if (auth0IsAuthenticated) {
+        console.log('Fazendo logout do Auth0...');
+        // Logout do Auth0
+        await logoutWithRedirect({
+          logoutParams: {
+            returnTo: import.meta.env.VITE_AUTH0_LOGOUT_URL
+          }
+        });
+      } else {
+        console.log('Fazendo logout local...');
+        // Logout local
+        logout();
+        // Redirecionar para login após logout local
+        window.location.href = '/login';
+      }
+    } catch (error) {
+      console.error('Erro no logout:', error);
+      // Fallback: logout local
+      logout();
+      window.location.href = '/login';
+    }
+  };
 
   return (
     <div
@@ -48,14 +89,28 @@ export const Topbar: React.FC<TopbarProps> = ({ menuReduzido, breadcrumb }) => {
           ))}
         </div>
         <div className="flex items-center gap-[30px]">
-          <Avatar
-            className="!relative"
-            shape="circle"
+          {user && (
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <span>Olá, {user.name}</span>
+            </div>
+          )}
+          
+          {/* Avatar/Foto do usuário */}
+          <UserAvatar
+            src={getUserPhoto()}
+            alt={user?.name || 'Usuário'}
+            name={user?.name}
             size="large"
-            type="image"
-            initials="U"
+            className="!relative"
           />
-          <ExitToApp className="w-6 h-6" color="#3A3A3A" />
+          
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 text-[#3A3A3A] hover:text-red-600 transition-colors duration-200"
+            title="Sair"
+          >
+            <ExitToApp className="w-6 h-6" color="currentColor" />
+          </button>
         </div>
       </div>
       <div
