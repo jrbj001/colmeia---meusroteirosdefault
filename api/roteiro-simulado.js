@@ -53,9 +53,10 @@ async function roteiroSimulado(req, res) {
         semanas = [] 
       } = linha;
 
-      // Só processar linhas com visibilidade "Selecionável"
-      if (visibilidade !== 'Selecionável') {
-        console.log(`⏭️ Pulando ${grupoSub_st} - visibilidade: ${visibilidade}`);
+      // Só processar linhas com visibilidade válida (25, 50, 75, 100)
+      const visibilidadeValida = ['25', '50', '75', '100'].includes(visibilidade);
+      if (!visibilidadeValida) {
+        console.log(`⏭️ Pulando ${grupoSub_st} - visibilidade inválida: ${visibilidade}`);
         return;
       }
 
@@ -110,7 +111,7 @@ async function roteiroSimulado(req, res) {
     if (recordsJson.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Nenhum registro válido encontrado. Verifique se há valores de inserção comprada > 0 e visibilidade = "Selecionável".'
+        message: 'Nenhum registro válido encontrado. Verifique se há valores de inserção comprada > 0 e visibilidade válida (25, 50, 75, 100).'
       });
     }
 

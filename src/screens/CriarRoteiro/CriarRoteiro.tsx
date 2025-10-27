@@ -384,6 +384,11 @@ export const CriarRoteiro: React.FC = () => {
           grupoSub_st: grupo.grupoSub_st,
           grupoDesc_st: grupo.grupoDesc_st,
           visibilidade: '100', // Valor padrão - Alta
+          insercaoComprada: 0, // Campo de inserção comprada geral
+          insercaoOferecida: 0, // Campo de inserção oferecida geral
+          seDigitalInsercoes_vl: 0, // Digital Inserções
+          seDigitalMaximoInsercoes_vl: 0, // Digital Máx. Inserções
+          seEstaticoVisibilidade_vl: 100, // Estático Visibilidade
           // Criar colunas para cada semana
           semanas: Array.from({ length: semanas }, (_, index) => ({
             semana: `W${index + 1}`,
@@ -443,42 +448,22 @@ export const CriarRoteiro: React.FC = () => {
         return;
       }
 
-      // Coletar dados da tabela (incluindo inputs dos usuários)
-      const dadosTabela = tabelaSimulado.map((linha, index) => {
-        // Buscar valores dos inputs na DOM
-        const linhaDOM = document.querySelectorAll('tbody tr')[index];
-        const inputsSemanas = linhaDOM?.querySelectorAll('input[type="number"]');
+      // Coletar dados da tabela (diretamente do estado React)
+      const dadosTabela = tabelaSimulado.map((linha) => {
+        // Usar os dados diretamente do estado
+        const semanasData = linha.semanas || [];
         
-        // Coletar valores dos novos campos (inputs 2-4 são os novos campos)
-        let seDigitalInsercoes_vl = 0;
-        let seDigitalMaximoInsercoes_vl = 0;
-        let seEstaticoVisibilidade_vl = 100;
-        
-        if (inputsSemanas && inputsSemanas.length >= 5) {
-          seDigitalInsercoes_vl = parseInt((inputsSemanas[2] as HTMLInputElement).value) || 0;
-          seDigitalMaximoInsercoes_vl = parseInt((inputsSemanas[3] as HTMLInputElement).value) || 0;
-          seEstaticoVisibilidade_vl = parseFloat((inputsSemanas[4] as HTMLInputElement).value) || 100;
-        }
-        
-        const semanasData = [];
-        if (inputsSemanas) {
-          // Os primeiros 2 inputs são inserção comprada/oferecida, depois vêm os novos campos, depois as semanas
-          const inicioSemanas = 5; // Começar após os novos campos
-          for (let i = inicioSemanas; i < inputsSemanas.length; i++) {
-            semanasData.push({
-              insercaoComprada: parseInt((inputsSemanas[i] as HTMLInputElement).value) || 0,
-              insercaoOferecida: 0, // Por enquanto só inserção comprada
-              // 🆕 Novos campos coletados dos inputs
-              seDigitalInsercoes_vl,
-              seDigitalMaximoInsercoes_vl,
-              seEstaticoVisibilidade_vl
-            });
-          }
-        }
-
+        // Garantir que cada semana tenha os novos campos
         return {
           ...linha,
-          semanas: semanasData
+          semanas: semanasData.map((semana: any) => ({
+            insercaoComprada: semana.insercaoComprada || 0,
+            insercaoOferecida: semana.insercaoOferecida || 0,
+            // Usar valores da linha ou da semana (semanas têm prioridade)
+            seDigitalInsercoes_vl: semana.seDigitalInsercoes_vl ?? linha.seDigitalInsercoes_vl ?? 0,
+            seDigitalMaximoInsercoes_vl: semana.seDigitalMaximoInsercoes_vl ?? linha.seDigitalMaximoInsercoes_vl ?? 0,
+            seEstaticoVisibilidade_vl: semana.seEstaticoVisibilidade_vl ?? linha.seEstaticoVisibilidade_vl ?? 100
+          }))
         };
       });
 
@@ -592,8 +577,9 @@ export const CriarRoteiro: React.FC = () => {
 
         // Executar Databricks específico para roteiro simulado
         try {
+          // O Databricks precisa processar TODOS os planos do grupo, então enviamos o planoMidiaGrupo_pk
           const databricksResponse = await axios.post('/databricks-roteiro-simulado', {
-            planoMidiaDesc_pk: planoMidiaGrupo_pk, // Usar planoMidiaGrupo_pk para o Databricks
+            planoMidiaDesc_pk: planoMidiaGrupo_pk, // O Databricks processa todos os planoMidiaDesc deste grupo
             date_dh: resultado.data?.date_dh || new Date().toISOString().slice(0, 19).replace('T', ' '),
             date_dt: resultado.data?.date_dt || new Date().toISOString().slice(0, 10)
           });
@@ -3356,7 +3342,12 @@ export const CriarRoteiro: React.FC = () => {
                                         <input
                                           type="number"
                                           min="0"
-                                          defaultValue="0"
+                                          value={linha.insercaoComprada || 0}
+                                          onChange={(e) => {
+                                            const novaTabela = [...tabelaSimulado];
+                                            novaTabela[index].insercaoComprada = parseInt(e.target.value) || 0;
+                                            setTabelaSimulado(novaTabela);
+                                          }}
                                           className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded"
                                         />
                                       </td>
@@ -3364,7 +3355,12 @@ export const CriarRoteiro: React.FC = () => {
                                         <input
                                           type="number"
                                           min="0"
-                                          defaultValue="0"
+                                          value={linha.insercaoOferecida || 0}
+                                          onChange={(e) => {
+                                            const novaTabela = [...tabelaSimulado];
+                                            novaTabela[index].insercaoOferecida = parseInt(e.target.value) || 0;
+                                            setTabelaSimulado(novaTabela);
+                                          }}
                                           className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded"
                                         />
                                       </td>
@@ -3373,7 +3369,12 @@ export const CriarRoteiro: React.FC = () => {
                                         <input
                                           type="number"
                                           min="0"
-                                          defaultValue="0"
+                                          value={linha.seDigitalInsercoes_vl || 0}
+                                          onChange={(e) => {
+                                            const novaTabela = [...tabelaSimulado];
+                                            novaTabela[index].seDigitalInsercoes_vl = parseInt(e.target.value) || 0;
+                                            setTabelaSimulado(novaTabela);
+                                          }}
                                           className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded"
                                           placeholder="Digital"
                                         />
@@ -3382,7 +3383,12 @@ export const CriarRoteiro: React.FC = () => {
                                         <input
                                           type="number"
                                           min="0"
-                                          defaultValue="0"
+                                          value={linha.seDigitalMaximoInsercoes_vl || 0}
+                                          onChange={(e) => {
+                                            const novaTabela = [...tabelaSimulado];
+                                            novaTabela[index].seDigitalMaximoInsercoes_vl = parseInt(e.target.value) || 0;
+                                            setTabelaSimulado(novaTabela);
+                                          }}
                                           className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded"
                                           placeholder="Máx. Digital"
                                         />
@@ -3392,7 +3398,12 @@ export const CriarRoteiro: React.FC = () => {
                                           type="number"
                                           min="0"
                                           max="100"
-                                          defaultValue="100"
+                                          value={linha.seEstaticoVisibilidade_vl || 100}
+                                          onChange={(e) => {
+                                            const novaTabela = [...tabelaSimulado];
+                                            novaTabela[index].seEstaticoVisibilidade_vl = parseFloat(e.target.value) || 100;
+                                            setTabelaSimulado(novaTabela);
+                                          }}
                                           className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded"
                                           placeholder="Visibilidade"
                                         />
@@ -3402,7 +3413,21 @@ export const CriarRoteiro: React.FC = () => {
                                           <input
                                             type="number"
                                             min="0"
-                                            defaultValue="0"
+                                            value={linha.semanas?.[semanaIndex]?.insercaoComprada || 0}
+                                            onChange={(e) => {
+                                              const novaTabela = [...tabelaSimulado];
+                                              if (!novaTabela[index].semanas) {
+                                                novaTabela[index].semanas = Array.from({ length: quantidadeSemanas }, () => ({
+                                                  insercaoComprada: 0,
+                                                  insercaoOferecida: 0,
+                                                  seDigitalInsercoes_vl: linha.seDigitalInsercoes_vl || 0,
+                                                  seDigitalMaximoInsercoes_vl: linha.seDigitalMaximoInsercoes_vl || 0,
+                                                  seEstaticoVisibilidade_vl: linha.seEstaticoVisibilidade_vl || 100
+                                                }));
+                                              }
+                                              novaTabela[index].semanas[semanaIndex].insercaoComprada = parseInt(e.target.value) || 0;
+                                              setTabelaSimulado(novaTabela);
+                                            }}
                                             className="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded"
                                           />
                                         </td>
