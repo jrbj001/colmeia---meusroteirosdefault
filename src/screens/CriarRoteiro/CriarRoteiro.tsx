@@ -435,8 +435,7 @@ export const CriarRoteiro: React.FC = () => {
             insercaoComprada: 0,
             insercaoOferecida: 0,
             seDigitalInsercoes_vl: 0,
-            seDigitalMaximoInsercoes_vl: 0,
-            seEstaticoVisibilidade_vl: 100
+            seDigitalMaximoInsercoes_vl: 0
           }));
           
           estruturaTabela.push({
@@ -447,7 +446,6 @@ export const CriarRoteiro: React.FC = () => {
             // Campos da BaseCalculadora para configuração geral
             seDigitalInsercoes_vl: 0, // Digital Inserções
             seDigitalMaximoInsercoes_vl: 0, // Digital Máx. Inserções
-            seEstaticoVisibilidade_vl: 100, // Estático Visibilidade
             // Array de semanas
             semanas: semanasArray
           });
@@ -507,7 +505,6 @@ export const CriarRoteiro: React.FC = () => {
           visibilidade: linha.visibilidade,
           seDigitalInsercoes_vl: linha.seDigitalInsercoes_vl || 0,
           seDigitalMaximoInsercoes_vl: linha.seDigitalMaximoInsercoes_vl || 0,
-          seEstaticoVisibilidade_vl: linha.seEstaticoVisibilidade_vl || 100,
           // Enviar array de semanas (agora configurável na interface)
           semanas: linha.semanas || []
         };
@@ -3491,7 +3488,6 @@ export const CriarRoteiro: React.FC = () => {
                                     <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Visibilidade</th>
                                     <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Digital Inserções</th>
                                     <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Digital Máx. Inserções</th>
-                                    <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Estático Visibilidade</th>
                                     {/* Colunas dinâmicas de semanas */}
                                     {tabelaSimulado[0]?.semanas && tabelaSimulado[0].semanas.map((semana: any, idx: number) => (
                                       <th key={idx} className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">
@@ -3547,21 +3543,6 @@ export const CriarRoteiro: React.FC = () => {
                                           }}
                                           className="w-full px-3 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                                           placeholder="0"
-                                        />
-                                      </td>
-                                      <td className="px-4 py-3">
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          max="100"
-                                          value={linha.seEstaticoVisibilidade_vl || 100}
-                                          onChange={(e) => {
-                                            const novaTabela = [...tabelaSimulado];
-                                            novaTabela[index].seEstaticoVisibilidade_vl = parseFloat(e.target.value) || 100;
-                                            setTabelaSimulado(novaTabela);
-                                          }}
-                                          className="w-full px-3 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                                          placeholder="100"
                                         />
                                       </td>
                                       {/* Células dinâmicas de semanas */}
