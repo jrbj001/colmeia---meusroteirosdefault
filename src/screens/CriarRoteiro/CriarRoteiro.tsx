@@ -236,9 +236,9 @@ export const CriarRoteiro: React.FC = () => {
   const [mensagemProcessamento, setMensagemProcessamento] = useState<string>('');
   
   // Estados para Roteiro Simulado
-  const [pracaSelecionadaSimulado, setPracaSelecionadaSimulado] = useState<any | null>(null);
+  const [pracasSelecionadasSimulado, setPracasSelecionadasSimulado] = useState<any[]>([]);
   const [quantidadeSemanas, setQuantidadeSemanas] = useState<number>(12);
-  const [tabelaSimulado, setTabelaSimulado] = useState<any[]>([]);
+  const [tabelaSimulado, setTabelaSimulado] = useState<Record<number, any[]>>({}); // Objeto: id_cidade -> array de linhas
   
   // Estados para o novo fluxo pós-upload
   const [uploadCompleto, setUploadCompleto] = useState(false);
@@ -403,60 +403,82 @@ export const CriarRoteiro: React.FC = () => {
   // Função para gerar estrutura da tabela simulada
   const gerarTabelaSimulado = async (semanas: number) => {
     try {
-      console.log('🏗️ Gerando tabela simulada...', { cidadesSalvas, semanas });
+      console.log('🏗️ Gerando tabelas simuladas por praça...', { cidadesSalvas, semanas });
       
-      if (!pracaSelecionadaSimulado) {
-        alert('Selecione uma praça primeiro');
+      if (pracasSelecionadasSimulado.length === 0) {
+        alert('Selecione pelo menos uma praça primeiro');
         return;
       }
       
-      // Buscar inventário da praça selecionada (igual Aba 3)
-      const inventarioResponse = await axios.get(`/inventario-cidade?cidade=${encodeURIComponent(pracaSelecionadaSimulado.nome_cidade)}`);
+      // Objeto para armazenar tabelas por praça: id_cidade -> array de linhas
+      const tabelasPorPraca: Record<number, any[]> = {};
       
-      if (!inventarioResponse.data.grupos) {
-        alert('Nenhum inventário encontrado para esta cidade');
-        return;
-      }
-      
-      // Filtrar grupos diretamente do inventário (igual Aba 3)
-      const gruposFiltrados = Object.entries(inventarioResponse.data.grupos)
-        .filter(([grupoKey]) => !grupoKey.toUpperCase().startsWith('P'));
-      
-      console.log('📊 Grupos filtrados do inventário (sem categoria P):', gruposFiltrados.map(([k]) => k));
-      
-      // Gerar estrutura da tabela baseada nos grupos filtrados do inventário
-      const estruturaTabela: any[] = [];
-      
-      gruposFiltrados.forEach(([grupoKey, grupoData]: [string, any]) => {
-        grupoData.subgrupos.forEach((subgrupo: any) => {
-          // Criar array de semanas com valores vazios
-          const semanasArray = Array.from({length: semanas}, (_, i) => ({
-            semana: i + 1,
-            insercaoComprada: 0,
-            insercaoOferecida: 0,
-            seDigitalInsercoes_vl: 0,
-            seDigitalMaximoInsercoes_vl: 0
-          }));
+      // Gerar uma tabela separada para cada praça
+      for (const praca of pracasSelecionadasSimulado) {
+        try {
+          const estruturaTabela: any[] = [];
           
-          estruturaTabela.push({
-            grupo_st: grupoKey,
-            grupoSub_st: subgrupo.codigo,
-            grupoDesc_st: subgrupo.descricao,
-            visibilidade: '100', // Valor padrão - Alta
-            // Campos da BaseCalculadora para configuração geral
-            seDigitalInsercoes_vl: 0, // Digital Inserções
-            seDigitalMaximoInsercoes_vl: 0, // Digital Máx. Inserções
-            // Array de semanas
-            semanas: semanasArray
+          const inventarioResponse = await axios.get(`/inventario-cidade?cidade=${encodeURIComponent(praca.nome_cidade)}`);
+          
+          if (!inventarioResponse.data.grupos) {
+            console.warn(`⚠️ Nenhum inventário encontrado para ${praca.nome_cidade}`);
+            continue;
+          }
+          
+          // Filtrar grupos diretamente do inventário (igual Aba 3)
+          const gruposFiltrados = Object.entries(inventarioResponse.data.grupos)
+            .filter(([grupoKey]) => !grupoKey.toUpperCase().startsWith('P'));
+          
+          console.log(`📊 Grupos filtrados do inventário de ${praca.nome_cidade}:`, gruposFiltrados.map(([k]) => k));
+          
+          // Processar grupos do inventário desta praça
+          gruposFiltrados.forEach(([grupoKey, grupoData]: [string, any]) => {
+            grupoData.subgrupos.forEach((subgrupo: any) => {
+              // Criar array de semanas com valores vazios
+              const semanasArray = Array.from({length: semanas}, (_, i) => ({
+                semana: i + 1,
+                insercaoComprada: 0,
+                insercaoOferecida: 0,
+                seDigitalInsercoes_vl: 0,
+                seDigitalMaximoInsercoes_vl: 0
+              }));
+              
+              estruturaTabela.push({
+                grupo_st: grupoKey,
+                grupoSub_st: subgrupo.codigo,
+                grupoDesc_st: subgrupo.descricao,
+                visibilidade: '100', // Valor padrão - Alta
+                // Campos da BaseCalculadora para configuração geral
+                seDigitalInsercoes_vl: 0, // Digital Inserções
+                seDigitalMaximoInsercoes_vl: 0, // Digital Máx. Inserções
+                // Array de semanas
+                semanas: semanasArray
+              });
+            });
           });
-        });
-      });
+          
+          // Armazenar tabela desta praça - garantir que usamos número como chave
+          const idPraca = Number(praca.id_cidade);
+          tabelasPorPraca[idPraca] = estruturaTabela;
+          console.log(`✅ Tabela gerada para ${praca.nome_cidade}: ${estruturaTabela.length} subgrupos`);
+          console.log(`✅ Tabela salva com chave ID: ${idPraca} (tipo: ${typeof idPraca})`);
+        } catch (error) {
+          console.error(`❌ Erro ao buscar inventário de ${praca.nome_cidade}:`, error);
+          // Continuar com outras praças mesmo se uma falhar
+        }
+      }
+      
+      if (Object.keys(tabelasPorPraca).length === 0) {
+        alert('Nenhum inventário encontrado para as praças selecionadas');
+        return;
+      }
         
-        setTabelaSimulado(estruturaTabela);
-      console.log('✅ Tabela simulada gerada:', estruturaTabela.length, 'subgrupos (exatamente como Aba 3)');
+      setTabelaSimulado(tabelasPorPraca);
+      const totalSubgrupos = Object.values(tabelasPorPraca).reduce((sum, tabela) => sum + tabela.length, 0);
+      console.log(`✅ ${Object.keys(tabelasPorPraca).length} tabela(s) simulada(s) gerada(s): ${totalSubgrupos} subgrupos no total`);
     } catch (error) {
-      console.error('❌ Erro ao gerar tabela simulada:', error);
-      alert('Erro ao gerar estrutura da tabela. Tente novamente.');
+      console.error('❌ Erro ao gerar tabelas simuladas:', error);
+      alert('Erro ao gerar estrutura das tabelas. Tente novamente.');
     }
   };
 
@@ -486,205 +508,385 @@ export const CriarRoteiro: React.FC = () => {
         return;
       }
 
-      if (!pracaSelecionadaSimulado) {
-        alert('Selecione uma praça para configurar');
+      if (pracasSelecionadasSimulado.length === 0) {
+        alert('Selecione pelo menos uma praça para configurar');
         setSalvandoAba4(false);
         return;
       }
 
-      if (tabelaSimulado.length === 0) {
+      if (Object.keys(tabelaSimulado).length === 0) {
         alert('Configure a tabela de vias públicas primeiro');
         setSalvandoAba4(false);
         return;
       }
 
-      // Coletar dados da tabela - incluir semanas configuradas
-      const dadosTabela = tabelaSimulado.map((linha) => {
-        return {
-          grupoSub_st: linha.grupoSub_st || linha.grupo_st,
-          visibilidade: linha.visibilidade,
-          seDigitalInsercoes_vl: linha.seDigitalInsercoes_vl || 0,
-          seDigitalMaximoInsercoes_vl: linha.seDigitalMaximoInsercoes_vl || 0,
-          // Enviar array de semanas (agora configurável na interface)
-          semanas: linha.semanas || []
-        };
+      // Verificar se todas as praças selecionadas têm tabela (usando número como chave)
+      const pracasSemTabela = pracasSelecionadasSimulado.filter(p => {
+        const idPraca = Number(p.id_cidade);
+        const tabela = tabelaSimulado[idPraca] || tabelaSimulado[p.id_cidade as any];
+        return !tabela || tabela.length === 0;
       });
+      if (pracasSemTabela.length > 0) {
+        alert(`As seguintes praças não possuem tabela configurada: ${pracasSemTabela.map(p => p.nome_cidade).join(', ')}`);
+        setSalvandoAba4(false);
+        return;
+      }
 
-      console.log('📊 Dados da tabela coletados:', dadosTabela);
-      console.log('📊 Total de linhas na tabela:', tabelaSimulado.length);
       console.log('📊 Total de semanas configuradas:', quantidadeSemanas);
-      console.log('📊 Total estimado de registros:', tabelaSimulado.length * quantidadeSemanas);
-
-      console.log('🔄 ETAPA 1: Criando planoMidiaDesc_pk específico para a praça...');
+      console.log('📊 Total de praças selecionadas:', pracasSelecionadasSimulado.length);
+      console.log('📊 Praças selecionadas:', pracasSelecionadasSimulado.map(p => `${p.nome_cidade} (ID: ${p.id_cidade}, tipo: ${typeof p.id_cidade})`).join(', '));
+      console.log('📊 Tabelas disponíveis:', Object.keys(tabelaSimulado).map(id => `ID ${id} (tipo: ${typeof id})`).join(', '));
       
-      // Criar planoMidiaDesc_pk específico para a praça selecionada
-      const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
-      const cidadeFormatada = (pracaSelecionadaSimulado.nome_cidade || '').replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
-      
-      // Buscar código IBGE correto por nome da cidade (API que funciona)
-      let ibgeCode = pracaSelecionadaSimulado.id_cidade; // Fallback
-      
-      console.log('🔍 DEBUG IBGE - Dados da praça:', {
-        nome_cidade: pracaSelecionadaSimulado.nome_cidade,
-        nome_estado: pracaSelecionadaSimulado.nome_estado,
-        id_cidade: pracaSelecionadaSimulado.id_cidade
+      // Validar correspondência entre IDs das praças e tabelas
+      pracasSelecionadasSimulado.forEach(praca => {
+        const idNumero = Number(praca.id_cidade);
+        const idString = String(praca.id_cidade);
+        const tabelaPorNumero = tabelaSimulado[idNumero];
+        const tabelaPorString = tabelaSimulado[idString];
+        const tabelaPorIdOriginal = tabelaSimulado[praca.id_cidade as any];
+        
+        console.log(`🔍 Validação para ${praca.nome_cidade}:`);
+        console.log(`  - ID original: ${praca.id_cidade} (${typeof praca.id_cidade})`);
+        console.log(`  - Tabela por número (${idNumero}): ${tabelaPorNumero ? 'ENCONTRADA' : 'NÃO ENCONTRADA'}`);
+        console.log(`  - Tabela por string (${idString}): ${tabelaPorString ? 'ENCONTRADA' : 'NÃO ENCONTRADA'}`);
+        console.log(`  - Tabela por ID original: ${tabelaPorIdOriginal ? 'ENCONTRADA' : 'NÃO ENCONTRADA'}`);
       });
+
+      const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
+      const planosMidiaDescPk: number[] = [];
+      const resultadosPraças: any[] = [];
+      const errosPraças: any[] = [];
+
+      console.log(`🔄 ETAPA 1: Criando planoMidiaDesc_pk para ${pracasSelecionadasSimulado.length} praça(s) em UMA ÚNICA CHAMADA...`);
+      console.log(`🔄 Lista de praças a processar:`, pracasSelecionadasSimulado.map((p, idx) => `${idx + 1}. ${p.nome_cidade} (ID: ${p.id_cidade})`).join('\n'));
+
+      // ETAPA 1: Preparar recordsJson com TODAS as cidades
+      const allRecordsJson: any[] = [];
+      const pracasComIbge: any[] = [];
       
-      console.log('🔍 DEBUG IBGE - Estado específico:', pracaSelecionadaSimulado.nome_estado);
-      console.log('🔍 DEBUG IBGE - Tipo do estado:', typeof pracaSelecionadaSimulado.nome_estado);
-      
-      try {
-        console.log('🔍 DEBUG IBGE - Fazendo chamada para /cidades-ibge...');
-        console.log('🔍 DEBUG IBGE - Dados enviados:', {
-          cidade_st: pracaSelecionadaSimulado.nome_cidade,
-          estado_st: pracaSelecionadaSimulado.nome_estado
-        });
+      for (let i = 0; i < pracasSelecionadasSimulado.length; i++) {
+        const praca = pracasSelecionadasSimulado[i];
+        console.log(`\n📍 ===== INICIANDO PROCESSAMENTO DA PRAÇA ${i + 1}/${pracasSelecionadasSimulado.length} =====`);
+        console.log(`📍 Nome: ${praca.nome_cidade} - ${praca.nome_estado}`);
+        console.log(`📍 ID Cidade: ${praca.id_cidade}`);
+        console.log(`📍 Praça completa:`, JSON.stringify(praca));
         
-        const ibgeResponse = await axios.post('/cidades-ibge', {
-          cidade_st: pracaSelecionadaSimulado.nome_cidade,
-          estado_st: pracaSelecionadaSimulado.nome_estado
-        });
-        
-        console.log('🔍 DEBUG IBGE - Resposta da API:', ibgeResponse.data);
-        
-        if (ibgeResponse.data.success && ibgeResponse.data.ibgeCode) {
-          ibgeCode = ibgeResponse.data.ibgeCode;
-          console.log(`✅ IBGE Code encontrado: ${ibgeCode} para ${pracaSelecionadaSimulado.nome_cidade}`);
-        } else {
-          console.warn(`⚠️ IBGE Code não encontrado, usando id_cidade: ${ibgeCode}`);
-        }
-      } catch (error: any) {
-        console.warn(`⚠️ Erro ao buscar IBGE Code, usando id_cidade: ${ibgeCode}`, error.response?.data || error.message);
-        
-        // Se for erro 400 (múltiplas cidades), tentar novamente com estado
-        if (error.response?.status === 400 && error.response?.data?.error?.includes('Múltiplas cidades')) {
-          console.log('🔄 Tentando novamente com estado específico...');
+        try {
+          const cidadeFormatada = (praca.nome_cidade || '').replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
+          
+          // Buscar código IBGE correto por nome da cidade
+          let ibgeCode = praca.id_cidade; // Fallback
+          
           try {
-            const retryResponse = await axios.post('/cidades-ibge', {
-              cidade_st: pracaSelecionadaSimulado.nome_cidade,
-              estado_st: pracaSelecionadaSimulado.nome_estado
+            const ibgeResponse = await axios.post('/cidades-ibge', {
+              cidade_st: praca.nome_cidade,
+              estado_st: praca.nome_estado
             });
             
-            if (retryResponse.data.success && retryResponse.data.ibgeCode) {
-              ibgeCode = retryResponse.data.ibgeCode;
-              console.log(`✅ IBGE Code encontrado na segunda tentativa: ${ibgeCode} para ${pracaSelecionadaSimulado.nome_cidade}`);
+            if (ibgeResponse.data.success && ibgeResponse.data.ibgeCode) {
+              ibgeCode = ibgeResponse.data.ibgeCode;
+              console.log(`✅ IBGE Code encontrado: ${ibgeCode} para ${praca.nome_cidade}`);
+            } else {
+              console.warn(`⚠️ IBGE Code não encontrado, usando id_cidade: ${ibgeCode}`);
             }
-          } catch (retryError: any) {
-            const error = retryError as any;
-            console.warn(`⚠️ Erro na segunda tentativa:`, error.response?.data || error.message);
+          } catch (error: any) {
+            console.warn(`⚠️ Erro ao buscar IBGE Code, usando id_cidade: ${ibgeCode}`, error.response?.data || error.message);
+            
+            // Se for erro 400 (múltiplas cidades), tentar novamente
+            if (error.response?.status === 400 && error.response?.data?.error?.includes('Múltiplas cidades')) {
+              try {
+                const retryResponse = await axios.post('/cidades-ibge', {
+                  cidade_st: praca.nome_cidade,
+                  estado_st: praca.nome_estado
+                });
+                
+                if (retryResponse.data.success && retryResponse.data.ibgeCode) {
+                  ibgeCode = retryResponse.data.ibgeCode;
+                  console.log(`✅ IBGE Code encontrado na segunda tentativa: ${ibgeCode}`);
+                }
+              } catch (retryError: any) {
+                console.warn(`⚠️ Erro na segunda tentativa:`, retryError.response?.data || retryError.message);
+              }
+            }
           }
+          
+          // Adicionar ao array de todas as cidades
+          allRecordsJson.push({
+            planoMidiaDesc_st: `${planoMidiaGrupo_st}_${cidadeFormatada}`,
+            usuarioId_st: user?.id || '',
+            usuarioName_st: user?.name || '',
+            gender_st: targetSalvoLocal.genero,
+            class_st: targetSalvoLocal.classe,
+            age_st: targetSalvoLocal.faixaEtaria,
+            ibgeCode_vl: ibgeCode
+          });
+          
+          pracasComIbge.push({
+            praca,
+            ibgeCode,
+            cidadeFormatada
+          });
+          
+          console.log(`✅ Cidade ${praca.nome_cidade} preparada (IBGE: ${ibgeCode})`);
+        } catch (error) {
+          console.error(`❌ Erro ao preparar ${praca.nome_cidade}:`, error);
+          errosPraças.push({
+            praca,
+            erro: error instanceof Error ? error.message : 'Erro desconhecido'
+          });
         }
       }
       
-      console.log('🔍 DEBUG IBGE - Código final que será usado:', ibgeCode);
-      console.log('🔍 DEBUG IBGE - Tipo do código:', typeof ibgeCode);
-      console.log('🔍 DEBUG IBGE - É igual a 3550308?', ibgeCode === 3550308);
-      console.log('🔍 DEBUG IBGE - É igual a 750?', ibgeCode === 750);
-      console.log('🔍 DEBUG IBGE - Valor exato:', JSON.stringify(ibgeCode));
+      // ETAPA 2: Criar TODOS os planoMidiaDesc_pk em UMA ÚNICA CHAMADA
+      if (allRecordsJson.length === 0) {
+        throw new Error('Nenhuma cidade foi preparada com sucesso');
+      }
       
-      const recordsJson = [{
-        planoMidiaDesc_st: `${planoMidiaGrupo_st}_${cidadeFormatada}`,
-        usuarioId_st: user?.id || '',
-        usuarioName_st: user?.name || '',
-        gender_st: targetSalvoLocal.genero,
-        class_st: targetSalvoLocal.classe,
-        age_st: targetSalvoLocal.faixaEtaria,
-        ibgeCode_vl: ibgeCode
-      }];
-
-      console.log('📋 Criando planoMidiaDesc para:', recordsJson[0]);
+      console.log(`\n📋 Criando ${allRecordsJson.length} planoMidiaDesc_pk em UMA ÚNICA CHAMADA...`);
+      console.log(`📊 Records JSON:`, JSON.stringify(allRecordsJson, null, 2));
 
       const descResponse = await axios.post('/plano-midia-desc', {
         planoMidiaGrupo_pk,
-        recordsJson
+        recordsJson: allRecordsJson  // ← TODAS AS CIDADES DE UMA VEZ!
       });
 
       if (!descResponse.data || !Array.isArray(descResponse.data) || descResponse.data.length === 0) {
-        throw new Error('Erro ao criar planoMidiaDesc específico para a praça');
+        throw new Error(`Erro ao criar planoMidiaDesc_pk`);
       }
 
-      const planoMidiaDesc_pk = descResponse.data[0].new_pk;
-      console.log('✅ ETAPA 1 CONCLUÍDA - planoMidiaDesc_pk criado:', planoMidiaDesc_pk);
-
-      console.log('🔄 ETAPA 2: Salvando roteiro simulado...');
-      console.log('📊 Total de registros a processar:', dadosTabela.length);
-      console.log('⏰ Iniciando processamento (isso pode demorar alguns segundos)...');
-
-      // Chamar API
-      const response = await axios.post('/roteiro-simulado', {
-        planoMidiaDesc_pk,
-        dadosTabela,
-        pracasSelecionadas: [pracaSelecionadaSimulado], // Apenas a praça selecionada
-        quantidadeSemanas
-      }, {
-        timeout: 60000 // 60 segundos de timeout
+      // Armazenar todos os PKs criados
+      descResponse.data.forEach((item: any, idx: number) => {
+        planosMidiaDescPk.push(item.new_pk);
+        console.log(`✅ planoMidiaDesc_pk criado para ${pracasComIbge[idx]?.praca.nome_cidade || `Cidade ${idx + 1}`}: ${item.new_pk}`);
       });
-
-      if (response.data.success) {
-        const resultado = response.data.data;
+      
+      console.log(`📊 Todos os PKs criados:`, planosMidiaDescPk.join(', '));
+      console.log(`📊 Response completo da API:`, JSON.stringify(descResponse.data));
+      
+      // ETAPA 3: Salvar roteiro simulado para cada cidade (isso precisa ser loop)
+      for (let i = 0; i < pracasComIbge.length; i++) {
+        const { praca, ibgeCode } = pracasComIbge[i];
+        const planoMidiaDesc_pk = planosMidiaDescPk[i];
         
-        console.log('✅ ETAPA 2 CONCLUÍDA - Roteiro simulado salvo');
-        console.log('🔄 ETAPA 3: Executando processamento Databricks para roteiro simulado...');
-
-        // Executar Databricks específico para roteiro simulado
         try {
-          // O Databricks precisa processar TODOS os planos do grupo, então enviamos o planoMidiaGrupo_pk
-          const databricksResponse = await axios.post('/databricks-roteiro-simulado', {
-            planoMidiaDesc_pk: planoMidiaGrupo_pk, // O Databricks processa todos os planoMidiaDesc deste grupo
-            date_dh: resultado.data?.date_dh || new Date().toISOString().slice(0, 19).replace('T', ' '),
-            date_dt: resultado.data?.date_dt || new Date().toISOString().slice(0, 10)
+
+          console.log(`🔄 ETAPA 2.${i + 1}: Salvando roteiro simulado para ${praca.nome_cidade}...`);
+
+          // Coletar dados da tabela específica desta praça
+          console.log(`🔍 Buscando tabela para praça ID ${praca.id_cidade} (tipo: ${typeof praca.id_cidade})...`);
+          
+          // Tentar buscar a tabela usando diferentes formatos de ID para garantir compatibilidade
+          let tabelaDaPraca = tabelaSimulado[praca.id_cidade as any];
+          
+          // Se não encontrou, tentar como número
+          if (!tabelaDaPraca) {
+            const idNumero = Number(praca.id_cidade);
+            tabelaDaPraca = tabelaSimulado[idNumero];
+            if (tabelaDaPraca) {
+              console.log(`✅ Tabela encontrada usando ID numérico: ${idNumero}`);
+            }
+          }
+          
+          // Se ainda não encontrou, tentar como string
+          if (!tabelaDaPraca) {
+            const idString = String(praca.id_cidade);
+            tabelaDaPraca = tabelaSimulado[idString as any];
+            if (tabelaDaPraca) {
+              console.log(`✅ Tabela encontrada usando ID string: ${idString}`);
+            }
+          }
+          
+          // Se ainda não encontrou, tentar todas as chaves disponíveis
+          if (!tabelaDaPraca) {
+            console.log(`⚠️ Tentando buscar tabela comparando IDs manualmente...`);
+            const todasChaves = Object.keys(tabelaSimulado);
+            console.log(`📋 Chaves disponíveis:`, todasChaves);
+            console.log(`📋 ID da praça (original):`, praca.id_cidade);
+            console.log(`📋 ID da praça (número):`, Number(praca.id_cidade));
+            console.log(`📋 ID da praça (string):`, String(praca.id_cidade));
+            
+            // Tentar comparar valores (não tipos)
+            for (const chave of todasChaves) {
+              if (Number(chave) === Number(praca.id_cidade) || String(chave) === String(praca.id_cidade)) {
+                tabelaDaPraca = tabelaSimulado[Number(chave) || chave as any];
+                if (tabelaDaPraca) {
+                  console.log(`✅ Tabela encontrada na chave: ${chave}`);
+                  break;
+                }
+              }
+            }
+          }
+          
+          if (!tabelaDaPraca) {
+            const todasChaves = Object.keys(tabelaSimulado);
+            throw new Error(
+              `Tabela não encontrada para a praça ${praca.nome_cidade} (ID: ${praca.id_cidade}, tipo: ${typeof praca.id_cidade}). ` +
+              `Chaves disponíveis: ${todasChaves.join(', ')}`
+            );
+          }
+          
+          if (tabelaDaPraca.length === 0) {
+            throw new Error(`Tabela vazia para a praça ${praca.nome_cidade} (ID: ${praca.id_cidade})`);
+          }
+          
+          console.log(`✅ Tabela encontrada para ${praca.nome_cidade}: ${tabelaDaPraca.length} linhas`);
+          
+          const dadosTabela = tabelaDaPraca.map((linha) => {
+            return {
+              grupoSub_st: linha.grupoSub_st || linha.grupo_st,
+              visibilidade: linha.visibilidade,
+              seDigitalInsercoes_vl: linha.seDigitalInsercoes_vl || 0,
+              seDigitalMaximoInsercoes_vl: linha.seDigitalMaximoInsercoes_vl || 0,
+              // Enviar array de semanas (agora configurável na interface)
+              semanas: linha.semanas || []
+            };
           });
 
-          console.log('✅ ETAPA 3 CONCLUÍDA - Databricks executado');
+          console.log(`📊 Dados da tabela para ${praca.nome_cidade}: ${dadosTabela.length} linhas`);
 
-          let mensagemSucesso = `🎉 ROTEIRO SIMULADO PROCESSADO COM SUCESSO!\n\n`;
-          mensagemSucesso += `📊 RESUMO:\n`;
-          mensagemSucesso += `• ${resultado.registrosProcessados} registros processados\n`;
-          mensagemSucesso += `• ${resultado.semanasConfiguradas} semanas configuradas\n`;
-          mensagemSucesso += `• ${resultado.gruposConfigurados} grupos com mídia\n`;
-          mensagemSucesso += `• ${resultado.detalhes.totalInsecoesCompradas} inserções compradas no total\n\n`;
+          // Chamar API para salvar roteiro simulado desta praça
+          console.log(`📤 Enviando para API /roteiro-simulado:`);
+          console.log(`   - planoMidiaDesc_pk: ${planoMidiaDesc_pk}`);
+          console.log(`   - Praça: ${praca.nome_cidade}`);
+          console.log(`   - Linhas de dados: ${dadosTabela.length}`);
           
-          mensagemSucesso += `🏙️ PRAÇA CONFIGURADA: ${pracaSelecionadaSimulado.nome_cidade} - ${pracaSelecionadaSimulado.nome_estado}\n`;
-          mensagemSucesso += `📋 PLANO MÍDIA DESC PK: ${planoMidiaDesc_pk}\n`;
-          mensagemSucesso += `📺 GRUPOS ATIVOS: ${resultado.detalhes.gruposAtivos.join(', ')}\n\n`;
-          
-          mensagemSucesso += `✅ PLANO MÍDIA DESC CRIADO PARA A PRAÇA!\n`;
-          mensagemSucesso += `✅ DADOS SALVOS NA BASE CALCULADORA!\n`;
-          mensagemSucesso += `✅ PROCESSAMENTO DATABRICKS EXECUTADO!\n`;
-          mensagemSucesso += `🎯 ROTEIRO SIMULADO PRONTO PARA VISUALIZAÇÃO!`;
+          const response = await axios.post('/roteiro-simulado', {
+            planoMidiaDesc_pk,
+            dadosTabela,
+            pracasSelecionadas: [praca],
+            quantidadeSemanas
+          }, {
+            timeout: 60000 // 60 segundos de timeout
+          });
 
-          alert(mensagemSucesso);
-          
-          // Marcar roteiro simulado como salvo
-          setRoteiroSimuladoSalvo(true);
-          
-          // Marcar Aba 4 como preenchida (permite ir para Aba 6)
-          setAba4Preenchida(true);
-          
-          // Ativar Aba 6 para visualizar resultados
-          setAba6Habilitada(true);
+          if (response.data.success) {
+            resultadosPraças.push({
+              praca: praca,
+              planoMidiaDesc_pk,
+              resultado: response.data.data
+            });
+            console.log(`✅ Roteiro simulado salvo para ${praca.nome_cidade}`);
+            console.log(`📍 ===== FINALIZANDO PROCESSAMENTO DA PRAÇA ${i + 1}/${pracasSelecionadasSimulado.length} =====\n`);
+          } else {
+            throw new Error(response.data.message || 'Erro desconhecido ao salvar roteiro simulado');
+          }
 
-        } catch (databricksError) {
-          console.error('❌ Erro no processamento Databricks:', databricksError);
+        } catch (error: any) {
+          console.error(`\n❌ ===== ERRO AO PROCESSAR PRAÇA ${i + 1}/${pracasSelecionadasSimulado.length} =====`);
+          console.error(`❌ Praça: ${praca.nome_cidade} (ID: ${praca.id_cidade})`);
+          console.error(`❌ Erro:`, error);
+          console.error(`❌ Erro completo:`, error.response?.data || error.message || 'Erro desconhecido');
+          console.error(`❌ ===== FIM DO ERRO =====\n`);
           
-          let mensagemErro = `⚠️ ROTEIRO SIMULADO SALVO, MAS ERRO NO PROCESSAMENTO!\n\n`;
-          mensagemErro += `✅ Dados salvos na base calculadora\n`;
-          mensagemErro += `❌ Erro no processamento Databricks\n\n`;
-          mensagemErro += `📋 PLANO MÍDIA DESC PK: ${planoMidiaDesc_pk}\n`;
-          mensagemErro += `🏙️ PRAÇA: ${pracaSelecionadaSimulado.nome_cidade}\n\n`;
-          mensagemErro += `💡 Contate o suporte para verificar o processamento.`;
+          errosPraças.push({
+            praca: praca,
+            erro: error.response?.data?.message || error.message || 'Erro desconhecido'
+          });
           
-          alert(mensagemErro);
-          
-          // Marcar roteiro simulado como salvo (mesmo com erro no Databricks)
-          setRoteiroSimuladoSalvo(true);
-          
-          // Marcar Aba 4 como preenchida (permite ir para Aba 6)
-          setAba4Preenchida(true);
+          // Continuar processando as outras praças mesmo se uma falhar
+          console.log(`⚠️ Continuando processamento das outras praças...`);
+        }
+      }
+      
+      console.log(`\n📊 ===== RESUMO DO PROCESSAMENTO =====`);
+      console.log(`📊 Total de praças selecionadas: ${pracasSelecionadasSimulado.length}`);
+      console.log(`📊 Praças processadas com sucesso: ${planosMidiaDescPk.length}`);
+      console.log(`📊 Praças com erro: ${errosPraças.length}`);
+      console.log(`📊 Planos criados:`, planosMidiaDescPk.join(', '));
+
+      if (planosMidiaDescPk.length === 0) {
+        throw new Error('Nenhuma praça foi processada com sucesso');
+      }
+
+      console.log(`✅ ETAPAS 1, 2 e 3 CONCLUÍDAS - ${planosMidiaDescPk.length} praça(s) processada(s) com sucesso`);
+      console.log('⏳ Aguardando 2 segundos para garantir que todos os dados foram persistidos...');
+      
+      // Aguardar um pouco para garantir que o SQL Server commitou todos os dados
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      console.log('🔄 ETAPA 4: Executando processamento Databricks para o grupo...');
+
+      // Executar Databricks UMA VEZ para o grupo (processa todos os planoMidiaDesc do grupo)
+      try {
+        const databricksResponse = await axios.post('/databricks-roteiro-simulado', {
+          planoMidiaDesc_pk: planoMidiaGrupo_pk, // O Databricks processa todos os planoMidiaDesc deste grupo
+          date_dh: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          date_dt: new Date().toISOString().slice(0, 10)
+        });
+
+        console.log('✅ ETAPA 4 CONCLUÍDA - Databricks executado');
+        
+        // DEBUG DESABILITADO TEMPORARIAMENTE (erro na query da tabela)
+        console.log('🔍 ETAPA 5 (DEBUG): Pulando debug automático...');
+        console.log('📊 Use o endpoint /teste-view-resultados manualmente se precisar investigar');
+
+        let mensagemSucesso = `🎉 ROTEIRO SIMULADO PROCESSADO COM SUCESSO!\n\n`;
+        mensagemSucesso += `📊 RESUMO:\n`;
+        mensagemSucesso += `• ${planosMidiaDescPk.length} ${planosMidiaDescPk.length === 1 ? 'praça processada' : 'praças processadas'}\n`;
+        
+        let totalRegistros = 0;
+        let totalInsecoes = 0;
+        resultadosPraças.forEach(r => {
+          totalRegistros += r.resultado.registrosProcessados || 0;
+          totalInsecoes += r.resultado.detalhes?.totalInsecoesCompradas || 0;
+        });
+        
+        mensagemSucesso += `• ${totalRegistros} registros processados no total\n`;
+        mensagemSucesso += `• ${resultadosPraças[0]?.resultado.semanasConfiguradas || quantidadeSemanas} semanas configuradas\n`;
+        mensagemSucesso += `• ${totalInsecoes} inserções compradas no total\n\n`;
+        
+        mensagemSucesso += `🏙️ PRAÇAS CONFIGURADAS:\n`;
+        resultadosPraças.forEach((r, idx) => {
+          mensagemSucesso += `  ${idx + 1}. ${r.praca.nome_cidade} - ${r.praca.nome_estado} (PK: ${r.planoMidiaDesc_pk})\n`;
+        });
+        
+        if (errosPraças.length > 0) {
+          mensagemSucesso += `\n⚠️ ERROS EM ${errosPraças.length} PRAÇA(S):\n`;
+          errosPraças.forEach((e, idx) => {
+            mensagemSucesso += `  ${idx + 1}. ${e.praca.nome_cidade}: ${e.erro}\n`;
+          });
         }
         
-      } else {
-        throw new Error(response.data.message || 'Erro desconhecido');
+        mensagemSucesso += `\n✅ PLANO MÍDIA DESC CRIADO PARA ${planosMidiaDescPk.length} PRAÇA(S)!\n`;
+        mensagemSucesso += `✅ DADOS SALVOS NA BASE CALCULADORA!\n`;
+        mensagemSucesso += `✅ PROCESSAMENTO DATABRICKS EXECUTADO!\n`;
+        mensagemSucesso += `🎯 ROTEIRO SIMULADO PRONTO PARA VISUALIZAÇÃO!`;
+
+        alert(mensagemSucesso);
+        
+        // Marcar roteiro simulado como salvo
+        setRoteiroSimuladoSalvo(true);
+        
+        // Marcar Aba 4 como preenchida (permite ir para Aba 6)
+        setAba4Preenchida(true);
+        
+        // Ativar Aba 6 para visualizar resultados
+        setAba6Habilitada(true);
+
+      } catch (databricksError) {
+        console.error('❌ Erro no processamento Databricks:', databricksError);
+        
+        let mensagemErro = `⚠️ ROTEIRO SIMULADO SALVO, MAS ERRO NO PROCESSAMENTO!\n\n`;
+        mensagemErro += `✅ Dados salvos na base calculadora para ${planosMidiaDescPk.length} praça(s)\n`;
+        mensagemErro += `❌ Erro no processamento Databricks\n\n`;
+        
+        if (errosPraças.length > 0) {
+          mensagemErro += `⚠️ ERROS EM ${errosPraças.length} PRAÇA(S):\n`;
+          errosPraças.forEach((e, idx) => {
+            mensagemErro += `  ${idx + 1}. ${e.praca.nome_cidade}: ${e.erro}\n`;
+          });
+          mensagemErro += `\n`;
+        }
+        
+        mensagemErro += `💡 Contate o suporte para verificar o processamento.`;
+        
+        alert(mensagemErro);
+        
+        // Marcar roteiro simulado como salvo (mesmo com erro no Databricks)
+        setRoteiroSimuladoSalvo(true);
+        
+        // Marcar Aba 4 como preenchida (permite ir para Aba 6)
+        setAba4Preenchida(true);
       }
 
     } catch (error) {
@@ -3365,45 +3567,83 @@ export const CriarRoteiro: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Seleção da Praça Específica */}
+                        {/* Seleção de Múltiplas Praças */}
                         {cidadesSalvas.length > 0 && (
                           <div className="mb-8 bg-white p-6 rounded-xl border-2 border-gray-200 shadow-sm">
                             <label className="block text-base font-bold text-[#3a3a3a] mb-4">
-                              Selecione a praça para configurar
+                              Selecione as praças para configurar (múltiplas seleções permitidas)
                             </label>
-                            <select 
-                              value={pracaSelecionadaSimulado?.id_cidade || ''}
-                              onChange={(e) => {
-                                const cidadeId = parseInt(e.target.value);
-                                const cidade = cidadesSalvas.find(c => c.id_cidade === cidadeId);
-                                setPracaSelecionadaSimulado(cidade || null);
-                                // Limpar tabela quando mudar de praça
-                                setTabelaSimulado([]);
-                              }}
-                              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            >
-                              <option value="">Escolha uma praça...</option>
-                              {cidadesSalvas.map((cidade) => (
-                                <option key={cidade.id_cidade} value={cidade.id_cidade}>
-                                  {cidade.nome_cidade} - {cidade.nome_estado}
-                                </option>
-                              ))}
-                            </select>
-                            {pracaSelecionadaSimulado && (
+                            <div className="space-y-3 max-h-96 overflow-y-auto border-2 border-gray-200 rounded-lg p-4 bg-gray-50">
+                              {cidadesSalvas.map((cidade) => {
+                                const estaPracaSelecionada = pracasSelecionadasSimulado.some(
+                                  p => p.id_cidade === cidade.id_cidade
+                                );
+                                return (
+                                  <label
+                                    key={cidade.id_cidade}
+                                    className="flex items-center gap-3 p-3 bg-white rounded-lg border-2 border-gray-300 hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition-all"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={estaPracaSelecionada}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          // Adicionar praça
+                                          setPracasSelecionadasSimulado([...pracasSelecionadasSimulado, cidade]);
+                                        } else {
+                                          // Remover praça
+                                          setPracasSelecionadasSimulado(
+                                            pracasSelecionadasSimulado.filter(p => p.id_cidade !== cidade.id_cidade)
+                                          );
+                                          // Remover tabela desta praça quando remover - usar número como chave
+                                          setTabelaSimulado((prev) => {
+                                            const novasTabelas = { ...prev };
+                                            const idPraca = Number(cidade.id_cidade);
+                                            delete novasTabelas[idPraca];
+                                            // Também tentar remover se estiver como string
+                                            delete novasTabelas[cidade.id_cidade as any];
+                                            return novasTabelas;
+                                          });
+                                        }
+                                      }}
+                                      className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                    />
+                                    <div className="flex-1">
+                                      <span className="text-sm font-medium text-gray-800">
+                                        {cidade.nome_cidade} - {cidade.nome_estado}
+                                      </span>
+                                    </div>
+                                    {estaPracaSelecionada && (
+                                      <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                      </div>
+                                    )}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            {pracasSelecionadasSimulado.length > 0 && (
                               <div className="mt-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-lg">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-md">
-                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    </svg>
-                    </div>
-                                  <div>
-                                    <p className="text-sm font-medium text-green-800">Praça selecionada</p>
-                                    <p className="text-base font-bold text-green-900">
-                                      {pracaSelecionadaSimulado.nome_cidade} - {pracaSelecionadaSimulado.nome_estado}
-                                    </p>
-                                  </div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  </svg>
+                                  <p className="text-sm font-medium text-green-800">
+                                    {pracasSelecionadasSimulado.length} {pracasSelecionadasSimulado.length === 1 ? 'praça selecionada' : 'praças selecionadas'}
+                                  </p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {pracasSelecionadasSimulado.map((praca) => (
+                                    <span
+                                      key={praca.id_cidade}
+                                      className="px-3 py-1 bg-green-600 text-white text-xs font-medium rounded-full"
+                                    >
+                                      {praca.nome_cidade} - {praca.nome_estado}
+                                    </span>
+                                  ))}
                                 </div>
                               </div>
                             )}
@@ -3411,7 +3651,7 @@ export const CriarRoteiro: React.FC = () => {
                         )}
 
                         {/* Card de Configuração */}
-                        {pracaSelecionadaSimulado && (
+                        {pracasSelecionadasSimulado.length > 0 && (
                           <div className="mb-8 bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl border-2 border-orange-200 shadow-sm">
                             <div className="space-y-4">
                               {/* Seleção de Semanas */}
@@ -3424,8 +3664,8 @@ export const CriarRoteiro: React.FC = () => {
                                   onChange={(e) => {
                                     const novasSemanas = parseInt(e.target.value);
                                     setQuantidadeSemanas(novasSemanas);
-                                    // Regenerar tabela com novas semanas se já existe
-                                    if (tabelaSimulado.length > 0) {
+                                    // Regenerar tabelas com novas semanas se já existem
+                                    if (Object.keys(tabelaSimulado).length > 0) {
                                       gerarTabelaSimulado(novasSemanas);
                                     }
                                   }}
@@ -3456,123 +3696,138 @@ export const CriarRoteiro: React.FC = () => {
                           </div>
                         )}
 
-                        {/* Tabela Simulada */}
-                        {tabelaSimulado.length > 0 && (
-                          <div className="mb-8">
-                            {/* Header da Tabela */}
-                            <div className="mb-6 p-6 bg-gradient-to-r from-blue-600 to-blue-700 rounded-t-xl border-b-4 border-blue-800">
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <h4 className="text-xl font-bold text-white uppercase tracking-wide mb-2">
-                                    Configure as vias públicas
-                            </h4>
-                                  <p className="text-blue-100">
-                                    📍 {pracaSelecionadaSimulado?.nome_cidade || 'praça'} - {pracaSelecionadaSimulado?.nome_estado}
-                                  </p>
-                                </div>
-                                <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center shadow-lg">
-                                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                  </svg>
-                                </div>
-                              </div>
-                            </div>
+                        {/* Tabelas Simuladas - Uma por Praça */}
+                        {Object.keys(tabelaSimulado).length > 0 && (
+                          <div className="mb-8 space-y-8">
+                            {pracasSelecionadasSimulado.map((praca) => {
+                              // Buscar tabela usando número como chave
+                              const idPracaNumero = Number(praca.id_cidade);
+                              const tabelaDaPraca = tabelaSimulado[idPracaNumero] || tabelaSimulado[praca.id_cidade as any];
+                              if (!tabelaDaPraca || tabelaDaPraca.length === 0) return null;
+                              
+                              return (
+                                <div key={praca.id_cidade} className="mb-8">
+                                  {/* Header da Tabela */}
+                                  <div className="mb-6 p-6 bg-gradient-to-r from-blue-600 to-blue-700 rounded-t-xl border-b-4 border-blue-800">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <h4 className="text-xl font-bold text-white uppercase tracking-wide mb-2">
+                                          Configure as vias públicas
+                                        </h4>
+                                        <p className="text-blue-100">
+                                          📍 {praca.nome_cidade} - {praca.nome_estado}
+                                        </p>
+                                      </div>
+                                      <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center shadow-lg">
+                                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                      </div>
+                                    </div>
+                                  </div>
 
-                            {/* Tabela */}
-                            <div className="overflow-x-auto border-2 border-gray-300 rounded-b-xl shadow-lg">
-                              <table className="w-full">
-                                <thead className="bg-gradient-to-r from-gray-700 to-gray-800 text-white">
-                                  <tr>
-                                    <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-xs">Grupo</th>
-                                    <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-xs">Descrição</th>
-                                    <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Visibilidade</th>
-                                    <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Digital Inserções</th>
-                                    <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Digital Máx. Inserções</th>
-                                    {/* Colunas dinâmicas de semanas */}
-                                    {tabelaSimulado[0]?.semanas && tabelaSimulado[0].semanas.map((semana: any, idx: number) => (
-                                      <th key={idx} className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">
-                                        Semana {semana.semana}
-                                      </th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {tabelaSimulado.map((linha, index) => (
-                                    <tr key={index} className={`border-b border-gray-200 transition-colors ${index % 2 === 0 ? 'bg-white hover:bg-blue-50' : 'bg-gray-50 hover:bg-blue-50'}`}>
-                                      <td className="px-4 py-3 text-sm font-bold text-gray-800">{linha.grupo_st}</td>
-                                      <td className="px-4 py-3 text-sm text-gray-700">{linha.grupoDesc_st}</td>
-                                      <td className="px-4 py-3">
-                                        <select 
-                                          value={linha.visibilidade}
-                                          onChange={(e) => {
-                                            const novaTabela = [...tabelaSimulado];
-                                            novaTabela[index].visibilidade = e.target.value;
-                                            setTabelaSimulado(novaTabela);
-                                          }}
-                                          className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                                        >
-                                          <option value="25">Baixa</option>
-                                          <option value="50">Média</option>
-                                          <option value="75">Moderada</option>
-                                          <option value="100">Alta</option>
-                                        </select>
-                                      </td>
-                                      <td className="px-4 py-3">
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          value={linha.seDigitalInsercoes_vl || 0}
-                                          onChange={(e) => {
-                                            const novaTabela = [...tabelaSimulado];
-                                            novaTabela[index].seDigitalInsercoes_vl = parseInt(e.target.value) || 0;
-                                            setTabelaSimulado(novaTabela);
-                                          }}
-                                          className="w-full px-3 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                                          placeholder="0"
-                                        />
-                                      </td>
-                                      <td className="px-4 py-3">
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          value={linha.seDigitalMaximoInsercoes_vl || 0}
-                                          onChange={(e) => {
-                                            const novaTabela = [...tabelaSimulado];
-                                            novaTabela[index].seDigitalMaximoInsercoes_vl = parseInt(e.target.value) || 0;
-                                            setTabelaSimulado(novaTabela);
-                                          }}
-                                          className="w-full px-3 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                                          placeholder="0"
-                                        />
-                                      </td>
-                                      {/* Células dinâmicas de semanas */}
-                                      {linha.semanas && linha.semanas.map((semana: any, semanaIdx: number) => (
-                                        <td key={semanaIdx} className="px-2 py-3">
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            value={semana.insercaoComprada || 0}
-                                            onChange={(e) => {
-                                              const novaTabela = [...tabelaSimulado];
-                                              const valor = parseInt(e.target.value) || 0;
-                                              novaTabela[index].semanas[semanaIdx].insercaoComprada = valor;
-                                              setTabelaSimulado(novaTabela);
-                                            }}
-                                            className="w-full px-2 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
-                                            placeholder="0"
-                                          />
-                                        </td>
-                                      ))}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
+                                  {/* Tabela */}
+                                  <div className="overflow-x-auto border-2 border-gray-300 rounded-b-xl shadow-lg">
+                                    <table className="w-full">
+                                      <thead className="bg-gradient-to-r from-gray-700 to-gray-800 text-white">
+                                        <tr>
+                                          <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-xs">Grupo</th>
+                                          <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-xs">Descrição</th>
+                                          <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Visibilidade</th>
+                                          <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Digital Inserções</th>
+                                          <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Digital Máx. Inserções</th>
+                                          {/* Colunas dinâmicas de semanas */}
+                                          {tabelaDaPraca[0]?.semanas && tabelaDaPraca[0].semanas.map((semana: any, idx: number) => (
+                                            <th key={idx} className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">
+                                              Semana {semana.semana}
+                                            </th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {tabelaDaPraca.map((linha, index) => (
+                                          <tr key={index} className={`border-b border-gray-200 transition-colors ${index % 2 === 0 ? 'bg-white hover:bg-blue-50' : 'bg-gray-50 hover:bg-blue-50'}`}>
+                                            <td className="px-4 py-3 text-sm font-bold text-gray-800">{linha.grupo_st}</td>
+                                            <td className="px-4 py-3 text-sm text-gray-700">{linha.grupoDesc_st}</td>
+                                            <td className="px-4 py-3">
+                                              <select 
+                                                value={linha.visibilidade}
+                                                onChange={(e) => {
+                                                  const novasTabelas = { ...tabelaSimulado };
+                                                  novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
+                                                  novasTabelas[idPracaNumero][index].visibilidade = e.target.value;
+                                                  setTabelaSimulado(novasTabelas);
+                                                }}
+                                                className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                              >
+                                                <option value="25">Baixa</option>
+                                                <option value="50">Média</option>
+                                                <option value="75">Moderada</option>
+                                                <option value="100">Alta</option>
+                                              </select>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                value={linha.seDigitalInsercoes_vl || 0}
+                                                onChange={(e) => {
+                                                  const novasTabelas = { ...tabelaSimulado };
+                                                  novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
+                                                  novasTabelas[idPracaNumero][index].seDigitalInsercoes_vl = parseInt(e.target.value) || 0;
+                                                  setTabelaSimulado(novasTabelas);
+                                                }}
+                                                className="w-full px-3 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                                placeholder="0"
+                                              />
+                                            </td>
+                                            <td className="px-4 py-3">
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                value={linha.seDigitalMaximoInsercoes_vl || 0}
+                                                onChange={(e) => {
+                                                  const novasTabelas = { ...tabelaSimulado };
+                                                  novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
+                                                  novasTabelas[idPracaNumero][index].seDigitalMaximoInsercoes_vl = parseInt(e.target.value) || 0;
+                                                  setTabelaSimulado(novasTabelas);
+                                                }}
+                                                className="w-full px-3 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                                placeholder="0"
+                                              />
+                                            </td>
+                                            {/* Células dinâmicas de semanas */}
+                                            {linha.semanas && linha.semanas.map((semana: any, semanaIdx: number) => (
+                                              <td key={semanaIdx} className="px-2 py-3">
+                                                <input
+                                                  type="number"
+                                                  min="0"
+                                                  value={semana.insercaoComprada || 0}
+                                                  onChange={(e) => {
+                                                    const novasTabelas = { ...tabelaSimulado };
+                                                    novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
+                                                    const valor = parseInt(e.target.value) || 0;
+                                                    novasTabelas[idPracaNumero][index].semanas[semanaIdx].insercaoComprada = valor;
+                                                    setTabelaSimulado(novasTabelas);
+                                                  }}
+                                                  className="w-full px-2 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
+                                                  placeholder="0"
+                                                />
+                                              </td>
+                                            ))}
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
 
                         {/* Botão Salvar para Roteiro Simulado */}
-                        {tabelaSimulado.length > 0 && (
+                        {Object.keys(tabelaSimulado).length > 0 && (
                           <div className="mb-8 flex justify-center">
                             <button
                               type="button"
