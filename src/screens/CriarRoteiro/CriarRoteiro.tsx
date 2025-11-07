@@ -4,7 +4,6 @@ import { Topbar } from "../../components/Topbar/Topbar";
 import { useAuth } from "../../contexts/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "../../config/axios";
-import * as XLSX from 'xlsx';
 
 interface Agencia {
   id_agencia: number;
@@ -1611,159 +1610,105 @@ export const CriarRoteiro: React.FC = () => {
     }
   };
 
-  // Função para exportar dados para Excel
-  const exportarParaExcel = () => {
+  // Função para baixar Excel do SharePoint
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
+  
+  const baixarExcelSharePoint = async () => {
+    console.log('🔵 FUNÇÃO CHAMADA: baixarExcelSharePoint');
+    console.log('🔵 planoMidiaGrupo_pk atual:', planoMidiaGrupo_pk);
+    
     try {
-      console.log('📊 Iniciando exportação para Excel...');
-      
-      // Criar workbook
-      const workbook = XLSX.utils.book_new();
-      
-      // 1. Aba: Visão Geral
-      if (dadosResultados.length > 0) {
-        const dadosVisaoGeral = [
-          // Cabeçalho com informações do plano
-          ['PLANO DE MÍDIA - RELATÓRIO DE RESULTADOS'],
-          [''],
-          ['Informações do Plano:'],
-          ['Nome do Plano:', nomeRoteiro || 'N/A'],
-          ['Gênero:', genero || 'Não definido'],
-          ['Classe:', classe || 'Não definida'],
-          ['Faixa Etária:', faixaEtaria || 'Não definida'],
-          ['Período Total:', `${semanasUnicas.length} semanas`],
-          ['Cidades:', pracasUnicas.map(p => p.praca).join(', ')],
-          ['Data de Criação:', new Date().toLocaleDateString('pt-BR')],
-          ['CPMView:', totaisResultados?.grp_vl?.toFixed(3) || '0.000'],
-          [''],
-          // Dados da tabela
-          ['VISÃO GERAL - RESUMO TOTAL'],
-          [''],
-          ['Praça', 'Impactos', 'Cobertura (pessoas)', 'Cobertura (%)', 'Frequência', 'GRP'],
-          ...dadosResultados.map(item => [
-            item.cidade_st,
-            Math.round(item.impactosTotal_vl || 0),
-            Math.round(item.coberturaPessoasTotal_vl || 0),
-            (item.coberturaProp_vl || 0).toFixed(1),
-            (item.frequencia_vl || 0).toFixed(1),
-            (item.grp_vl || 0).toFixed(3)
-          ]),
-          // Linha de totais
-          ['TOTAL', 
-           Math.round(totaisResultados?.impactosTotal_vl || 0),
-           Math.round(totaisResultados?.coberturaPessoasTotal_vl || 0),
-           (totaisResultados?.coberturaProp_vl || 0).toFixed(1),
-           (totaisResultados?.frequencia_vl || 0).toFixed(1),
-           (totaisResultados?.grp_vl || 0).toFixed(3)
-          ]
-        ];
-        
-        const worksheetGeral = XLSX.utils.aoa_to_sheet(dadosVisaoGeral);
-        XLSX.utils.book_append_sheet(workbook, worksheetGeral, 'Visão Geral');
+      // Validar se temos o planoMidiaGrupo_pk
+      if (!planoMidiaGrupo_pk) {
+        console.warn('⚠️ planoMidiaGrupo_pk não encontrado');
+        alert('⚠️ Não foi possível identificar o plano de mídia. Por favor, salve o roteiro primeiro.');
+        return;
       }
-      
-      // 1.1. Aba: Target (se houver dados)
-      if (dadosTarget.length > 0) {
-        const dadosTargetExcel = [
-          // Cabeçalho com informações do plano
-          ['PLANO DE MÍDIA - RELATÓRIO DE TARGET'],
-          [''],
-          ['Informações do Plano:'],
-          ['Nome do Plano:', nomeRoteiro || 'N/A'],
-          ['Gênero:', genero || 'Não definido'],
-          ['Classe:', classe || 'Não definida'],
-          ['Faixa Etária:', faixaEtaria || 'Não definida'],
-          ['Período Total:', `${semanasUnicas.length} semanas`],
-          ['Cidades:', pracasUnicas.map(p => p.praca).join(', ')],
-          ['Data de Criação:', new Date().toLocaleDateString('pt-BR')],
-          ['CPMView:', totaisTarget?.grp_vl?.toFixed(3) || '0.000'],
-          [''],
-          // Dados da tabela
-          ['TARGET - RESUMO TOTAL'],
-          [''],
-          ['Praça', 'Impactos', 'Cobertura (pessoas)', 'Cobertura (%)', 'Frequência', 'GRP'],
-          ...dadosTarget.map(item => [
-            item.cidade_st,
-            Math.round(item.impactosTotal_vl || 0),
-            Math.round(item.coberturaPessoasTotal_vl || 0),
-            (item.coberturaProp_vl || 0).toFixed(1),
-            (item.frequencia_vl || 0).toFixed(1),
-            (item.grp_vl || 0).toFixed(3)
-          ]),
-          // Linha de totais
-          ['TOTAL', 
-           Math.round(totaisTarget?.impactosTotal_vl || 0),
-           Math.round(totaisTarget?.coberturaPessoasTotal_vl || 0),
-           (totaisTarget?.coberturaProp_vl || 0).toFixed(1),
-           (totaisTarget?.frequencia_vl || 0).toFixed(1),
-           (totaisTarget?.grp_vl || 0).toFixed(3)
-          ]
-        ];
-        
-        const worksheetTarget = XLSX.utils.aoa_to_sheet(dadosTargetExcel);
-        XLSX.utils.book_append_sheet(workbook, worksheetTarget, 'Target');
-      }
-      
-      // 2. Aba: Visão por Praça
-      if (dadosSemanais.length > 0) {
-        // Agrupar dados por cidade
-        const dadosPorCidade = dadosSemanais.reduce((acc: any, item: any) => {
-          const cidade = item.cidade_st;
-          if (!acc[cidade]) {
-            acc[cidade] = {};
-          }
-          acc[cidade][item.week_vl] = item;
-          return acc;
-        }, {});
 
-        // Criar dados para cada cidade
-        Object.entries(dadosPorCidade).forEach(([cidade, dadosCidade]: [string, any]) => {
-          const dadosCidadeExcel = [
-            // Cabeçalho da cidade
-            [`VISÃO POR PRAÇA - ${cidade}`],
-            [''],
-            ['Itens', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9', 'W10', 'W11', 'W12', 'TOTAL'],
-            // Impactos IPV
-            ['Impactos IPV', ...Array.from({ length: 12 }, (_, i) => {
-              const semana = dadosCidade[i + 1];
-              return semana?.impactos_vl ? Math.round(semana.impactos_vl) : 0;
-            }), dadosSemanaisSummary.find(s => s.cidade_st === cidade)?.impactosTotal_vl || 0],
-            // Cobertura (N° pessoas)
-            ['Cobertura (N° pessoas)', ...Array.from({ length: 12 }, (_, i) => {
-              const semana = dadosCidade[i + 1];
-              return semana?.coberturaPessoas_vl ? Math.round(semana.coberturaPessoas_vl) : 0;
-            }), dadosSemanaisSummary.find(s => s.cidade_st === cidade)?.coberturaPessoasTotal_vl || 0],
-            // Cobertura
-            ['Cobertura %', ...Array.from({ length: 12 }, (_, i) => {
-              const semana = dadosCidade[i + 1];
-              return semana?.coberturaProp_vl ? semana.coberturaProp_vl.toFixed(1) + '%' : '0.0%';
-            }), dadosSemanaisSummary.find(s => s.cidade_st === cidade) ? 
-              (dadosSemanaisSummary.find(s => s.cidade_st === cidade).coberturaProp_vl || 0).toFixed(1) + '%' : '0.0%'],
-            // Frequência
-            ['Frequência', ...Array.from({ length: 12 }, (_, i) => {
-              const semana = dadosCidade[i + 1];
-              return semana?.frequencia_vl ? semana.frequencia_vl.toFixed(1) : '0.0';
-            }), dadosSemanaisSummary.find(s => s.cidade_st === cidade)?.frequencia_vl?.toFixed(1) || '0.0'],
-            // GRP
-            ['GRP', ...Array.from({ length: 12 }, (_, i) => {
-              const semana = dadosCidade[i + 1];
-              return semana?.grp_vl ? semana.grp_vl.toFixed(3) : '0.000';
-            }), dadosSemanaisSummary.find(s => s.cidade_st === cidade)?.grp_vl?.toFixed(3) || '0.000']
-          ];
-          
-          const worksheetCidade = XLSX.utils.aoa_to_sheet(dadosCidadeExcel);
-          XLSX.utils.book_append_sheet(workbook, worksheetCidade, cidade.substring(0, 31)); // Limitar nome da aba
-        });
+      setDownloadingExcel(true);
+      console.log('📥 Iniciando download do SharePoint...');
+      console.log('📊 planoMidiaGrupo_pk:', planoMidiaGrupo_pk);
+      console.log('🌐 URL da API:', '/sharepoint-download');
+
+      // Chamar API do SharePoint
+      console.log('📤 Enviando requisição para API...');
+      const response = await axios.post('/sharepoint-download', {
+        planoMidiaGrupo_pk: planoMidiaGrupo_pk
+      }, {
+        responseType: 'blob', // Importante para receber arquivo binário
+        timeout: 60000 // 60 segundos
+      });
+
+      console.log('✅ Resposta recebida da API');
+      console.log('📊 Status:', response.status);
+      console.log('📦 Content-Type:', response.headers['content-type']);
+      console.log('📏 Tamanho:', response.data.size, 'bytes');
+
+      // Criar URL temporária para download
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      
+      console.log('🔗 Criando URL de download...');
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Nome do arquivo
+      const nomeArquivo = `Roteiro_Completo_${planoMidiaGrupo_pk}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.setAttribute('download', nomeArquivo);
+      
+      // Fazer download
+      console.log('💾 Iniciando download do arquivo:', nomeArquivo);
+      document.body.appendChild(link);
+      link.click();
+      
+      // Limpar
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        console.log('🧹 Limpeza concluída');
+      }, 100);
+
+      console.log('✅ Download concluído com sucesso!');
+      alert(`✅ Download concluído!\n\nArquivo: ${nomeArquivo}`);
+
+    } catch (error: any) {
+      console.error('❌ ERRO DETALHADO:', error);
+      console.error('❌ Error.response:', error.response);
+      console.error('❌ Error.message:', error.message);
+      console.error('❌ Error.code:', error.code);
+      
+      let mensagemErro = '❌ Erro ao baixar arquivo do SharePoint.\n\n';
+      
+      if (error.response?.status === 404) {
+        mensagemErro += 'Arquivo não encontrado no SharePoint para este roteiro.\n\n';
+        mensagemErro += `planoMidiaGrupo_pk: ${planoMidiaGrupo_pk}\n\n`;
+        mensagemErro += 'Verifique se o arquivo foi carregado no SharePoint com esta PK.';
+      } else if (error.response?.status === 500) {
+        mensagemErro += 'Erro no servidor. Verifique as configurações do Azure.\n\n';
+        // Tentar extrair mensagem do erro
+        try {
+          const errorText = await error.response.data.text();
+          mensagemErro += errorText || 'Erro desconhecido';
+        } catch {
+          mensagemErro += error.response?.data?.message || 'Erro desconhecido';
+        }
+      } else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        mensagemErro += 'Tempo limite excedido. O arquivo pode ser muito grande ou o servidor não está respondendo.';
+      } else if (error.message?.includes('Network Error')) {
+        mensagemErro += 'Erro de rede. Verifique:\n';
+        mensagemErro += '1. Se o servidor está rodando (vercel dev)\n';
+        mensagemErro += '2. Se a API está acessível\n';
+        mensagemErro += '3. Sua conexão com a internet';
+      } else {
+        mensagemErro += error.response?.data?.message || error.message || 'Erro desconhecido';
       }
       
-      // 3. Gerar e baixar arquivo
-      const nomeArquivo = `Resultados_${nomeRoteiro || 'Plano'}_${new Date().toISOString().split('T')[0]}.xlsx`;
-      XLSX.writeFile(workbook, nomeArquivo);
-      
-      console.log('✅ Arquivo Excel gerado com sucesso:', nomeArquivo);
-      
-    } catch (error) {
-      console.error('❌ Erro ao exportar para Excel:', error);
-      alert('Erro ao gerar arquivo Excel. Tente novamente.');
+      alert(mensagemErro);
+    } finally {
+      setDownloadingExcel(false);
+      console.log('🔵 Estado downloadingExcel resetado');
     }
   };
 
@@ -4678,14 +4623,37 @@ export const CriarRoteiro: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Botão Download Excel */}
+                    {/* Botão Download Excel do SharePoint */}
                     <div className="mt-8 flex justify-center">
                       <button
-                        onClick={exportarParaExcel}
-                        className="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium"
+                        onClick={baixarExcelSharePoint}
+                        disabled={downloadingExcel || !planoMidiaGrupo_pk}
+                        className={`px-6 py-3 rounded-lg transition-colors font-medium flex items-center gap-2 ${
+                          downloadingExcel || !planoMidiaGrupo_pk
+                            ? 'bg-gray-400 cursor-not-allowed'
+                            : 'bg-orange-500 text-white hover:bg-orange-600'
+                        }`}
                       >
-                        📊 Download Excel
+                        {downloadingExcel ? (
+                          <>
+                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>Baixando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>📊</span>
+                            <span>Download Excel</span>
+                          </>
+                        )}
                       </button>
+                      {!planoMidiaGrupo_pk && (
+                        <p className="text-sm text-gray-500 mt-2 text-center">
+                          Salve o roteiro primeiro para habilitar o download
+                        </p>
+                      )}
                     </div>
 
                   </div>
