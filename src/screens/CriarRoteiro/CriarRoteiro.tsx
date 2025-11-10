@@ -4,6 +4,7 @@ import { Topbar } from "../../components/Topbar/Topbar";
 import { useAuth } from "../../contexts/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "../../config/axios";
+import * as XLSX from "xlsx";
 
 interface Agencia {
   id_agencia: number;
