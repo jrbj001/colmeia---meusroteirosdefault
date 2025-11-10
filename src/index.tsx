@@ -9,6 +9,7 @@ import { Callback } from "./screens/Callback";
 import { MeusRoteiros } from "./screens/MeusRoteiros";
 import { Mapa } from "./screens/Mapa";
 import { CriarRoteiro } from "./screens/CriarRoteiro";
+import { ConsultaEndereco } from "./screens/ConsultaEndereco";
 import { VisualizarResultados } from "./screens/VisualizarResultados";
 import '../tailwind.css';
 import 'leaflet/dist/leaflet.css';
@@ -58,6 +59,14 @@ createRoot(document.getElementById("app") as HTMLElement).render(
               element={
                 <ProtectedRoute>
                   <VisualizarResultados />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/consulta-endereco" 
+              element={
+                <ProtectedRoute>
+                  <ConsultaEndereco />
                 </ProtectedRoute>
               } 
             />

@@ -1,0 +1,2 @@
+export { ConsultaEndereco } from './ConsultaEndereco';
+
