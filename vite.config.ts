@@ -1,5 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { existsSync, writeFileSync } from 'fs'
+
+// Garantir que .env existe (mesmo vazio) para o build não falhar
+if (!existsSync('.env')) {
+  writeFileSync('.env', '# Auto-generated for build\n')
+}
 
 export default defineConfig({
   plugins: [react()],
