@@ -1222,14 +1222,14 @@ export const CriarRoteiro: React.FC = () => {
               const visibilidadeTexto = row[templateIndices.visibilidade_estatico]?.toString().trim().toUpperCase();
               if (!visibilidadeTexto) return null;
               
-              // Mapear texto para valor numérico
-              if (visibilidadeTexto.includes('ALTA')) return 100;
-              if (visibilidadeTexto.includes('MODERADA')) return 75;
-              if (visibilidadeTexto.includes('MÉDIA') || visibilidadeTexto.includes('MEDIA')) return 50;
+              // Mapear texto para valor numérico (ordem importa! Verificar BAIXA antes de ALTA)
               if (visibilidadeTexto.includes('BAIXA')) return 25;
+              if (visibilidadeTexto.includes('MÉDIA') || visibilidadeTexto.includes('MEDIA')) return 50;
+              if (visibilidadeTexto.includes('MODERADA')) return 75;
+              if (visibilidadeTexto.includes('ALTA')) return 100;
               
-              // "Não visibilidade" ou "Sem visibilidade" = 0
-              if (visibilidadeTexto.includes('NÃO') || visibilidadeTexto.includes('NAO') || visibilidadeTexto.includes('SEM')) return 0;
+              // "Não visibilidade" ou "Sem visibilidade" = null (sem info)
+              if (visibilidadeTexto.includes('NÃO') || visibilidadeTexto.includes('NAO') || visibilidadeTexto.includes('SEM')) return null;
               
               // Se for número direto, usar o número
               const numero = parseFloat(visibilidadeTexto);
@@ -1238,7 +1238,7 @@ export const CriarRoteiro: React.FC = () => {
               // Log para valores não mapeados
               console.warn(`⚠️ Visibilidade não mapeada na linha ${i + 1}: "${visibilidadeTexto}"`);
               
-              // Caso contrário, retornar null
+              // Caso contrário, retornar null (sem info)
               return null;
             })(),
             semana_st: semanaExcel, // ✅ Usar semana real do Excel
