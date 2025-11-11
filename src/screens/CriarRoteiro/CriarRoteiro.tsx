@@ -1313,38 +1313,23 @@ export const CriarRoteiro: React.FC = () => {
       console.log(`📊 Semanas encontradas: ${semanas.join(', ')}`);
       console.log(`🏙️ Praças encontradas: ${pracas.map(p => `${p.praca}-${p.uf}`).join(', ')}`);
 
-      // Chamar as 3 APIs em paralelo + nova API de detalhes
-      const [matrixResponse, matrixRowResponse, subGruposResponse, detalhesResponse] = await Promise.all([
+      // Chamar as 3 APIs em paralelo
+      const [matrixResponse, matrixRowResponse, subGruposResponse] = await Promise.all([
         axios.post('/matrix-data-query', { planoMidiaGrupo_pk }),
         axios.post('/matrix-data-row-query', { planoMidiaGrupo_pk }),
-        axios.get('/grupo-sub-distinct'),
-        axios.post('/upload-roteiros-detalhes', { planoMidiaGrupo_pk, date_dh: dadosUpload.date_dh })
+        axios.get('/grupo-sub-distinct')
       ]);
 
       if (matrixResponse.data.success) {
+        // sp_baseCalculadoraMatrixDataQuery JÁ retorna os campos corretos
         setDadosMatrix(matrixResponse.data.data);
         console.log(`✅ Dados matrix carregados: ${matrixResponse.data.data.length} registros`);
+        console.log(`📋 Exemplo de registro matrix:`, matrixResponse.data.data[0]);
       }
 
       if (matrixRowResponse.data.success) {
-        // Enriquecer dadosMatrixRow com os dados de detalhes
-        const detalhes = detalhesResponse.data.success ? detalhesResponse.data.data : [];
-        const dadosEnriquecidos = matrixRowResponse.data.data.map((row: any) => {
-          // Buscar detalhes correspondentes
-          const detalhe = detalhes.find((d: any) => 
-            d.cidade_st === row.cidade_st && 
-            d.estado_st === row.estado_st && 
-            d.semana_vl === row.semana_vl
-          );
-          return {
-            ...row,
-            seDigitalInsercoes_vl: detalhe?.seDigitalInsercoes_vl || null,
-            seDigitalMaximoInsercoes_vl: detalhe?.seDigitalMaximoInsercoes_vl || null,
-            seEstaticoVisibilidade_st: detalhe?.seEstaticoVisibilidade_st || null
-          };
-        });
-        setDadosMatrixRow(dadosEnriquecidos);
-        console.log(`✅ Dados matrix row carregados e enriquecidos: ${dadosEnriquecidos.length} registros`);
+        setDadosMatrixRow(matrixRowResponse.data.data);
+        console.log(`✅ Dados matrix row carregados: ${matrixRowResponse.data.data.length} registros`);
       }
 
       if (subGruposResponse.data.success) {
@@ -4045,8 +4030,8 @@ export const CriarRoteiro: React.FC = () => {
                                       </thead>
                                       <tbody>
                                         {gruposPraca.map((grupo, grupoIndex) => {
-                                          // Buscar dados específicos para este grupo e praça
-                                          const dadosGrupo = dadosMatrixRow.filter(d => {
+                                          // Buscar dados específicos para este grupo e praça em dadosMatrix (que tem os campos corretos)
+                                          const dadosGrupo = dadosMatrix.filter(d => {
                                             const cidadeNormalizada = normalizarNome(d.cidade_st);
                                             const estadoNormalizado = d.estado_st?.toUpperCase() || '';
                                             return d.grupoSub_st === grupo.grupoSub_st && 
@@ -4060,10 +4045,10 @@ export const CriarRoteiro: React.FC = () => {
                                             console.log('  grupo.grupoSub_st:', grupo.grupoSub_st);
                                             console.log('  praca.praca:', praca.praca);
                                             console.log('  praca.uf:', praca.uf);
-                                            console.log('  dadosMatrixRow total:', dadosMatrixRow.length);
+                                            console.log('  dadosMatrix total:', dadosMatrix.length);
                                             console.log('  dadosGrupo filtrado:', dadosGrupo.length);
-                                            if (dadosMatrixRow.length > 0) {
-                                              console.log('  Exemplo dadosMatrixRow[0]:', dadosMatrixRow[0]);
+                                            if (dadosMatrix.length > 0) {
+                                              console.log('  Exemplo dadosMatrix[0]:', dadosMatrix[0]);
                                             }
                                             if (dadosGrupo.length > 0) {
                                               console.log('  Exemplo dadosGrupo[0]:', dadosGrupo[0]);
