@@ -4056,14 +4056,24 @@ export const CriarRoteiro: React.FC = () => {
                                           // Pegar o primeiro registro do grupo para obter os valores únicos (não somados)
                                           const primeiroRegistro = dadosGrupo.length > 0 ? dadosGrupo[0] : null;
                                           
-                                          // Visibilidade vem de seEstaticoVisibilidade_st
+                                          // Debug: verificar campos disponíveis
+                                          if (grupoIndex === 0 && pracaIndex === 0 && primeiroRegistro) {
+                                            console.log('🔍 DEBUG - Campos disponíveis no primeiroRegistro:', Object.keys(primeiroRegistro));
+                                            console.log('🔍 DEBUG - Valores:', {
+                                              seEstaticoVisibilidade_st: primeiroRegistro.seEstaticoVisibilidade_st,
+                                              seDigitalInsercoes_vl: primeiroRegistro.seDigitalInsercoes_vl,
+                                              seDigitalMaximoInsercoes_vl: primeiroRegistro.seDigitalMaximoInsercoes_vl
+                                            });
+                                          }
+                                          
+                                          // Visibilidade vem de seEstaticoVisibilidade_st (string)
                                           const visibilidade = primeiroRegistro?.seEstaticoVisibilidade_st || 'Selecionar';
                                           
                                           // Inserção comprada vem de seDigitalInsercoes_vl
-                                          const insercaoComprada = Math.round(primeiroRegistro?.seDigitalInsercoes_vl || 0);
+                                          const insercaoComprada = primeiroRegistro?.seDigitalInsercoes_vl ? Math.round(primeiroRegistro.seDigitalInsercoes_vl) : 0;
                                           
                                           // Inserção oferecida vem de seDigitalMaximoInsercoes_vl
-                                          const insercaoOferecida = Math.round(primeiroRegistro?.seDigitalMaximoInsercoes_vl || 0);
+                                          const insercaoOferecida = primeiroRegistro?.seDigitalMaximoInsercoes_vl ? Math.round(primeiroRegistro.seDigitalMaximoInsercoes_vl) : 0;
                                           
                                           return (
                                             <tr key={grupoIndex} className="border-b border-gray-200 hover:bg-gray-50">
