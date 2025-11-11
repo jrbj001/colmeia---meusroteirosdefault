@@ -1221,14 +1221,23 @@ export const CriarRoteiro: React.FC = () => {
               if (templateIndices.visibilidade_estatico < 0) return null;
               const visibilidadeTexto = row[templateIndices.visibilidade_estatico]?.toString().trim().toUpperCase();
               if (!visibilidadeTexto) return null;
+              
               // Mapear texto para valor numérico
               if (visibilidadeTexto.includes('ALTA')) return 100;
               if (visibilidadeTexto.includes('MODERADA')) return 75;
               if (visibilidadeTexto.includes('MÉDIA') || visibilidadeTexto.includes('MEDIA')) return 50;
               if (visibilidadeTexto.includes('BAIXA')) return 25;
+              
+              // "Não visibilidade" ou "Sem visibilidade" = 0
+              if (visibilidadeTexto.includes('NÃO') || visibilidadeTexto.includes('NAO') || visibilidadeTexto.includes('SEM')) return 0;
+              
               // Se for número direto, usar o número
               const numero = parseFloat(visibilidadeTexto);
               if (!isNaN(numero)) return numero;
+              
+              // Log para valores não mapeados
+              console.warn(`⚠️ Visibilidade não mapeada na linha ${i + 1}: "${visibilidadeTexto}"`);
+              
               // Caso contrário, retornar null
               return null;
             })(),
@@ -1324,7 +1333,7 @@ export const CriarRoteiro: React.FC = () => {
         // sp_baseCalculadoraMatrixDataQuery JÁ retorna os campos corretos
         setDadosMatrix(matrixResponse.data.data);
         console.log(`✅ Dados matrix carregados: ${matrixResponse.data.data.length} registros`);
-        console.log(`📋 Exemplo de registro matrix:`, matrixResponse.data.data[0]);
+        console.log(`📋 TODOS os registros matrix:`, JSON.stringify(matrixResponse.data.data, null, 2));
       }
 
       if (matrixRowResponse.data.success) {
@@ -4059,12 +4068,13 @@ export const CriarRoteiro: React.FC = () => {
                                           const primeiroRegistro = dadosGrupo.length > 0 ? dadosGrupo[0] : null;
                                           
                                           // Debug: verificar campos disponíveis
-                                          if (grupoIndex === 0 && pracaIndex === 0 && primeiroRegistro) {
-                                            console.log('🔍 DEBUG - Campos disponíveis no primeiroRegistro:', Object.keys(primeiroRegistro));
-                                            console.log('🔍 DEBUG - Valores:', {
+                                          if (primeiroRegistro) {
+                                            console.log(`🔍 DEBUG - Grupo ${grupo.grupoSub_st} | Praça ${praca.praca}-${praca.uf}:`, {
+                                              grupoSub_st: primeiroRegistro.grupoSub_st,
                                               seEstaticoVisibilidade_st: primeiroRegistro.seEstaticoVisibilidade_st,
                                               seDigitalInsercoes_vl: primeiroRegistro.seDigitalInsercoes_vl,
-                                              seDigitalMaximoInsercoes_vl: primeiroRegistro.seDigitalMaximoInsercoes_vl
+                                              seDigitalMaximoInsercoes_vl: primeiroRegistro.seDigitalMaximoInsercoes_vl,
+                                              qtd_registros: primeiroRegistro.qtd_registros
                                             });
                                           }
                                           
