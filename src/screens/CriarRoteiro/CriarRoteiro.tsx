@@ -1217,8 +1217,21 @@ export const CriarRoteiro: React.FC = () => {
               (row[templateIndices.insercoes_compradas] ? parseInt(row[templateIndices.insercoes_compradas]) : null) : null,
             seDigitalMaximoInsercoes_vl: templateIndices.max_insercoes >= 0 ? 
               (row[templateIndices.max_insercoes] ? parseInt(row[templateIndices.max_insercoes]) : null) : null,
-            seEstaticoVisibilidade_vl: templateIndices.visibilidade_estatico >= 0 ? 
-              (row[templateIndices.visibilidade_estatico] ? parseFloat(row[templateIndices.visibilidade_estatico]) : 100) : 100,
+            seEstaticoVisibilidade_vl: (() => {
+              if (templateIndices.visibilidade_estatico < 0) return null;
+              const visibilidadeTexto = row[templateIndices.visibilidade_estatico]?.toString().trim().toUpperCase();
+              if (!visibilidadeTexto) return null;
+              // Mapear texto para valor numérico
+              if (visibilidadeTexto.includes('ALTA')) return 100;
+              if (visibilidadeTexto.includes('MODERADA')) return 75;
+              if (visibilidadeTexto.includes('MÉDIA') || visibilidadeTexto.includes('MEDIA')) return 50;
+              if (visibilidadeTexto.includes('BAIXA')) return 25;
+              // Se for número direto, usar o número
+              const numero = parseFloat(visibilidadeTexto);
+              if (!isNaN(numero)) return numero;
+              // Caso contrário, retornar null
+              return null;
+            })(),
             semana_st: semanaExcel, // ✅ Usar semana real do Excel
             // Dados enriquecidos
             param_descricao: paramData.descricao,
