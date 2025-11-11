@@ -4040,11 +4040,17 @@ export const CriarRoteiro: React.FC = () => {
                                             }
                                           }
                                           
-                                          // Calcular inserção comprada (soma de todas as semanas) - SEMPRE INTEIRO
-                                          const insercaoComprada = Math.round(dadosGrupo.reduce((acc, d) => acc + (d.qtd_registros || 0), 0));
+                                          // Pegar o primeiro registro do grupo para obter os valores únicos (não somados)
+                                          const primeiroRegistro = dadosGrupo.length > 0 ? dadosGrupo[0] : null;
                                           
-                                          // Inserção oferecida (por enquanto igual à comprada) - SEMPRE INTEIRO
-                                          const insercaoOferecida = insercaoComprada;
+                                          // Visibilidade vem de seEstaticoVisibilidade_st
+                                          const visibilidade = primeiroRegistro?.seEstaticoVisibilidade_st || 'Selecionar';
+                                          
+                                          // Inserção comprada vem de seDigitalInsercoes_vl
+                                          const insercaoComprada = Math.round(primeiroRegistro?.seDigitalInsercoes_vl || 0);
+                                          
+                                          // Inserção oferecida vem de seDigitalMaximoInsercoes_vl
+                                          const insercaoOferecida = Math.round(primeiroRegistro?.seDigitalMaximoInsercoes_vl || 0);
                                           
                                           return (
                                             <tr key={grupoIndex} className="border-b border-gray-200 hover:bg-gray-50">
@@ -4058,7 +4064,7 @@ export const CriarRoteiro: React.FC = () => {
                                                 <input 
                                                   type="text" 
                                                   className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] bg-gray-50"
-                                                  value="Selecionar"
+                                                  value={visibilidade}
                                                   readOnly={true}
                                                 />
                                               </td>
