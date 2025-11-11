@@ -1313,11 +1313,12 @@ export const CriarRoteiro: React.FC = () => {
       console.log(`📊 Semanas encontradas: ${semanas.join(', ')}`);
       console.log(`🏙️ Praças encontradas: ${pracas.map(p => `${p.praca}-${p.uf}`).join(', ')}`);
 
-      // Chamar as 3 APIs em paralelo
-      const [matrixResponse, matrixRowResponse, subGruposResponse] = await Promise.all([
+      // Chamar as 3 APIs em paralelo + nova API de detalhes
+      const [matrixResponse, matrixRowResponse, subGruposResponse, detalhesResponse] = await Promise.all([
         axios.post('/matrix-data-query', { planoMidiaGrupo_pk }),
         axios.post('/matrix-data-row-query', { planoMidiaGrupo_pk }),
-        axios.get('/grupo-sub-distinct')
+        axios.get('/grupo-sub-distinct'),
+        axios.post('/upload-roteiros-detalhes', { planoMidiaGrupo_pk, date_dh: dadosUpload.date_dh })
       ]);
 
       if (matrixResponse.data.success) {
@@ -1326,8 +1327,24 @@ export const CriarRoteiro: React.FC = () => {
       }
 
       if (matrixRowResponse.data.success) {
-        setDadosMatrixRow(matrixRowResponse.data.data);
-        console.log(`✅ Dados matrix row carregados: ${matrixRowResponse.data.data.length} registros`);
+        // Enriquecer dadosMatrixRow com os dados de detalhes
+        const detalhes = detalhesResponse.data.success ? detalhesResponse.data.data : [];
+        const dadosEnriquecidos = matrixRowResponse.data.data.map((row: any) => {
+          // Buscar detalhes correspondentes
+          const detalhe = detalhes.find((d: any) => 
+            d.cidade_st === row.cidade_st && 
+            d.estado_st === row.estado_st && 
+            d.semana_vl === row.semana_vl
+          );
+          return {
+            ...row,
+            seDigitalInsercoes_vl: detalhe?.seDigitalInsercoes_vl || null,
+            seDigitalMaximoInsercoes_vl: detalhe?.seDigitalMaximoInsercoes_vl || null,
+            seEstaticoVisibilidade_st: detalhe?.seEstaticoVisibilidade_st || null
+          };
+        });
+        setDadosMatrixRow(dadosEnriquecidos);
+        console.log(`✅ Dados matrix row carregados e enriquecidos: ${dadosEnriquecidos.length} registros`);
       }
 
       if (subGruposResponse.data.success) {
