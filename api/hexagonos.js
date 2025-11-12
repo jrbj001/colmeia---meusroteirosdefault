@@ -60,7 +60,7 @@ module.exports = async (req, res) => {
         rgbColorB_vl,
         grupoDesc_st,
         hexColor_st
-      FROM serv_product_be180.baseCalculadoraHexagonosJoin_dm_vw
+      FROM serv_product_be180.BaseCalculadoraHexagonosJoin_dm
       WHERE planoMidia_pk IN (${pkList})
     `);
     
