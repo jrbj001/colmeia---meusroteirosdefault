@@ -1495,12 +1495,17 @@ export const Mapa: React.FC = () => {
                 )}
                 
                 {/* Informações rápidas */}
-                <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
+                <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 160 }}>
                   <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>ℹ️ Informações</div>
                   <div style={{ fontSize: 11, color: '#444', lineHeight: 1.4 }}>
-                    <div><strong>Total:</strong> {formatNumber(hexagonos.length)} pontos</div>
+                    <div><strong>Hexágonos:</strong> {formatNumber(hexagonos.length)} áreas</div>
+                    {pontosMidia.length > 0 && (
+                      <div><strong>Pontos de Mídia:</strong> {formatNumber(pontosMidia.length)} unidades</div>
+                    )}
                     <div><strong>Área:</strong> ~{formatNumber(hexagonos.length * 0.36)} km²</div>
-                    <div><strong>Última atualização:</strong></div>
+                    <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid #e5e7eb' }}>
+                      <strong>Última atualização:</strong>
+                    </div>
                     <div style={{ fontSize: 10, color: '#666' }}>
                       {lastSearchInfo ? getTimeAgo(lastSearchInfo.timestamp) : 'Agora'}
                     </div>
