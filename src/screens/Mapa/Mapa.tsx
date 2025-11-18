@@ -34,6 +34,19 @@ interface Hexagono {
   groupCount_vl: number;
 }
 
+// Tipo para os dados dos pontos de mídia individuais
+interface PontoMidia {
+  planoMidia_pk: number;
+  latitude_vl: number;
+  longitude_vl: number;
+  calculatedFluxoEstimado_vl: number;
+  estaticoDigital_st: 'D' | 'E'; // Digital ou Estático
+  grupoSub_st: string;
+  grupo_st: string;
+  // Outros campos disponíveis na view
+  [key: string]: any;
+}
+
 // Componente auxiliar para ajustar o centro e bounds do mapa
 function AjustarMapa({ hexagonos }: { hexagonos: Hexagono[] }) {
   const map = useMap();
@@ -71,8 +84,10 @@ export const Mapa: React.FC = () => {
   const [semanaSelecionada, setSemanaSelecionada] = React.useState("");
   const [descPks, setDescPks] = React.useState<{ [cidade: string]: number }>({});
   const [hexagonos, setHexagonos] = React.useState<Hexagono[]>([]);
+  const [pontosMidia, setPontosMidia] = React.useState<PontoMidia[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [loadingHexagonos, setLoadingHexagonos] = React.useState(false);
+  const [loadingPontos, setLoadingPontos] = React.useState(false);
   const [mostrarSugestoes, setMostrarSugestoes] = React.useState(false);
   const [mostrarModalDetalhes, setMostrarModalDetalhes] = React.useState(false);
   
@@ -463,6 +478,37 @@ export const Mapa: React.FC = () => {
     }
   }, [debouncedCidadeSelecionada, debouncedSemanaSelecionada, descPks]);
 
+  // useEffect para carregar pontos de mídia individuais
+  React.useEffect(() => {
+    if (!debouncedCidadeSelecionada) {
+      setPontosMidia([]);
+      return;
+    }
+
+    const descPk = descPks[debouncedCidadeSelecionada];
+    if (!descPk) {
+      setPontosMidia([]);
+      return;
+    }
+
+    console.log("🗺️ Carregando pontos de mídia para desc_pk:", descPk);
+    setLoadingPontos(true);
+
+    api.get(`pontos-midia?desc_pk=${descPk}`)
+      .then(res => {
+        const pontosData = res.data.pontos || [];
+        console.log(`🗺️ Pontos de mídia carregados: ${pontosData.length}`);
+        setPontosMidia(pontosData);
+      })
+      .catch(err => {
+        console.error("Erro ao carregar pontos de mídia:", err);
+        setPontosMidia([]);
+      })
+      .finally(() => {
+        setLoadingPontos(false);
+      });
+  }, [debouncedCidadeSelecionada, descPks]);
+
   // Calcular o range de fluxo para normalizar o tamanho dos pontos
   const minFluxo = hexagonos.length > 0 ? Math.min(...hexagonos.map(h => h.calculatedFluxoEstimado_vl)) : 0;
   const maxFluxo = hexagonos.length > 0 ? Math.max(...hexagonos.map(h => h.calculatedFluxoEstimado_vl)) : 1;
@@ -471,6 +517,16 @@ export const Mapa: React.FC = () => {
     // Raio mínimo 6, máximo 20
     if (maxFluxo === minFluxo) return 10;
     return 6 + 14 * ((fluxo - minFluxo) / (maxFluxo - minFluxo));
+  }
+
+  // Calcular tamanho dos pontos de mídia baseado no fluxo
+  const minFluxoPontos = pontosMidia.length > 0 ? Math.min(...pontosMidia.map(p => p.calculatedFluxoEstimado_vl || 0)) : 0;
+  const maxFluxoPontos = pontosMidia.length > 0 ? Math.max(...pontosMidia.map(p => p.calculatedFluxoEstimado_vl || 0)) : 1;
+
+  function getRadiusPonto(fluxo: number) {
+    // Raio mínimo 4, máximo 12 (menor que hexágonos para não sobrepor)
+    if (maxFluxoPontos === minFluxoPontos) return 6;
+    return 4 + 8 * ((fluxo - minFluxoPontos) / (maxFluxoPontos - minFluxoPontos));
   }
 
   // Componente de Status para feedback do usuário
@@ -1307,6 +1363,40 @@ export const Mapa: React.FC = () => {
                     radius={getRadius(hex.calculatedFluxoEstimado_vl)}
                     interactive={false} // Não clicável - apenas visual
                   />
+                ))}
+
+                {/* Pontos de mídia individuais com bordas diferentes */}
+                {pontosMidia.map((ponto, idx) => (
+                  <CircleMarker
+                    key={`ponto-${ponto.planoMidia_pk}-${idx}`}
+                    center={[ponto.latitude_vl, ponto.longitude_vl]}
+                    pathOptions={{ 
+                      color: '#ffffff', // Borda branca fina
+                      fillColor: ponto.estaticoDigital_st === 'D' ? '#3b82f6' : '#10b981', // Azul para Digital, Verde para Estático
+                      fillOpacity: 0.8,
+                      weight: 1.5, // Borda fina e clean
+                      opacity: 1,
+                      dashArray: ponto.estaticoDigital_st === 'E' ? '3, 3' : undefined // Tracejado para Estático
+                    }}
+                    radius={getRadiusPonto(ponto.calculatedFluxoEstimado_vl || 0)}
+                  >
+                    <Popup>
+                      <div style={{ minWidth: 200, maxWidth: 300 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 8, color: '#1f2937' }}>
+                          {ponto.estaticoDigital_st === 'D' ? '📱 Digital' : '🏢 Estático'}
+                        </div>
+                        <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.6 }}>
+                          <div><strong>SubGrupo:</strong> {ponto.grupoSub_st || 'N/A'}</div>
+                          <div><strong>Grupo:</strong> {ponto.grupo_st || 'N/A'}</div>
+                          <div><strong>Fluxo:</strong> {(ponto.calculatedFluxoEstimado_vl || 0).toLocaleString()}</div>
+                          <div style={{ marginTop: 8, fontSize: 10, color: '#9ca3af' }}>
+                            <div><strong>Lat:</strong> {ponto.latitude_vl.toFixed(6)}</div>
+                            <div><strong>Lon:</strong> {ponto.longitude_vl.toFixed(6)}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </Popup>
+                  </CircleMarker>
                 ))}
               </MapContainer>
             </div>
