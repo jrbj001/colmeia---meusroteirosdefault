@@ -1365,22 +1365,6 @@ export const Mapa: React.FC = () => {
                     </Popup>
                   </Polygon>
                 ))}
-                
-                {/* CircleMarkers para mostrar tamanhos diferentes baseados no fluxo - SEM POPUP */}
-                {hexagonos.map((hex, idx) => (
-                  <CircleMarker
-                    key={`circle-${hex.hexagon_pk}`}
-                    center={[hex.hex_centroid_lat, hex.hex_centroid_lon]}
-                    pathOptions={{ 
-                      color: hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`, 
-                      fillOpacity: 0.7,
-                      weight: 1,
-                      opacity: 0.8
-                    }}
-                    radius={getRadius(hex.calculatedFluxoEstimado_vl)}
-                    interactive={false} // Não clicável - apenas visual
-                  />
-                ))}
 
                 {/* Pontos de mídia individuais com bordas diferentes */}
                 {pontosMidia.map((ponto, idx) => (
@@ -1397,20 +1381,105 @@ export const Mapa: React.FC = () => {
                     }}
                     radius={getRadiusPonto(ponto.calculatedFluxoEstimado_vl || 0)}
                   >
-                    <Popup>
-                      <div style={{ minWidth: 200, maxWidth: 300 }}>
-                        <div style={{ fontWeight: 600, marginBottom: 8, color: '#1f2937' }}>
-                          {ponto.estaticoDigital_st === 'D' ? '📱 Digital' : '🏢 Estático'}
+                    <Popup maxWidth={350}>
+                      <div style={{ 
+                        minWidth: 280, 
+                        maxWidth: 350,
+                        fontFamily: 'system-ui, -apple-system, sans-serif'
+                      }}>
+                        {/* Header com tipo */}
+                        <div style={{ 
+                          background: ponto.estaticoDigital_st === 'D' ? '#3b82f6' : '#10b981',
+                          color: 'white',
+                          padding: '12px',
+                          marginBottom: '12px',
+                          borderRadius: '6px',
+                          fontWeight: 600,
+                          fontSize: '14px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}>
+                          {ponto.estaticoDigital_st === 'D' ? '📱' : '🏢'}
+                          {ponto.estaticoDigital_st === 'D' ? 'Mídia Digital' : 'Mídia Estática'}
                         </div>
-                        <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.6 }}>
-                          <div><strong>SubGrupo:</strong> {ponto.grupoSub_st || 'N/A'}</div>
-                          <div><strong>Grupo:</strong> {ponto.grupo_st || 'N/A'}</div>
-                          <div><strong>Fluxo:</strong> {(ponto.calculatedFluxoEstimado_vl || 0).toLocaleString()}</div>
-                          <div style={{ marginTop: 8, fontSize: 10, color: '#9ca3af' }}>
+
+                        {/* Informações principais */}
+                        <div style={{ 
+                          background: '#f9fafb',
+                          padding: '12px',
+                          borderRadius: '6px',
+                          marginBottom: '8px'
+                        }}>
+                          <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.6 }}>
+                            <div style={{ marginBottom: 6 }}>
+                              <strong style={{ color: '#111827' }}>SubGrupo:</strong> {ponto.grupoSub_st || 'N/A'}
+                            </div>
+                            <div style={{ marginBottom: 6 }}>
+                              <strong style={{ color: '#111827' }}>Grupo:</strong> {ponto.grupo_st || 'N/A'}
+                            </div>
+                            {ponto.nome_st && (
+                              <div style={{ marginBottom: 6 }}>
+                                <strong style={{ color: '#111827' }}>Nome:</strong> {ponto.nome_st}
+                              </div>
+                            )}
+                            {ponto.tipo_st && (
+                              <div style={{ marginBottom: 6 }}>
+                                <strong style={{ color: '#111827' }}>Tipo:</strong> {ponto.tipo_st}
+                              </div>
+                            )}
+                            {ponto.formato_st && (
+                              <div style={{ marginBottom: 6 }}>
+                                <strong style={{ color: '#111827' }}>Formato:</strong> {ponto.formato_st}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Fluxo */}
+                        <div style={{ 
+                          background: '#eff6ff',
+                          padding: '10px',
+                          borderRadius: '6px',
+                          marginBottom: '8px',
+                          border: '1px solid #dbeafe'
+                        }}>
+                          <div style={{ fontSize: 11, color: '#1e40af', fontWeight: 600, marginBottom: 4 }}>
+                            👥 Fluxo Estimado
+                          </div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: '#1e3a8a' }}>
+                            {(ponto.calculatedFluxoEstimado_vl || 0).toLocaleString('pt-BR')}
+                          </div>
+                        </div>
+
+                        {/* Localização */}
+                        {(ponto.cidade_st || ponto.estado_st || ponto.bairro_st) && (
+                          <div style={{ 
+                            fontSize: 11, 
+                            color: '#6b7280',
+                            marginBottom: 8,
+                            paddingTop: 8,
+                            borderTop: '1px solid #e5e7eb'
+                          }}>
+                            {ponto.cidade_st && ponto.estado_st && (
+                              <div>📍 {ponto.cidade_st}/{ponto.estado_st}</div>
+                            )}
+                            {ponto.bairro_st && (
+                              <div>🏘️ {ponto.bairro_st}</div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Coordenadas (colapsadas) */}
+                        <details style={{ fontSize: 10, color: '#9ca3af' }}>
+                          <summary style={{ cursor: 'pointer', marginBottom: 4 }}>
+                            📐 Coordenadas
+                          </summary>
+                          <div style={{ marginTop: 4, padding: 6, background: '#f3f4f6', borderRadius: 4 }}>
                             <div><strong>Lat:</strong> {ponto.latitude_vl.toFixed(6)}</div>
                             <div><strong>Lon:</strong> {ponto.longitude_vl.toFixed(6)}</div>
                           </div>
-                        </div>
+                        </details>
                       </div>
                     </Popup>
                   </CircleMarker>
