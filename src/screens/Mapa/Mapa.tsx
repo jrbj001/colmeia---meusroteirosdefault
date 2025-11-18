@@ -498,6 +498,23 @@ export const Mapa: React.FC = () => {
       .then(res => {
         const pontosData = res.data.pontos || [];
         console.log(`🗺️ Pontos de mídia carregados: ${pontosData.length}`);
+        
+        // Debug: contar por SubGrupo
+        const porSubGrupo = pontosData.reduce((acc: any, p: PontoMidia) => {
+          const sub = p.grupoSub_st || 'Sem SubGrupo';
+          acc[sub] = (acc[sub] || 0) + 1;
+          return acc;
+        }, {});
+        console.log(`🗺️ [Frontend] Pontos por SubGrupo:`, porSubGrupo);
+        
+        // Debug: contar por tipo
+        const porTipo = pontosData.reduce((acc: any, p: PontoMidia) => {
+          const tipo = p.estaticoDigital_st || 'Sem Tipo';
+          acc[tipo] = (acc[tipo] || 0) + 1;
+          return acc;
+        }, {});
+        console.log(`🗺️ [Frontend] Pontos por Tipo (D/E):`, porTipo);
+        
         setPontosMidia(pontosData);
       })
       .catch(err => {
