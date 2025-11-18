@@ -1420,9 +1420,9 @@ export const Mapa: React.FC = () => {
                   </div>
                 </div>
                 
-                {/* Legenda de grupos */}
+                {/* Legenda de grupos (Hexágonos) */}
                 <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
-                  <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>🎨 Grupos de Planejamento</div>
+                  <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>🎨 Grupos (Hexágonos)</div>
                   {Array.from(new Map(hexagonos.map(h => [h.grupoDesc_st, h]))).map(([grupo, hex]) => (
                     <div key={grupo} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                       <span style={{ display: 'inline-block', width: 18, height: 18, borderRadius: '50%', background: hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`, border: '2px solid #888' }}></span>
@@ -1430,6 +1430,52 @@ export const Mapa: React.FC = () => {
                     </div>
                   ))}
                 </div>
+
+                {/* Legenda de SubGrupos (Pontos) */}
+                {pontosMidia.length > 0 && (
+                  <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
+                    <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>📍 SubGrupos (Pontos)</div>
+                    {Array.from(new Set(pontosMidia.map(p => p.grupoSub_st).filter(Boolean))).map((subgrupo) => {
+                      const ponto = pontosMidia.find(p => p.grupoSub_st === subgrupo);
+                      const isDigital = ponto?.estaticoDigital_st === 'D';
+                      return (
+                        <div key={subgrupo} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <svg width={18} height={18} style={{ display: 'block' }}>
+                            <circle 
+                              cx={9} 
+                              cy={9} 
+                              r={7} 
+                              fill={isDigital ? '#3b82f6' : '#10b981'}
+                              stroke="#ffffff" 
+                              strokeWidth={1.5}
+                              strokeDasharray={isDigital ? undefined : '3,3'}
+                            />
+                          </svg>
+                          <span style={{ fontSize: 11, color: '#444' }}>{subgrupo}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Legenda de tipos de mídia */}
+                {pontosMidia.length > 0 && (
+                  <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
+                    <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>🔵 Tipos de Mídia</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <svg width={18} height={18} style={{ display: 'block' }}>
+                        <circle cx={9} cy={9} r={7} fill="#3b82f6" stroke="#ffffff" strokeWidth={1.5} />
+                      </svg>
+                      <span style={{ fontSize: 11, color: '#444' }}>Digital (borda sólida)</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <svg width={18} height={18} style={{ display: 'block' }}>
+                        <circle cx={9} cy={9} r={7} fill="#10b981" stroke="#ffffff" strokeWidth={1.5} strokeDasharray="3,3" />
+                      </svg>
+                      <span style={{ fontSize: 11, color: '#444' }}>Estático (borda tracejada)</span>
+                    </div>
+                  </div>
+                )}
                 
                 {/* Informações rápidas */}
                 <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
