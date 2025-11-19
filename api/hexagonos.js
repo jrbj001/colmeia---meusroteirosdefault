@@ -64,6 +64,19 @@ module.exports = async (req, res) => {
       WHERE planoMidia_pk IN (${pkList})
     `);
     
+    console.log(`🔷 [API hexagonos] Total de hexágonos retornados: ${result.recordset.length}`);
+    if (result.recordset.length > 0) {
+      console.log(`🔷 [API hexagonos] Amostra do primeiro hexágono:`, result.recordset[0]);
+      
+      // Estatísticas de fluxo
+      const fluxos = result.recordset.map(h => h.calculatedFluxoEstimado_vl || 0);
+      const minFluxo = Math.min(...fluxos);
+      const maxFluxo = Math.max(...fluxos);
+      const avgFluxo = fluxos.reduce((a, b) => a + b, 0) / fluxos.length;
+      
+      console.log(`🔷 [API hexagonos] Fluxo - Min: ${minFluxo}, Max: ${maxFluxo}, Média: ${avgFluxo.toFixed(0)}`);
+    }
+    
     res.status(200).json({ hexagonos: Array.isArray(result.recordset) ? result.recordset : [] });
     
   } catch (err) {

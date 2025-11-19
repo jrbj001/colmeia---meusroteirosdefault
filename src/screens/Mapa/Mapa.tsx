@@ -151,7 +151,7 @@ export const Mapa: React.FC = () => {
 
   // Funções auxiliares para popup melhorado
   const getHexagonRanking = (hex: Hexagono, allHexagons: Hexagono[]) => {
-    const sortedHexagons = [...allHexagons].sort((a, b) => b.calculatedFluxoEstimado_vl - a.calculatedFluxoEstimado_vl);
+    const sortedHexagons = [...allHexagons].sort((a, b) => b.fluxoEstimado_vl - a.fluxoEstimado_vl);
     const rank = sortedHexagons.findIndex(h => h.hexagon_pk === hex.hexagon_pk) + 1;
     const total = allHexagons.length;
     const percentile = Math.round((rank / total) * 100);
@@ -163,8 +163,8 @@ export const Mapa: React.FC = () => {
   };
 
   const getFluxoVsMedia = (hex: Hexagono, allHexagons: Hexagono[]) => {
-    const media = allHexagons.reduce((sum, h) => sum + h.calculatedFluxoEstimado_vl, 0) / allHexagons.length;
-    const diff = ((hex.calculatedFluxoEstimado_vl - media) / media) * 100;
+    const media = allHexagons.reduce((sum, h) => sum + h.fluxoEstimado_vl, 0) / allHexagons.length;
+    const diff = ((hex.fluxoEstimado_vl - media) / media) * 100;
     
     if (diff > 20) return { text: `+${diff.toFixed(0)}%`, color: "#10b981", emoji: "📈" };
     if (diff > 0) return { text: `+${diff.toFixed(0)}%`, color: "#3b82f6", emoji: "📊" };
@@ -188,8 +188,8 @@ export const Mapa: React.FC = () => {
 
   // Funções para métricas de eficiência
   const getEficiencia = (hex: Hexagono, allHexagons: Hexagono[]) => {
-    const mediaFluxo = allHexagons.reduce((sum, h) => sum + h.calculatedFluxoEstimado_vl, 0) / allHexagons.length;
-    const eficiencia = (hex.calculatedFluxoEstimado_vl / mediaFluxo) * 100;
+    const mediaFluxo = allHexagons.reduce((sum, h) => sum + h.fluxoEstimado_vl, 0) / allHexagons.length;
+    const eficiencia = (hex.fluxoEstimado_vl / mediaFluxo) * 100;
     
     if (eficiencia > 150) return { text: "Muito Alta", color: "#10b981", emoji: "🚀" };
     if (eficiencia > 120) return { text: "Alta", color: "#3b82f6", emoji: "💰" };
@@ -199,7 +199,7 @@ export const Mapa: React.FC = () => {
 
   const getCobertura = (hex: Hexagono) => {
     // Simulação baseada no fluxo - em um sistema real viria da API
-    const cobertura = Math.min(95, Math.max(60, (hex.calculatedFluxoEstimado_vl / 200000) * 100));
+    const cobertura = Math.min(95, Math.max(60, (hex.fluxoEstimado_vl / 200000) * 100));
     
     if (cobertura > 90) return { text: `${cobertura.toFixed(0)}%`, color: "#10b981", emoji: "👥" };
     if (cobertura > 75) return { text: `${cobertura.toFixed(0)}%`, color: "#3b82f6", emoji: "👥" };
@@ -1132,10 +1132,10 @@ export const Mapa: React.FC = () => {
                                   <svg style={{ width: 14, height: 14 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                   </svg>
-                                  Fluxo
+                                  Fluxo Total da Área
                                 </div>
                                 <div style={{ fontSize: 16, fontWeight: 700, color: '#1e293b' }}>
-                                  {formatNumber(hex.calculatedFluxoEstimado_vl)}
+                                  {formatNumber(hex.fluxoEstimado_vl)}
                                 </div>
                               </div>
                               <div style={{ textAlign: 'right' }}>

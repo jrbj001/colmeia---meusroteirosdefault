@@ -54,6 +54,14 @@ module.exports = async (req, res) => {
         return acc;
       }, {});
       console.log(`📍 [API pontos-midia] Pontos por Tipo:`, porTipo);
+      
+      // Estatísticas de fluxo dos PONTOS
+      const fluxosPontos = result.recordset.map(p => p.calculatedFluxoEstimado_vl || 0);
+      const minFluxoPonto = Math.min(...fluxosPontos);
+      const maxFluxoPonto = Math.max(...fluxosPontos);
+      const avgFluxoPonto = fluxosPontos.reduce((a, b) => a + b, 0) / fluxosPontos.length;
+      
+      console.log(`📍 [API pontos-midia] Fluxo - Min: ${minFluxoPonto}, Max: ${maxFluxoPonto}, Média: ${avgFluxoPonto.toFixed(0)}`);
     }
     
     res.status(200).json({ 
