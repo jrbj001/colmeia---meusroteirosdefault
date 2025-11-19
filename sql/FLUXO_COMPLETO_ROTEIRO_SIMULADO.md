@@ -215,19 +215,33 @@ const result = await pool.request()
 
 ### **ETAPA 4: Executar Databricks**
 
-**Arquivo Frontend**: `src/screens/CriarRoteiro/CriarRoteiro.tsx` (linha ~800+)
+**Arquivo Frontend**: `src/screens/CriarRoteiro/CriarRoteiro.tsx` (linha ~807+)
 
 **Arquivo Backend**: `api/databricks-roteiro-simulado.js`
 
-#### 4.1. Frontend dispara job Databricks PARA CADA cidade
+#### 4.1. Frontend dispara job Databricks PARA CADA cidade (CORRIGIDO!)
 ```typescript
-for (const resultado of resultadosPraças) {
+// ✅ CORRETO: Loop por cada planoMidiaDesc_pk individual
+for (let i = 0; i < planosMidiaDescPk.length; i++) {
+  const planoMidiaDesc_pk = planosMidiaDescPk[i];
+  const praca = resultadosPraças[i]?.praca;
+  
   await axios.post('/databricks-roteiro-simulado', {
-    planoMidiaDesc_pk: resultado.planoMidiaDesc_pk,  // ← PK específico
-    date_dh: new Date().toISOString(),
-    date_dt: new Date().toISOString().split('T')[0]
+    planoMidiaDesc_pk: planoMidiaDesc_pk,  // ← PK específico de cada cidade!
+    date_dh: new Date().toISOString().slice(0, 19).replace('T', ' '),
+    date_dt: new Date().toISOString().slice(0, 10)
   });
 }
+```
+
+**❌ ERRO ANTERIOR (CORRIGIDO)**:
+```typescript
+// ERRADO: Enviava planoMidiaGrupo_pk em vez do PK individual
+await axios.post('/databricks-roteiro-simulado', {
+  planoMidiaDesc_pk: planoMidiaGrupo_pk,  // ← ERRADO! Processava todas as cidades juntas
+  date_dh: new Date().toISOString().slice(0, 19).replace('T', ' '),
+  date_dt: new Date().toISOString().slice(0, 10)
+});
 ```
 
 #### 4.2. Backend chama Databricks (api/databricks-roteiro-simulado.js)
@@ -275,43 +289,42 @@ const response = await axios.post(
 
 ---
 
-## 🐛 PROBLEMA ATUAL
+## 🐛 PROBLEMA IDENTIFICADO E CORRIGIDO
 
 ### **Sintoma**:
-Quando criamos roteiro simulado para múltiplas cidades (ex: São Paulo, Rio de Janeiro), o campo `planoMidiaDescPk_st` na tabela `planoMidia_dm_vw` fica com apenas o **último código** em vez de todos concatenados.
+Quando criamos roteiro simulado para múltiplas cidades (ex: São Paulo, Rio de Janeiro), os dados estavam sendo sobrescritos e todas as cidades ficavam com o mesmo código.
 
-### **Exemplo**:
+### **Causa Raiz (IDENTIFICADA)**:
+O problema **NÃO estava na stored procedure `sp_planoMidiaDescInsert`**, mas sim no **frontend que enviava o `planoMidiaGrupo_pk` para o Databricks** em vez de enviar cada `planoMidiaDesc_pk` individual!
 
-**Esperado**:
-```
-planoMidiaGrupo_pk: 6812
-planoMidiaDescPk_st: "12345,12346,12347"  ← Todos os códigos
-```
-
-**Atual (ERRADO)**:
-```
-planoMidiaGrupo_pk: 6812
-planoMidiaDescPk_st: "12347"  ← Apenas o último!
-```
-
-### **Causa Raiz**:
-A stored procedure `sp_planoMidiaDescInsert` está fazendo:
-```sql
-UPDATE planoMidia_dm_vw
-SET planoMidiaDescPk_st = @new_pk  -- ← SOBRESCREVE!
-WHERE planoMidiaGrupo_pk = @planoMidiaGrupo_pk
+### **Código Problemático (ANTES)**:
+```typescript
+// ❌ ERRADO: Enviava o PK do GRUPO em vez do PK individual de cada cidade
+await axios.post('/databricks-roteiro-simulado', {
+  planoMidiaDesc_pk: planoMidiaGrupo_pk,  // ← ERRADO!
+  date_dh: new Date().toISOString().slice(0, 19).replace('T', ' '),
+  date_dt: new Date().toISOString().slice(0, 10)
+});
 ```
 
-Deveria fazer:
-```sql
-UPDATE planoMidia_dm_vw
-SET planoMidiaDescPk_st = CASE
-  WHEN planoMidiaDescPk_st IS NULL OR planoMidiaDescPk_st = '' 
-    THEN CAST(@new_pk AS NVARCHAR(MAX))
-  ELSE CONCAT(planoMidiaDescPk_st, ',', @new_pk)
-END
-WHERE planoMidiaGrupo_pk = @planoMidiaGrupo_pk
+**Resultado**: O Databricks processava **TODAS as cidades do grupo** usando o mesmo código, sobrescrevendo os dados de cada cidade!
+
+### **Código Corrigido (DEPOIS)**:
+```typescript
+// ✅ CORRETO: Loop por cada planoMidiaDesc_pk individual
+for (let i = 0; i < planosMidiaDescPk.length; i++) {
+  const planoMidiaDesc_pk = planosMidiaDescPk[i];
+  const praca = resultadosPraças[i]?.praca;
+  
+  await axios.post('/databricks-roteiro-simulado', {
+    planoMidiaDesc_pk: planoMidiaDesc_pk,  // ← CORRETO! PK individual
+    date_dh: new Date().toISOString().slice(0, 19).replace('T', ' '),
+    date_dt: new Date().toISOString().slice(0, 10)
+  });
+}
 ```
+
+**Resultado**: Cada cidade é processada individualmente com seu próprio `planoMidiaDesc_pk`, mantendo os dados separados! ✅
 
 ---
 
@@ -336,43 +349,30 @@ WHERE planoMidiaGrupo_pk = @planoMidiaGrupo_pk
 
 ---
 
-## ✅ SOLUÇÃO PROPOSTA
+## ✅ SOLUÇÃO IMPLEMENTADA
 
-### **Opção 1: Corrigir a SP `sp_planoMidiaDescInsert`**
-Alterar o UPDATE para concatenar em vez de sobrescrever:
+### **Correção no Frontend**
+Alterado o código em `src/screens/CriarRoteiro/CriarRoteiro.tsx` (linha ~807) para:
 
-```sql
-ALTER PROCEDURE [serv_product_be180].[sp_planoMidiaDescInsert]
-  @planoMidiaGrupo_pk INT,
-  @recordsJson NVARCHAR(MAX)
-AS
-BEGIN
-  -- ... código existente ...
-  
-  -- Para cada registro no JSON:
-  UPDATE planoMidia_dm_vw
-  SET planoMidiaDescPk_st = CASE
-    WHEN planoMidiaDescPk_st IS NULL OR planoMidiaDescPk_st = '' 
-      THEN CAST(@new_pk AS NVARCHAR(MAX))
-    ELSE CONCAT(planoMidiaDescPk_st, ',', @new_pk)  -- ← CONCATENA!
-  END
-  WHERE planoMidiaGrupo_pk = @planoMidiaGrupo_pk;
-  
-  -- ... resto do código ...
-END
-```
+1. **Executar Databricks em LOOP** para cada `planoMidiaDesc_pk` individual
+2. **Enviar o PK correto** de cada cidade em vez do `planoMidiaGrupo_pk`
+3. **Coletar resultados** de cada execução (sucesso/erro)
+4. **Exibir relatório detalhado** ao final do processamento
 
-### **Opção 2: Workaround no Frontend (já implementado, mas não funciona)**
-O frontend já tenta enviar todas as cidades de uma vez (linhas 648-651), mas a SP ainda sobrescreve.
+### **Benefícios da Correção**:
+- ✅ Cada cidade mantém seus dados separados
+- ✅ Não há sobrescrita de dados entre cidades
+- ✅ Melhor rastreabilidade de erros por cidade
+- ✅ Relatório detalhado de processamento Databricks
 
 ---
 
-## 🔬 PRÓXIMOS PASSOS
+## 🔬 STATUS
 
 1. ✅ Documentar fluxo completo
-2. ⏳ Inspecionar código da SP `sp_planoMidiaDescInsert`
-3. ⏳ Propor correção da SP
-4. ⏳ Testar correção
+2. ✅ Identificar causa raiz do problema
+3. ✅ Implementar correção no frontend
+4. ⏳ Testar correção em ambiente de desenvolvimento
 5. ⏳ Validar em produção
 
 ---
@@ -411,5 +411,5 @@ O frontend já tenta enviar todas as cidades de uma vez (linhas 648-651), mas a 
 
 **Última atualização**: 2025-11-19
 **Branch**: `fix-roteiro-simulado`
-**Status**: 🔍 Investigando bug na SP `sp_planoMidiaDescInsert`
+**Status**: ✅ Bug corrigido - Frontend agora envia PK individual para cada cidade
 
