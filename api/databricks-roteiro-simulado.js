@@ -55,7 +55,7 @@ async function databricksRoteiroSimulado(req, res) {
     const requestBody = {
       job_id: parseInt(databricksJobId),
       notebook_params: {
-        planoMidiaGrupo_pk: planoMidiaDesc_pk.toString(),
+        planoMidiaDesc_pk: planoMidiaDesc_pk.toString(), // ← CORRETO! Nome do parâmetro corrigido
         date_dh: date_dh,
         date_dt: date_dt
       }
