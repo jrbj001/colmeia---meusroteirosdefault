@@ -72,15 +72,23 @@ function wktToLatLngs(wkt: string) {
 
 // Função para obter a cor do SubGrupo baseada no Grupo pai
 function getCorSubGrupo(grupoSub_st: string, hexagonos: Hexagono[]): string {
+  if (!grupoSub_st) {
+    console.warn(`⚠️ grupoSub_st está vazio ou undefined`);
+    return '#999999'; // Cinza para indicar erro
+  }
+
   // Extrair o número do grupo do SubGrupo (ex: G2D -> GRUPO 2, G3ME -> GRUPO 3)
   const match = grupoSub_st.match(/^G(\d+)/);
   if (!match) {
-    console.warn(`⚠️ Não foi possível extrair número do grupo de: ${grupoSub_st}`);
-    return '#3b82f6'; // Cor padrão se não conseguir extrair
+    console.warn(`⚠️ Não foi possível extrair número do grupo de: "${grupoSub_st}"`);
+    return '#999999'; // Cinza para indicar erro
   }
   
   const numeroGrupo = parseInt(match[1]);
   const grupoDesc = `GRUPO ${numeroGrupo}`;
+  
+  console.log(`🔍 Buscando cor para ${grupoSub_st} (Grupo ${numeroGrupo})`);
+  console.log(`🔍 Hexágonos disponíveis:`, hexagonos.map(h => ({ grupoDesc_st: h.grupoDesc_st, grupo_st: h.grupo_st, cor: h.hexColor_st })));
   
   // Tentar buscar por grupoDesc_st primeiro
   let hexGrupo = hexagonos.find(h => h.grupoDesc_st === grupoDesc);
@@ -92,8 +100,11 @@ function getCorSubGrupo(grupoSub_st: string, hexagonos: Hexagono[]): string {
   
   if (hexGrupo) {
     const cor = hexGrupo.hexColor_st || `rgb(${hexGrupo.rgbColorR_vl},${hexGrupo.rgbColorG_vl},${hexGrupo.rgbColorB_vl})`;
+    console.log(`✅ Cor encontrada para ${grupoSub_st}: ${cor}`);
     return cor;
   }
+  
+  console.warn(`⚠️ Hexágono não encontrado para ${grupoDesc}, usando cor padrão`);
   
   // Cores padrão por grupo se não encontrar no hexágono
   const coresPadrao: { [key: number]: string } = {
