@@ -12,6 +12,8 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: 'desc_pk é obrigatório' });
     }
 
+    console.log(`📍 [API pontos-midia] Recebido desc_pk: ${desc_pk}`);
+
     const pool = await getPool();
     
     // Primeiro, buscar TODOS os planoMidia_pk que aparecem nos hexágonos para este desc_pk
@@ -24,6 +26,8 @@ module.exports = async (req, res) => {
         WHERE planoMidiaDesc_vl = ${desc_pk}
       )
     `);
+    
+    console.log(`📍 [API pontos-midia] Query executada para desc_pk ${desc_pk}`);
 
     if (!hexagonosResult.recordset || hexagonosResult.recordset.length === 0) {
       return res.status(200).json({ pontos: [] });

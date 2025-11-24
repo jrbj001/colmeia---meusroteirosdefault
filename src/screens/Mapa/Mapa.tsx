@@ -1370,15 +1370,19 @@ export const Mapa: React.FC = () => {
 
                 {/* Pontos de mídia individuais com bordas diferentes */}
                 {pontosMidia.map((ponto, idx) => {
-                  // Usar a cor que já vem do banco de dados!
-                  const cor = ponto.hexColor_st || `rgb(${ponto.rgbColorR_vl},${ponto.rgbColorG_vl},${ponto.rgbColorB_vl})`;
+                  // Buscar a cor do hexágono correspondente ao grupo_st do ponto
+                  const hexGrupo = hexagonos.find(h => h.grupo_st === ponto.grupo_st);
+                  const cor = hexGrupo 
+                    ? (hexGrupo.hexColor_st || `rgb(${hexGrupo.rgbColorR_vl},${hexGrupo.rgbColorG_vl},${hexGrupo.rgbColorB_vl})`)
+                    : '#999999'; // Fallback cinza se não encontrar
+                  
                   return (
                   <CircleMarker
                     key={`ponto-${ponto.planoMidia_pk}-${idx}`}
                     center={[ponto.latitude_vl, ponto.longitude_vl]}
                     pathOptions={{ 
                       color: '#ffffff', // Borda branca fina
-                      fillColor: cor, // Cor que já vem do banco!
+                      fillColor: cor, // Cor do hexágono do grupo!
                       fillOpacity: 0.8,
                       weight: 1.5, // Borda fina e clean
                       opacity: 1,
@@ -1530,7 +1534,11 @@ export const Mapa: React.FC = () => {
                     {Array.from(new Set(pontosMidia.map(p => p.grupoSub_st).filter(Boolean))).map((subgrupo) => {
                       const ponto = pontosMidia.find(p => p.grupoSub_st === subgrupo);
                       const isDigital = ponto?.estaticoDigital_st === 'D';
-                      const cor = ponto?.hexColor_st || `rgb(${ponto?.rgbColorR_vl},${ponto?.rgbColorG_vl},${ponto?.rgbColorB_vl})`;
+                      // Buscar cor do hexágono do grupo
+                      const hexGrupo = hexagonos.find(h => h.grupo_st === ponto?.grupo_st);
+                      const cor = hexGrupo 
+                        ? (hexGrupo.hexColor_st || `rgb(${hexGrupo.rgbColorR_vl},${hexGrupo.rgbColorG_vl},${hexGrupo.rgbColorB_vl})`)
+                        : '#999999';
                       return (
                         <div key={subgrupo} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                           <svg width={18} height={18} style={{ display: 'block' }}>
