@@ -5,6 +5,7 @@ import { AddBox } from "../../icons/AddBox";
 import { ArrowForwardIos } from "../../icons/ArrowForwardIos";
 import { FindInPage } from "../../icons/FindInPage";
 import { PinDrop } from "../../icons/PinDrop";
+import { Difference4 } from "../../icons/Difference4";
 
 interface SidebarProps {
   menuReduzido: boolean;
@@ -59,6 +60,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
             </span>
           )}
         </div>
+
+        <Link to="/consulta-endereco" className="block">
+          <div className={`flex items-center gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
+            location.pathname === "/consulta-endereco" ? "bg-[#ededed] text-[#222]" : ""
+          }`}>
+            <Difference4 className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" color="#757575" />
+            {!menuReduzido && (
+              <span className="font-medium text-sm text-[#757575] tracking-[0.50px] group-hover:text-[#222] transition-colors duration-200">
+                Consulta endereço
+              </span>
+            )}
+          </div>
+        </Link>
       </nav>
 
       <div className="absolute bottom-16 left-0 w-full flex items-center justify-center">

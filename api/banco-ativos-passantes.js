@@ -2,11 +2,11 @@
 const { Pool } = require('pg');
 
 const POSTGRES_CONFIG = {
-    host: process.env.POSTGRES_HOST || '35.247.196.233',
+    host: process.env.POSTGRES_HOST,
     port: parseInt(process.env.POSTGRES_PORT || '5432'),
-    database: process.env.POSTGRES_DATABASE || 'colmeia_dev',
-    user: process.env.POSTGRES_USER || 'readonly_user',
-    password: process.env.POSTGRES_PASSWORD || '_e2Jy9r9kOo(',
+    database: process.env.POSTGRES_DATABASE,
+    user: process.env.POSTGRES_USER,
+    password: process.env.POSTGRES_PASSWORD,
     ssl: { rejectUnauthorized: false },
     connectionTimeoutMillis: 30000,
     max: 5, // Máximo 5 conexões simultâneas (Vercel limit)

@@ -50,7 +50,9 @@ async function roteiroSimulado(req, res) {
       const { 
         grupoSub_st, 
         visibilidade, 
-        semanas = [] 
+        seDigitalInsercoes_vl,
+        seDigitalMaximoInsercoes_vl,
+        semanas = []
       } = linha;
 
       // Só processar linhas com visibilidade válida (25, 50, 75, 100)
@@ -60,27 +62,47 @@ async function roteiroSimulado(req, res) {
         return;
       }
 
-      // Processar cada semana
-      semanas.forEach((semana, index) => {
-        const week_vl = index + 1;
-        const contagem_vl = parseInt(semana.insercaoComprada) || 0;
-
-        // Só adicionar se houver contagem > 0
-        if (contagem_vl > 0) {
-          // Usar grupo_st como código se grupoSub_st parecer ser descrição
-          const codigoGrupo = grupoSub_st.includes(' ') ? linha.grupo_st : grupoSub_st;
+      // Usar grupo_st como código se grupoSub_st parecer ser descrição
+      const codigoGrupo = grupoSub_st.includes(' ') ? linha.grupo_st : grupoSub_st;
+      
+      // Usar o valor de visibilidade como contagem simbólica para permitir visualização
+      // Isso é necessário para que o Databricks possa processar e gerar hexágonos no mapa
+      const contagemSimbolica = parseFloat(visibilidade) || 100;
+      
+      // Se houver semanas configuradas, processar cada semana
+      if (semanas.length > 0) {
+        semanas.forEach((semana, index) => {
+          const week_vl = index + 1;
+          
+          // Sempre usar 0 quando não houver valor (null, undefined ou 0)
+          const contagem = parseInt(semana.insercaoComprada) || 0;
+          
+          // Verificar valores digitais - sempre 0 quando não houver valor
+          const digInsercoes = parseInt(semana.seDigitalInsercoes_vl) || parseInt(seDigitalInsercoes_vl) || 0;
+          const digMaxInsercoes = parseInt(semana.seDigitalMaximoInsercoes_vl) || parseInt(seDigitalMaximoInsercoes_vl) || 0;
           
           recordsJson.push({
             week_vl,
-            grupoSub_st: codigoGrupo, // Garantir que seja código, não descrição
-            contagem_vl,
-            // 🆕 Novos campos adicionados
-            seDigitalInsercoes_vl: parseInt(semana.seDigitalInsercoes_vl) || 0,
-            seDigitalMaximoInsercoes_vl: parseInt(semana.seDigitalMaximoInsercoes_vl) || 0,
-            seEstaticoVisibilidade_vl: parseFloat(semana.seEstaticoVisibilidade_vl) || 0
+            grupoSub_st: codigoGrupo,
+            contagem_vl: contagem,
+            seDigitalInsercoes_vl: digInsercoes,
+            seDigitalMaximoInsercoes_vl: digMaxInsercoes
           });
-        }
-      });
+        });
+      } else {
+        // Se não houver semanas, adicionar apenas um registro com os campos de configuração
+        // Sempre usar 0 como padrão quando não houver valor
+        const insDig = parseInt(seDigitalInsercoes_vl) || 0;
+        const maxDig = parseInt(seDigitalMaximoInsercoes_vl) || 0;
+        
+        recordsJson.push({
+          week_vl: 1, // Semana padrão
+          grupoSub_st: codigoGrupo,
+          contagem_vl: 0, // Sempre 0 quando não houver semanas configuradas
+          seDigitalInsercoes_vl: insDig,
+          seDigitalMaximoInsercoes_vl: maxDig
+        });
+      }
     });
 
     console.log(`📝 Registros processados: ${recordsJson.length}`);
@@ -102,7 +124,6 @@ async function roteiroSimulado(req, res) {
         contagem_vl: registro.contagem_vl,
         seDigitalInsercoes_vl: registro.seDigitalInsercoes_vl,
         seDigitalMaximoInsercoes_vl: registro.seDigitalMaximoInsercoes_vl,
-        seEstaticoVisibilidade_vl: registro.seEstaticoVisibilidade_vl,
         tipo_grupoSub_st: typeof registro.grupoSub_st
       });
     });
@@ -111,7 +132,7 @@ async function roteiroSimulado(req, res) {
     if (recordsJson.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Nenhum registro válido encontrado. Verifique se há valores de inserção comprada > 0 e visibilidade válida (25, 50, 75, 100).'
+        message: 'Nenhum registro válido encontrado. Verifique se há visibilidade válida configurada (25, 50, 75, 100).'
       });
     }
 
@@ -145,7 +166,6 @@ async function roteiroSimulado(req, res) {
           totalInsecoesCompradas: recordsJson.reduce((sum, r) => sum + r.contagem_vl, 0),
           totalDigitalInsercoes: recordsJson.reduce((sum, r) => sum + r.seDigitalInsercoes_vl, 0),
           totalDigitalMaximoInsercoes: recordsJson.reduce((sum, r) => sum + r.seDigitalMaximoInsercoes_vl, 0),
-          totalEstaticoVisibilidade: recordsJson.reduce((sum, r) => sum + r.seEstaticoVisibilidade_vl, 0),
           gruposAtivos: [...new Set(recordsJson.map(r => r.grupoSub_st))],
           distribuicaoSemanal: recordsJson.reduce((acc, r) => {
             acc[`W${r.week_vl}`] = (acc[`W${r.week_vl}`] || 0) + r.contagem_vl;

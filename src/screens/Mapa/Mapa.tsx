@@ -85,9 +85,9 @@ export const Mapa: React.FC = () => {
   const [loadingDescPks, setLoadingDescPks] = React.useState(false);
   const [loadingSemanas, setLoadingSemanas] = React.useState(false);
   
-  // Estados debounced para performance
-  const debouncedCidadeSelecionada = useDebounce(cidadeSelecionada, 300);
-  const debouncedSemanaSelecionada = useDebounce(semanaSelecionada, 300);
+  // Estados debounced para performance (reduzido de 300ms para 150ms)
+  const debouncedCidadeSelecionada = useDebounce(cidadeSelecionada, 150);
+  const debouncedSemanaSelecionada = useDebounce(semanaSelecionada, 150);
   
   // Estados de cache para performance
   const [cacheCidades, setCacheCidades] = React.useState<{ [grupo: string]: string[] }>({});
@@ -323,10 +323,19 @@ export const Mapa: React.FC = () => {
       // Verificar cache primeiro
       if (cacheSemanas[descPk]) {
         console.log("🗺️ [CACHE] Usando semanas do cache para descPk:", descPk);
-        setSemanas(cacheSemanas[descPk]);
+        
+        // Filtrar semanas que têm valores null (garantir consistência)
+        const semanasCacheadas = cacheSemanas[descPk].filter((semana: any) => 
+          semana.semanaInicial_vl !== null && 
+          semana.semanaInicial_vl !== undefined && 
+          semana.semanaFinal_vl !== null && 
+          semana.semanaFinal_vl !== undefined
+        );
+        
+        setSemanas(semanasCacheadas);
         setLoadingSemanas(false);
         setIsDebouncing(false); // Resetar debounce quando usa cache
-        showStatus(`✅ Semanas carregadas do cache para ${debouncedCidadeSelecionada}`, "success");
+        showStatus(`✅ ${semanasCacheadas.length} semana(s) válida(s) do cache para ${debouncedCidadeSelecionada}`, "success");
         return;
       }
 
@@ -336,12 +345,23 @@ export const Mapa: React.FC = () => {
       api.get(`semanas?desc_pk=${descPk}`)
         .then(res => {
           console.log("🗺️ [CACHE] Salvando semanas no cache para descPk:", descPk);
-          setSemanas(res.data.semanas);
-          setCacheSemanas(prev => ({ ...prev, [descPk]: res.data.semanas }));
-          if (res.data.semanas && res.data.semanas.length > 0) {
-            showStatus(`✅ ${res.data.semanas.length} semana(s) encontrada(s) para ${cidadeSelecionada}`, "success");
+          
+          // Filtrar semanas que têm valores null em semanaInicial_vl ou semanaFinal_vl
+          const semanasValidas = (res.data.semanas || []).filter((semana: any) => 
+            semana.semanaInicial_vl !== null && 
+            semana.semanaInicial_vl !== undefined && 
+            semana.semanaFinal_vl !== null && 
+            semana.semanaFinal_vl !== undefined
+          );
+          
+          console.log(`🗺️ Semanas filtradas: ${res.data.semanas?.length || 0} → ${semanasValidas.length} (removidas null/null)`);
+          
+          setSemanas(semanasValidas);
+          setCacheSemanas(prev => ({ ...prev, [descPk]: semanasValidas }));
+          if (semanasValidas.length > 0) {
+            showStatus(`✅ ${semanasValidas.length} semana(s) válida(s) para ${cidadeSelecionada}`, "success");
           } else {
-            showStatus(`⚠️ Nenhuma semana encontrada para ${cidadeSelecionada}. Esta praça pode não ter dados de planejamento.`, "warning");
+            showStatus(`⚠️ Nenhuma semana válida encontrada para ${cidadeSelecionada}. Esta praça pode não ter dados de planejamento.`, "warning");
           }
         })
         .catch(err => {
@@ -377,15 +397,19 @@ export const Mapa: React.FC = () => {
       const descPk = descPks[debouncedCidadeSelecionada];
       const cacheKey = `${descPk}_${debouncedSemanaSelecionada || 'all'}`;
       
-      // Verificar cache primeiro
+      // Verificar cache primeiro (COM PRIORIDADE - mais rápido)
       if (cacheHexagonos[cacheKey]) {
-        console.log("🗺️ [CACHE] Usando hexágonos do cache para:", cacheKey);
+        console.log("🗺️ [CACHE HIT] Usando hexágonos do cache para:", cacheKey);
+        console.log(`🗺️ [CACHE] Total de hexágonos no cache: ${cacheHexagonos[cacheKey].length}`);
         setHexagonos(cacheHexagonos[cacheKey]);
+        setLoadingHexagonos(false); // Garantir que loading está false
         setIsDebouncing(false); // Resetar debounce quando usa cache
         const semanaText = debouncedSemanaSelecionada ? `semana ${debouncedSemanaSelecionada}` : "todas as semanas";
-        showStatus(`✅ Mapa carregado do cache para ${debouncedCidadeSelecionada} (${semanaText})`, "success");
+        showStatus(`⚡ Cache: ${cacheHexagonos[cacheKey].length} pontos para ${debouncedCidadeSelecionada} (${semanaText})`, "success");
         return;
       }
+      
+      console.log("🗺️ [CACHE MISS] Não encontrado no cache:", cacheKey);
 
       const searchTerm = debouncedSemanaSelecionada ? `semana ${debouncedSemanaSelecionada}` : "todas as semanas";
       showStatus(`🗺️ [DEBOUNCE] Carregando mapa para ${debouncedCidadeSelecionada} (${searchTerm})...`, "info");
@@ -397,10 +421,14 @@ export const Mapa: React.FC = () => {
         : `hexagonos?desc_pk=${descPk}`;
       
       console.log("🗺️ [PERF] Carregando hexágonos para:", cacheKey);
+      const startTime = performance.now();
+      
       api.get(apiUrl)
         .then(res => {
+          const endTime = performance.now();
+          const loadTime = (endTime - startTime).toFixed(2);
           const hexagonosData = res.data.hexagonos || [];
-          console.log("🗺️ [CACHE] Salvando hexágonos no cache para:", cacheKey);
+          console.log(`🗺️ [CACHE] Salvando ${hexagonosData.length} hexágonos no cache (${loadTime}ms)`);
           setHexagonos(hexagonosData);
           setCacheHexagonos(prev => ({ ...prev, [cacheKey]: hexagonosData }));
           
@@ -409,7 +437,7 @@ export const Mapa: React.FC = () => {
             const fluxoMedio = totalFluxo / hexagonosData.length;
             
             const semanaText = debouncedSemanaSelecionada ? `semana ${debouncedSemanaSelecionada}` : "todas as semanas";
-            showStatus(`✅ Mapa carregado: ${formatNumber(hexagonosData.length)} pontos para ${debouncedCidadeSelecionada} (${semanaText}) - Fluxo médio: ${formatNumber(fluxoMedio)}`, "success");
+            showStatus(`✅ Carregado em ${loadTime}ms: ${formatNumber(hexagonosData.length)} pontos para ${debouncedCidadeSelecionada} (${semanaText}) - Fluxo médio: ${formatNumber(fluxoMedio)}`, "success");
             
             // Salvar informações da última busca
             setLastSearchInfo({
@@ -449,29 +477,73 @@ export const Mapa: React.FC = () => {
   const StatusMessage = () => {
     if (!statusMessage) return null;
     
-    const bgColor = {
-      info: "bg-blue-50 border-blue-200 text-blue-800",
-      success: "bg-green-50 border-green-200 text-green-800",
-      warning: "bg-yellow-50 border-yellow-200 text-yellow-800",
-      error: "bg-red-50 border-red-200 text-red-800"
-    }[statusType];
+    const configs = {
+      info: { 
+        bg: "bg-gradient-to-r from-blue-50 to-indigo-50", 
+        border: "border-blue-300", 
+        text: "text-blue-800",
+        icon: "ℹ️",
+        dotColor: "bg-blue-500"
+      },
+      success: { 
+        bg: "bg-gradient-to-r from-green-50 to-emerald-50", 
+        border: "border-green-300", 
+        text: "text-green-800",
+        icon: "✅",
+        dotColor: "bg-green-500"
+      },
+      warning: { 
+        bg: "bg-gradient-to-r from-yellow-50 to-amber-50", 
+        border: "border-yellow-300", 
+        text: "text-yellow-800",
+        icon: "⚠️",
+        dotColor: "bg-yellow-500"
+      },
+      error: { 
+        bg: "bg-gradient-to-r from-red-50 to-pink-50", 
+        border: "border-red-300", 
+        text: "text-red-800",
+        icon: "❌",
+        dotColor: "bg-red-500"
+      }
+    };
     
-    const icon = {
-      info: "ℹ️",
-      success: "✅",
-      warning: "⚠️",
-      error: "❌"
-    }[statusType];
+    const config = configs[statusType];
+    
+    const icons = {
+      info: (
+        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      success: (
+        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      warning: (
+        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
+        </svg>
+      ),
+      error: (
+        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      )
+    };
     
     return (
-      <div className={`mb-4 p-3 border rounded-lg flex items-start gap-2 ${bgColor}`}>
-        <span className="text-lg">{icon}</span>
+      <div className={`mb-4 p-4 border-2 rounded-xl shadow-sm flex items-start gap-3 ${config.bg} ${config.border} ${config.text}`}>
+        <div className={`w-8 h-8 ${config.dotColor} rounded-full flex items-center justify-center flex-shrink-0`}>
+          {icons[statusType]}
+        </div>
         <div className="flex-1">
           <p className="text-sm font-medium">{statusMessage}</p>
           {statusType === "info" && (
             <button 
               onClick={clearStatus}
-              className="text-xs underline mt-1 hover:no-underline"
+              className="text-xs underline mt-1 hover:no-underline opacity-80 hover:opacity-100"
             >
               Fechar
             </button>
@@ -703,21 +775,20 @@ export const Mapa: React.FC = () => {
                       console.log('🎯 Análise:', analise);
                     }}
                     disabled={isAnalyzing}
-                    className="w-full bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg px-4 py-3 text-sm font-medium hover:from-purple-600 hover:to-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{
-                      boxShadow: '0 4px 6px -1px rgba(139, 92, 246, 0.3)'
-                    }}
+                    className="w-full bg-gradient-to-r from-[#ff4600] to-orange-600 text-white rounded-xl px-6 py-4 text-base font-bold hover:from-[#e03700] hover:to-orange-500 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isAnalyzing ? (
                       <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                        <span>Analisando...</span>
+                        <div className="animate-spin rounded-full h-5 w-5 border-3 border-white border-t-transparent"></div>
+                        <span>Analisando mapa...</span>
                       </>
                     ) : (
                       <>
-                        <span className="text-lg">💡</span>
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
                         <span>Otimizar Plano</span>
-                        <span className="text-xs opacity-80">(Beta)</span>
+                        <span className="bg-white/20 px-2 py-1 rounded-lg text-xs font-bold">BETA</span>
                       </>
                     )}
                   </button>
@@ -727,22 +798,34 @@ export const Mapa: React.FC = () => {
                   
                   {/* Preview rápido dos insights quando disponível */}
                   {analise && mostrarSugestoes && (
-                    <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span>📊</span>
-                        <span className="font-bold text-purple-900">Quick Insights:</span>
+                    <div className="mt-4 p-4 bg-gradient-to-br from-purple-50 via-indigo-50 to-pink-50 border-2 border-purple-300 rounded-xl shadow-md">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center shadow-md">
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                          </svg>
+                        </div>
+                        <span className="font-bold text-purple-900 text-sm uppercase tracking-wide">Quick Insights</span>
                       </div>
-                      <div className="space-y-1 text-purple-800">
-                        <div>• {analise.planoAtual.totalHexagonos} hexágonos analisados</div>
-                        <div>• {analise.planoOtimizado.sugestoes.length} sugestões de melhoria</div>
-                        <div>• Ganho estimado: <span className="font-bold text-green-600">+{analise.planoOtimizado.ganhoPercentual.toFixed(1)}%</span></div>
+                      <div className="space-y-2 mb-3">
+                        <div className="bg-white p-2 rounded-lg border border-purple-200">
+                          <span className="text-purple-800 text-xs font-medium">{analise.planoAtual.totalHexagonos} hexágonos analisados</span>
+                        </div>
+                        <div className="bg-white p-2 rounded-lg border border-purple-200">
+                          <span className="text-purple-800 text-xs font-medium">{analise.planoOtimizado.sugestoes.length} sugestões de melhoria</span>
+                        </div>
+                        <div className="bg-gradient-to-r from-green-100 to-emerald-100 p-2 rounded-lg border border-green-300">
+                          <span className="text-green-800 text-xs font-bold">
+                            Ganho estimado: <span className="text-green-600 font-black">+{analise.planoOtimizado.ganhoPercentual.toFixed(1)}%</span>
+                          </span>
+                        </div>
                       </div>
                       <button
                         onClick={() => {
                           setMostrarModalDetalhes(true);
                           setMostrarSugestoes(false);
                         }}
-                        className="mt-2 text-purple-600 hover:text-purple-800 underline text-xs"
+                        className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-2 rounded-lg text-xs font-bold hover:from-purple-700 hover:to-indigo-700 transition-all shadow-sm hover:shadow-md"
                       >
                         Ver detalhes completos →
                       </button>
@@ -762,43 +845,54 @@ export const Mapa: React.FC = () => {
                   const areaCoberta = hexagonos.length * 0.36; // Aproximação: cada hexágono ~0.36 km²
                   
                   return (
-                    <div className="mb-4 p-4 bg-gradient-to-br from-green-50 to-blue-50 border border-green-200 rounded-lg">
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="text-lg">📊</span>
-                        <h4 className="text-sm font-bold text-green-700">Resumo dos Dados</h4>
+                    <div className="mb-4 p-5 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 border-2 border-orange-200 rounded-xl shadow-lg">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-500 rounded-xl flex items-center justify-center shadow-md">
+                          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                          </svg>
+                        </div>
+                        <h4 className="text-sm font-bold text-orange-900 uppercase tracking-wide">Resumo dos Dados</h4>
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div className="bg-white p-2 rounded border">
-                          <div className="font-semibold text-gray-700">Pontos no mapa</div>
-                          <div className="text-green-600 font-bold">{formatNumber(hexagonos.length)}</div>
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div className="bg-white p-3 rounded-lg border-2 border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Pontos no mapa</div>
+                          <div className="text-green-600 font-bold text-lg">{formatNumber(hexagonos.length)}</div>
                         </div>
-                        <div className="bg-white p-2 rounded border">
-                          <div className="font-semibold text-gray-700">Área coberta</div>
-                          <div className="text-blue-600 font-bold">~{formatNumber(areaCoberta)} km²</div>
+                        <div className="bg-white p-3 rounded-lg border-2 border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Área coberta</div>
+                          <div className="text-blue-600 font-bold text-lg">~{formatNumber(areaCoberta)} km²</div>
                         </div>
-                        <div className="bg-white p-2 rounded border">
-                          <div className="font-semibold text-gray-700">Fluxo total</div>
-                          <div className="text-purple-600 font-bold">{formatNumber(totalFluxo)}</div>
+                        <div className="bg-white p-3 rounded-lg border-2 border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Fluxo total</div>
+                          <div className="text-purple-600 font-bold text-lg">{formatNumber(totalFluxo)}</div>
                         </div>
-                        <div className="bg-white p-2 rounded border">
-                          <div className="font-semibold text-gray-700">Fluxo médio</div>
-                          <div className="text-orange-600 font-bold">{formatNumber(fluxoMedio)}</div>
+                        <div className="bg-white p-3 rounded-lg border-2 border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Fluxo médio</div>
+                          <div className="text-orange-600 font-bold text-lg">{formatNumber(fluxoMedio)}</div>
                         </div>
                       </div>
                       
-                      <div className="mt-3 p-2 bg-white rounded border">
-                        <div className="text-xs text-gray-600 mb-1">
-                          <strong>Extremos:</strong> {formatNumber(minHex.calculatedFluxoEstimado_vl)} (mín) → {formatNumber(maxHex.calculatedFluxoEstimado_vl)} (máx)
+                      <div className="p-3 bg-white rounded-xl border-2 border-gray-200 shadow-sm">
+                        <div className="text-xs text-gray-700 mb-2">
+                          <strong className="text-gray-900">📈 Extremos de Fluxo:</strong> 
+                          <div className="mt-1">
+                            {formatNumber(minHex.calculatedFluxoEstimado_vl)} (mín) → {formatNumber(maxHex.calculatedFluxoEstimado_vl)} (máx)
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-600">
-                          <strong>Grupos:</strong> {grupos.length > 0 ? grupos.join(', ') : 'Nenhum grupo definido'}
+                        <div className="text-xs text-gray-700 border-t border-gray-200 pt-2 mt-2">
+                          <strong className="text-gray-900">🎨 Grupos:</strong> 
+                          <div className="mt-1 text-gray-600">
+                            {grupos.length > 0 ? grupos.join(', ') : 'Nenhum grupo definido'}
+                          </div>
                         </div>
                       </div>
                       
                       {lastSearchInfo && (
-                        <div className="mt-2 text-xs text-gray-500 italic">
-                          Última atualização: {getTimeAgo(lastSearchInfo.timestamp)}
+                        <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
+                          <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
+                          <span className="italic">Última atualização: {getTimeAgo(lastSearchInfo.timestamp)}</span>
                         </div>
                       )}
                     </div>
@@ -807,39 +901,59 @@ export const Mapa: React.FC = () => {
               )}
               
               {/* Seção de Dicas e Ajuda */}
-              <div className="mt-6 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-lg">💡</span>
-                  <h4 className="text-sm font-bold text-blue-700">Dicas de Uso</h4>
+              <div className="mt-6 p-5 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border-2 border-blue-200 rounded-xl shadow-md">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center shadow-md">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                  </div>
+                  <h4 className="text-sm font-bold text-blue-900 uppercase tracking-wide">Dicas de Uso</h4>
                 </div>
                 
-                <div className="space-y-2 text-xs text-blue-800">
-                  <div className="flex items-start gap-2">
-                    <span className="text-blue-600">•</span>
-                    <span>Clique nos pontos do mapa para ver detalhes</span>
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3 bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
+                    <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                      </svg>
+                    </div>
+                    <span className="text-xs text-blue-900 font-medium">Clique nos pontos do mapa para ver detalhes</span>
                   </div>
-                  <div className="flex items-start gap-2">
-                    <span className="text-blue-600">•</span>
-                    <span>Use o zoom para explorar áreas específicas</span>
+                  <div className="flex items-start gap-3 bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
+                    <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+                    <span className="text-xs text-blue-900 font-medium">Use o zoom para explorar áreas específicas</span>
                   </div>
-                  <div className="flex items-start gap-2">
-                    <span className="text-blue-600">•</span>
-                    <span>Selecione uma semana para filtrar dados específicos</span>
+                  <div className="flex items-start gap-3 bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
+                    <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <span className="text-xs text-blue-900 font-medium">Selecione uma semana para filtrar dados específicos</span>
                   </div>
-                  <div className="flex items-start gap-2">
-                    <span className="text-blue-600">•</span>
-                    <span>As cores indicam diferentes grupos de planejamento</span>
+                  <div className="flex items-start gap-3 bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
+                    <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                      </svg>
+                    </div>
+                    <span className="text-xs text-blue-900 font-medium">As cores indicam diferentes grupos de planejamento</span>
                   </div>
                 </div>
                 
                 {hexagonos.length === 0 && (
-                  <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded">
-                    <p className="text-xs text-yellow-800">
-                      <strong>Não encontrou dados?</strong><br/>
-                      • Verifique se a praça possui planejamento cadastrado<br/>
-                      • Tente selecionar outra semana<br/>
-                      • Entre em contato com o suporte se o problema persistir
-                    </p>
+                  <div className="mt-4 p-4 bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-300 rounded-lg shadow-sm">
+                    <p className="text-xs font-bold text-yellow-900 mb-2">Não encontrou dados?</p>
+                    <div className="space-y-1 text-xs text-yellow-800">
+                      <div>✓ Verifique se a praça possui planejamento cadastrado</div>
+                      <div>✓ Tente selecionar outra semana</div>
+                      <div>✓ Entre em contato com o suporte se o problema persistir</div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -848,37 +962,24 @@ export const Mapa: React.FC = () => {
             <div className="flex-1 h-full w-full" style={{ minHeight: 320, background: '#fff', borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e5e5', marginBottom: 48, position: 'relative' }}>
               {/* Overlay/modal para seleção de praça e semana */}
               {showOverlay && (
-                <div style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  background: 'rgba(255,255,255,0.95)',
-                  zIndex: 2000,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: 20
-                }}>
-                  <div style={{ textAlign: 'center', maxWidth: 400 }}>
-                    <div style={{ fontSize: 48, marginBottom: 16 }}>🗺️</div>
-                    <h3 style={{ fontSize: 24, fontWeight: 600, color: '#222', marginBottom: 12 }}>
+                <div className="absolute inset-0 bg-gradient-to-br from-gray-50 via-white to-orange-50 z-50 flex items-center justify-center p-8">
+                  <div className="text-center max-w-lg">
+                    <div className="w-24 h-24 bg-gradient-to-br from-orange-500 to-amber-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl animate-pulse">
+                      <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                      </svg>
+                    </div>
+                    <h3 className="text-3xl font-bold text-gray-900 mb-4">
                       Mapa de Roteiros
                     </h3>
-                    <p style={{ fontSize: 16, color: '#666', marginBottom: 20, lineHeight: 1.5 }}>
-                      Para visualizar o mapa, selecione uma praça no painel à esquerda e opcionalmente uma semana específica.
+                    <p className="text-base text-gray-600 mb-8 leading-relaxed">
+                      Para visualizar o mapa interativo, selecione uma praça no painel à esquerda e opcionalmente uma semana específica.
                     </p>
-                    <div style={{ 
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
-                      color: 'white', 
-                      padding: '12px 24px', 
-                      borderRadius: 8,
-                      fontSize: 14,
-                      fontWeight: 500
-                    }}>
-                      💡 Dica: Comece selecionando uma praça para ver os dados disponíveis
+                    <div className="inline-flex items-center gap-3 bg-gradient-to-r from-[#ff4600] to-orange-600 text-white px-6 py-3 rounded-xl shadow-lg">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="font-semibold">Dica: Comece selecionando uma praça</span>
                     </div>
                   </div>
                 </div>
@@ -954,13 +1055,23 @@ export const Mapa: React.FC = () => {
                               marginBottom: 8
                             }}>
                               <div>
-                                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>📊 Fluxo</div>
+                                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <svg style={{ width: 14, height: 14 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                  </svg>
+                                  Fluxo
+                                </div>
                                 <div style={{ fontSize: 16, fontWeight: 700, color: '#1e293b' }}>
                                   {formatNumber(hex.calculatedFluxoEstimado_vl)}
                                 </div>
                               </div>
                               <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>📈 vs Média</div>
+                                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                  <svg style={{ width: 14, height: 14 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                  </svg>
+                                  vs Média
+                                </div>
                                 <div style={{ 
                                   fontSize: 14, 
                                   fontWeight: 600,
@@ -992,11 +1103,21 @@ export const Mapa: React.FC = () => {
                               border: '1px solid #e2e8f0',
                               textAlign: 'center'
                             }}>
-                              <div style={{ fontSize: 20, marginBottom: 4 }}>
-                                {(() => {
-                                  const tipoRegiao = getTipoRegiao(hex);
-                                  return tipoRegiao.emoji;
-                                })()}
+                              <div style={{ marginBottom: 4, display: 'flex', justifyContent: 'center' }}>
+                                <svg style={{ width: 24, height: 24 }} fill="none" stroke="currentColor" viewBox="0 0 24 24" color="#64748b">
+                                  {hex.calculatedFluxoEstimado_vl > 150000 && (
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                  )}
+                                  {hex.calculatedFluxoEstimado_vl > 100000 && hex.calculatedFluxoEstimado_vl <= 150000 && (
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                                  )}
+                                  {hex.calculatedFluxoEstimado_vl > 50000 && hex.calculatedFluxoEstimado_vl <= 100000 && (
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                  )}
+                                  {hex.calculatedFluxoEstimado_vl <= 50000 && (
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                                  )}
+                                </svg>
                               </div>
                               <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
                                 {(() => {
@@ -1013,7 +1134,11 @@ export const Mapa: React.FC = () => {
                               border: '1px solid #e2e8f0',
                               textAlign: 'center'
                             }}>
-                              <div style={{ fontSize: 20, marginBottom: 4 }}>📏</div>
+                              <div style={{ marginBottom: 4, display: 'flex', justifyContent: 'center' }}>
+                                <svg style={{ width: 24, height: 24 }} fill="none" stroke="currentColor" viewBox="0 0 24 24" color="#64748b">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                                </svg>
+                              </div>
                               <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
                                 {getAreaAproximada(hex)}
                               </div>
@@ -1034,11 +1159,10 @@ export const Mapa: React.FC = () => {
                               border: '1px solid #e2e8f0',
                               textAlign: 'center'
                             }}>
-                              <div style={{ fontSize: 16, marginBottom: 4 }}>
-                                {(() => {
-                                  const eficiencia = getEficiencia(hex, hexagonos);
-                                  return eficiencia.emoji;
-                                })()}
+                              <div style={{ marginBottom: 4, display: 'flex', justifyContent: 'center' }}>
+                                <svg style={{ width: 20, height: 20 }} fill="none" stroke="currentColor" viewBox="0 0 24 24" color={getEficiencia(hex, hexagonos).color}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
                               </div>
                               <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, marginBottom: 2 }}>
                                 Eficiência
@@ -1065,11 +1189,10 @@ export const Mapa: React.FC = () => {
                               border: '1px solid #e2e8f0',
                               textAlign: 'center'
                             }}>
-                              <div style={{ fontSize: 16, marginBottom: 4 }}>
-                                {(() => {
-                                  const cobertura = getCobertura(hex);
-                                  return cobertura.emoji;
-                                })()}
+                              <div style={{ marginBottom: 4, display: 'flex', justifyContent: 'center' }}>
+                                <svg style={{ width: 20, height: 20 }} fill="none" stroke="currentColor" viewBox="0 0 24 24" color={getCobertura(hex).color}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                </svg>
                               </div>
                               <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, marginBottom: 2 }}>
                                 Cobertura
@@ -1096,11 +1219,11 @@ export const Mapa: React.FC = () => {
                               border: '1px solid #e2e8f0',
                               textAlign: 'center'
                             }}>
-                              <div style={{ fontSize: 16, marginBottom: 4 }}>
-                                {(() => {
-                                  const pontos = getPontosDisponiveis(hex);
-                                  return pontos.emoji;
-                                })()}
+                              <div style={{ marginBottom: 4, display: 'flex', justifyContent: 'center' }}>
+                                <svg style={{ width: 20, height: 20 }} fill="none" stroke="currentColor" viewBox="0 0 24 24" color={getPontosDisponiveis(hex).color}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
                               </div>
                               <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, marginBottom: 2 }}>
                                 Pontos
@@ -1129,8 +1252,11 @@ export const Mapa: React.FC = () => {
                             border: '1px solid #e2e8f0',
                             marginBottom: 12
                           }}>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>
-                              📋 Dados de Planejamento
+                            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              Dados de Planejamento
                             </div>
                             <div style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.4 }}>
                               <div style={{ marginBottom: 4 }}>
@@ -1149,8 +1275,12 @@ export const Mapa: React.FC = () => {
 
                           {/* Coordenadas (colapsadas) */}
                           <details style={{ fontSize: 10, color: '#9ca3af' }}>
-                            <summary style={{ cursor: 'pointer', marginBottom: 4 }}>
-                              📍 Coordenadas (clique para expandir)
+                            <summary style={{ cursor: 'pointer', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <svg style={{ width: 12, height: 12 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                              Coordenadas (clique para expandir)
                             </summary>
                             <div style={{ marginTop: 4, padding: 8, background: '#f1f5f9', borderRadius: 4 }}>
                               <div><strong>Lat:</strong> {hex.hex_centroid_lat.toFixed(6)}</div>

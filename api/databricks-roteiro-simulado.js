@@ -10,7 +10,7 @@ async function databricksRoteiroSimulado(req, res) {
 
     console.log('🎯 [databricksRoteiroSimulado] Iniciando processamento Databricks para roteiro simulado...');
     console.log('📊 Dados recebidos:', {
-      planoMidiaDesc_pk: planoMidiaDesc_pk, // Na verdade é o planoMidiaGrupo_pk
+      planoMidiaDesc_pk: planoMidiaDesc_pk, // PK individual da praça (será processado pelo Databricks)
       date_dh,
       date_dt
     });
@@ -19,7 +19,7 @@ async function databricksRoteiroSimulado(req, res) {
     if (!planoMidiaDesc_pk) {
       return res.status(400).json({
         success: false,
-        message: 'planoMidiaGrupo_pk é obrigatório (recebido como planoMidiaDesc_pk)'
+        message: 'planoMidiaDesc_pk é obrigatório'
       });
     }
 
@@ -86,7 +86,7 @@ async function databricksRoteiroSimulado(req, res) {
         data: {
           run_id: runId,
           job_id: databricksJobId,
-          planoMidiaGrupo_pk: planoMidiaDesc_pk, // Enviado como planoMidiaGrupo_pk para o Databricks
+          planoMidiaDesc_pk: planoMidiaDesc_pk, // PK processado
           parameters: requestBody.notebook_params,
           status: 'RUNNING'
         }

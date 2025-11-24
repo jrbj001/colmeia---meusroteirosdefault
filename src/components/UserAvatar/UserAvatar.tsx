@@ -22,38 +22,29 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
     large: 'w-12 h-12'
   };
 
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    // Esconder a imagem e mostrar o avatar genérico
-    e.currentTarget.style.display = 'none';
-    const avatarElement = e.currentTarget.nextElementSibling as HTMLElement;
-    if (avatarElement) {
-      avatarElement.classList.remove('hidden');
-    }
-  };
+  const [showFallback, setShowFallback] = React.useState(false);
 
-  return (
-    <div className={`relative ${className}`}>
-      {src ? (
-        <>
-          <img
-            src={src}
-            alt={alt || name || 'Usuário'}
-            className={`${sizeClasses[size]} rounded-full object-cover border-2 border-gray-200 hover:border-orange-500 transition-colors duration-200`}
-            onError={handleImageError}
-          />
-          <Avatar
-            className="!absolute !top-0 !left-0 hidden"
-            shape="circle"
-            size={size}
-          />
-        </>
-      ) : (
+  // Se não tem src ou deve mostrar fallback, mostrar avatar genérico
+  if (!src || showFallback) {
+    return (
+      <div className={className}>
         <Avatar
-          className="!relative"
           shape="circle"
           size={size}
         />
-      )}
+      </div>
+    );
+  }
+
+  // Sempre tentar mostrar a foto
+  return (
+    <div className={className}>
+      <img
+        src={src}
+        alt={alt || name || 'Usuário'}
+        className={`${sizeClasses[size]} rounded-full object-cover border-2 border-gray-200 hover:border-orange-500 transition-colors duration-200`}
+        onError={() => setShowFallback(true)}
+      />
     </div>
   );
 };

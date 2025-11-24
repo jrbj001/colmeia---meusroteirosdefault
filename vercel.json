@@ -184,6 +184,38 @@
     {
       "source": "/banco-ativos-controle",
       "destination": "/api/banco-ativos-controle.js"
+    },
+    {
+      "source": "/debug-roteiro-simulado",
+      "destination": "/api/debug-roteiro-simulado.js"
+    },
+    {
+      "source": "/descobrir-tabelas",
+      "destination": "/api/descobrir-tabelas.js"
+    },
+    {
+      "source": "/teste-view-resultados",
+      "destination": "/api/teste-view-resultados.js"
+    },
+    {
+      "source": "/ver-sp-codigo",
+      "destination": "/api/ver-sp-codigo.js"
+    },
+    {
+      "source": "/verificar-desc-salvos",
+      "destination": "/api/verificar-desc-salvos.js"
+    },
+    {
+      "source": "/verificar-dados-para-databricks",
+      "destination": "/api/verificar-dados-para-databricks.js"
+    },
+    {
+      "source": "/ver-sp-planomidiadesc",
+      "destination": "/api/ver-sp-planomidiadesc.js"
+    },
+    {
+      "source": "/atualizar-grupo-desc-pks",
+      "destination": "/api/atualizar-grupo-desc-pks.js"
     }
   ]
 } 

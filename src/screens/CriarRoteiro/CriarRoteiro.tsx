@@ -4,7 +4,7 @@ import { Topbar } from "../../components/Topbar/Topbar";
 import { useAuth } from "../../contexts/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "../../config/axios";
-import * as XLSX from 'xlsx';
+import * as XLSX from "xlsx";
 
 interface Agencia {
   id_agencia: number;
@@ -157,6 +157,17 @@ export const CriarRoteiro: React.FC = () => {
     }
   }, [location.state]);
 
+  // Forçar re-render quando tipoVisualizacao muda para garantir que dados sejam exibidos
+  useEffect(() => {
+    // Fazer uma forçar atualização dos estados para garantir renderização
+    if (tipoVisualizacao === 'praca' && dadosSemanais.length > 0 && carregandoSemanais) {
+      setCarregandoSemanais(false);
+    }
+    if (tipoVisualizacao === 'geral' && dadosResultados.length > 0 && carregandoResultados) {
+      setCarregandoResultados(false);
+    }
+  }, [tipoVisualizacao, dadosSemanais.length, dadosResultados.length, carregandoSemanais, carregandoResultados]);
+
   
   // Estados para aba 2 - Configurar target
   const [genero, setGenero] = useState("");
@@ -225,9 +236,9 @@ export const CriarRoteiro: React.FC = () => {
   const [mensagemProcessamento, setMensagemProcessamento] = useState<string>('');
   
   // Estados para Roteiro Simulado
-  const [pracaSelecionadaSimulado, setPracaSelecionadaSimulado] = useState<any | null>(null);
+  const [pracasSelecionadasSimulado, setPracasSelecionadasSimulado] = useState<any[]>([]);
   const [quantidadeSemanas, setQuantidadeSemanas] = useState<number>(12);
-  const [tabelaSimulado, setTabelaSimulado] = useState<any[]>([]);
+  const [tabelaSimulado, setTabelaSimulado] = useState<Record<number, any[]>>({}); // Objeto: id_cidade -> array de linhas
   
   // Estados para o novo fluxo pós-upload
   const [uploadCompleto, setUploadCompleto] = useState(false);
@@ -258,9 +269,20 @@ export const CriarRoteiro: React.FC = () => {
           axios.get('/categoria')
         ]);
 
-        setAgencias(agenciasRes.data);
-        setMarcas(marcasRes.data);
-        setCategorias(categoriasRes.data);
+        // Ordenar alfabeticamente
+        const agenciasOrdenadas = [...agenciasRes.data].sort((a, b) => 
+          (a.agencia_st || '').localeCompare(b.agencia_st || '', 'pt-BR')
+        );
+        const marcasOrdenadas = [...marcasRes.data].sort((a, b) => 
+          (a.marca_st || '').localeCompare(b.marca_st || '', 'pt-BR')
+        );
+        const categoriasOrdenadas = [...categoriasRes.data].sort((a, b) => 
+          (a.categoria_st || '').localeCompare(b.categoria_st || '', 'pt-BR')
+        );
+
+        setAgencias(agenciasOrdenadas);
+        setMarcas(marcasOrdenadas);
+        setCategorias(categoriasOrdenadas);
         
         setLoadingAgencias(false);
         setLoadingMarcas(false);
@@ -290,9 +312,20 @@ export const CriarRoteiro: React.FC = () => {
           axios.get('/target-faixa-etaria')
         ]);
 
-        setGeneros(generosRes.data);
-        setClasses(classesRes.data);
-        setFaixasEtarias(faixasEtariasRes.data);
+        // Ordenar alfabeticamente
+        const generosOrdenados = [...generosRes.data].sort((a, b) => 
+          (a.gender || '').localeCompare(b.gender || '', 'pt-BR')
+        );
+        const classesOrdenadas = [...classesRes.data].sort((a, b) => 
+          (a.class || '').localeCompare(b.class || '', 'pt-BR')
+        );
+        const faixasOrdenadas = [...faixasEtariasRes.data].sort((a, b) => 
+          (a.age || '').localeCompare(b.age || '', 'pt-BR')
+        );
+
+        setGeneros(generosOrdenados);
+        setClasses(classesOrdenadas);
+        setFaixasEtarias(faixasOrdenadas);
         
         setLoadingGeneros(false);
         setLoadingClasses(false);
@@ -370,43 +403,82 @@ export const CriarRoteiro: React.FC = () => {
   // Função para gerar estrutura da tabela simulada
   const gerarTabelaSimulado = async (semanas: number) => {
     try {
-      console.log('🏗️ Gerando tabela simulada...', { cidadesSalvas, semanas });
+      console.log('🏗️ Gerando tabelas simuladas por praça...', { cidadesSalvas, semanas });
       
-      // Buscar grupos/subgrupos disponíveis
-      const gruposResponse = await axios.get('/grupo-sub-distinct');
-      
-      if (gruposResponse.data.success) {
-        const grupos = gruposResponse.data.data;
-        
-        // Gerar estrutura da tabela baseada nos grupos
-        const estruturaTabela = grupos.map((grupo: any) => ({
-          grupo_st: grupo.grupo_st,
-          grupoSub_st: grupo.grupoSub_st,
-          grupoDesc_st: grupo.grupoDesc_st,
-          visibilidade: '100', // Valor padrão - Alta
-          insercaoComprada: 0, // Campo de inserção comprada geral
-          insercaoOferecida: 0, // Campo de inserção oferecida geral
-          seDigitalInsercoes_vl: 0, // Digital Inserções
-          seDigitalMaximoInsercoes_vl: 0, // Digital Máx. Inserções
-          seEstaticoVisibilidade_vl: 100, // Estático Visibilidade
-          // Criar colunas para cada semana
-          semanas: Array.from({ length: semanas }, (_, index) => ({
-            semana: `W${index + 1}`,
-            insercaoComprada: 0,
-            insercaoOferecida: 0,
-            // 🆕 Novos campos adicionados
-            seDigitalInsercoes_vl: 0,
-            seDigitalMaximoInsercoes_vl: 0,
-            seEstaticoVisibilidade_vl: 100
-          }))
-        }));
-        
-        setTabelaSimulado(estruturaTabela);
-        console.log('✅ Tabela simulada gerada:', estruturaTabela.length, 'grupos');
+      if (pracasSelecionadasSimulado.length === 0) {
+        alert('Selecione pelo menos uma praça primeiro');
+        return;
       }
+      
+      // Objeto para armazenar tabelas por praça: id_cidade -> array de linhas
+      const tabelasPorPraca: Record<number, any[]> = {};
+      
+      // Gerar uma tabela separada para cada praça
+      for (const praca of pracasSelecionadasSimulado) {
+        try {
+          const estruturaTabela: any[] = [];
+          
+          const inventarioResponse = await axios.get(`/inventario-cidade?cidade=${encodeURIComponent(praca.nome_cidade)}`);
+          
+          if (!inventarioResponse.data.grupos) {
+            console.warn(`⚠️ Nenhum inventário encontrado para ${praca.nome_cidade}`);
+            continue;
+          }
+          
+          // Filtrar grupos diretamente do inventário (igual Aba 3)
+          const gruposFiltrados = Object.entries(inventarioResponse.data.grupos)
+            .filter(([grupoKey]) => !grupoKey.toUpperCase().startsWith('P'));
+          
+          console.log(`📊 Grupos filtrados do inventário de ${praca.nome_cidade}:`, gruposFiltrados.map(([k]) => k));
+          
+          // Processar grupos do inventário desta praça
+          gruposFiltrados.forEach(([grupoKey, grupoData]: [string, any]) => {
+            grupoData.subgrupos.forEach((subgrupo: any) => {
+              // Criar array de semanas com valores vazios
+              const semanasArray = Array.from({length: semanas}, (_, i) => ({
+                semana: i + 1,
+                insercaoComprada: 0,
+                insercaoOferecida: 0,
+                seDigitalInsercoes_vl: 0,
+                seDigitalMaximoInsercoes_vl: 0
+              }));
+              
+              estruturaTabela.push({
+                grupo_st: grupoKey,
+                grupoSub_st: subgrupo.codigo,
+                grupoDesc_st: subgrupo.descricao,
+                visibilidade: '100', // Valor padrão - Alta
+                // Campos da BaseCalculadora para configuração geral
+                seDigitalInsercoes_vl: 0, // Digital Inserções
+                seDigitalMaximoInsercoes_vl: 0, // Digital Máx. Inserções
+                // Array de semanas
+                semanas: semanasArray
+              });
+            });
+          });
+          
+          // Armazenar tabela desta praça - garantir que usamos número como chave
+          const idPraca = Number(praca.id_cidade);
+          tabelasPorPraca[idPraca] = estruturaTabela;
+          console.log(`✅ Tabela gerada para ${praca.nome_cidade}: ${estruturaTabela.length} subgrupos`);
+          console.log(`✅ Tabela salva com chave ID: ${idPraca} (tipo: ${typeof idPraca})`);
+        } catch (error) {
+          console.error(`❌ Erro ao buscar inventário de ${praca.nome_cidade}:`, error);
+          // Continuar com outras praças mesmo se uma falhar
+        }
+      }
+      
+      if (Object.keys(tabelasPorPraca).length === 0) {
+        alert('Nenhum inventário encontrado para as praças selecionadas');
+        return;
+      }
+        
+      setTabelaSimulado(tabelasPorPraca);
+      const totalSubgrupos = Object.values(tabelasPorPraca).reduce((sum, tabela) => sum + tabela.length, 0);
+      console.log(`✅ ${Object.keys(tabelasPorPraca).length} tabela(s) simulada(s) gerada(s): ${totalSubgrupos} subgrupos no total`);
     } catch (error) {
-      console.error('❌ Erro ao gerar tabela simulada:', error);
-      alert('Erro ao gerar estrutura da tabela. Tente novamente.');
+      console.error('❌ Erro ao gerar tabelas simuladas:', error);
+      alert('Erro ao gerar estrutura das tabelas. Tente novamente.');
     }
   };
 
@@ -436,195 +508,385 @@ export const CriarRoteiro: React.FC = () => {
         return;
       }
 
-      if (!pracaSelecionadaSimulado) {
-        alert('Selecione uma praça para configurar');
+      if (pracasSelecionadasSimulado.length === 0) {
+        alert('Selecione pelo menos uma praça para configurar');
         setSalvandoAba4(false);
         return;
       }
 
-      if (tabelaSimulado.length === 0) {
+      if (Object.keys(tabelaSimulado).length === 0) {
         alert('Configure a tabela de vias públicas primeiro');
         setSalvandoAba4(false);
         return;
       }
 
-      // Coletar dados da tabela (diretamente do estado React)
-      const dadosTabela = tabelaSimulado.map((linha) => {
-        // Usar os dados diretamente do estado
-        const semanasData = linha.semanas || [];
+      // Verificar se todas as praças selecionadas têm tabela (usando número como chave)
+      const pracasSemTabela = pracasSelecionadasSimulado.filter(p => {
+        const idPraca = Number(p.id_cidade);
+        const tabela = tabelaSimulado[idPraca] || tabelaSimulado[p.id_cidade as any];
+        return !tabela || tabela.length === 0;
+      });
+      if (pracasSemTabela.length > 0) {
+        alert(`As seguintes praças não possuem tabela configurada: ${pracasSemTabela.map(p => p.nome_cidade).join(', ')}`);
+        setSalvandoAba4(false);
+        return;
+      }
+
+      console.log('📊 Total de semanas configuradas:', quantidadeSemanas);
+      console.log('📊 Total de praças selecionadas:', pracasSelecionadasSimulado.length);
+      console.log('📊 Praças selecionadas:', pracasSelecionadasSimulado.map(p => `${p.nome_cidade} (ID: ${p.id_cidade}, tipo: ${typeof p.id_cidade})`).join(', '));
+      console.log('📊 Tabelas disponíveis:', Object.keys(tabelaSimulado).map(id => `ID ${id} (tipo: ${typeof id})`).join(', '));
+      
+      // Validar correspondência entre IDs das praças e tabelas
+      pracasSelecionadasSimulado.forEach(praca => {
+        const idNumero = Number(praca.id_cidade);
+        const idString = String(praca.id_cidade);
+        const tabelaPorNumero = tabelaSimulado[idNumero];
+        const tabelaPorString = tabelaSimulado[idString];
+        const tabelaPorIdOriginal = tabelaSimulado[praca.id_cidade as any];
         
-        // Garantir que cada semana tenha os novos campos
-        return {
-          ...linha,
-          semanas: semanasData.map((semana: any) => ({
-            insercaoComprada: semana.insercaoComprada || 0,
-            insercaoOferecida: semana.insercaoOferecida || 0,
-            // Usar valores da linha ou da semana (semanas têm prioridade)
-            seDigitalInsercoes_vl: semana.seDigitalInsercoes_vl ?? linha.seDigitalInsercoes_vl ?? 0,
-            seDigitalMaximoInsercoes_vl: semana.seDigitalMaximoInsercoes_vl ?? linha.seDigitalMaximoInsercoes_vl ?? 0,
-            seEstaticoVisibilidade_vl: semana.seEstaticoVisibilidade_vl ?? linha.seEstaticoVisibilidade_vl ?? 100
-          }))
-        };
+        console.log(`🔍 Validação para ${praca.nome_cidade}:`);
+        console.log(`  - ID original: ${praca.id_cidade} (${typeof praca.id_cidade})`);
+        console.log(`  - Tabela por número (${idNumero}): ${tabelaPorNumero ? 'ENCONTRADA' : 'NÃO ENCONTRADA'}`);
+        console.log(`  - Tabela por string (${idString}): ${tabelaPorString ? 'ENCONTRADA' : 'NÃO ENCONTRADA'}`);
+        console.log(`  - Tabela por ID original: ${tabelaPorIdOriginal ? 'ENCONTRADA' : 'NÃO ENCONTRADA'}`);
       });
 
-      console.log('📊 Dados da tabela coletados:', dadosTabela);
-
-      console.log('🔄 ETAPA 1: Criando planoMidiaDesc_pk específico para a praça...');
-      
-      // Criar planoMidiaDesc_pk específico para a praça selecionada
       const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
-      const cidadeFormatada = (pracaSelecionadaSimulado.nome_cidade || '').replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
+      const planosMidiaDescPk: number[] = [];
+      const resultadosPraças: any[] = [];
+      const errosPraças: any[] = [];
+
+      console.log(`🔄 ETAPA 1: Criando planoMidiaDesc_pk para ${pracasSelecionadasSimulado.length} praça(s) em UMA ÚNICA CHAMADA...`);
+      console.log(`🔄 Lista de praças a processar:`, pracasSelecionadasSimulado.map((p, idx) => `${idx + 1}. ${p.nome_cidade} (ID: ${p.id_cidade})`).join('\n'));
+
+      // ETAPA 1: Preparar recordsJson com TODAS as cidades
+      const allRecordsJson: any[] = [];
+      const pracasComIbge: any[] = [];
       
-      // Buscar código IBGE correto por nome da cidade (API que funciona)
-      let ibgeCode = pracaSelecionadaSimulado.id_cidade; // Fallback
-      
-      console.log('🔍 DEBUG IBGE - Dados da praça:', {
-        nome_cidade: pracaSelecionadaSimulado.nome_cidade,
-        nome_estado: pracaSelecionadaSimulado.nome_estado,
-        id_cidade: pracaSelecionadaSimulado.id_cidade
-      });
-      
-      console.log('🔍 DEBUG IBGE - Estado específico:', pracaSelecionadaSimulado.nome_estado);
-      console.log('🔍 DEBUG IBGE - Tipo do estado:', typeof pracaSelecionadaSimulado.nome_estado);
-      
-      try {
-        console.log('🔍 DEBUG IBGE - Fazendo chamada para /cidades-ibge...');
-        console.log('🔍 DEBUG IBGE - Dados enviados:', {
-          cidade_st: pracaSelecionadaSimulado.nome_cidade,
-          estado_st: pracaSelecionadaSimulado.nome_estado
-        });
+      for (let i = 0; i < pracasSelecionadasSimulado.length; i++) {
+        const praca = pracasSelecionadasSimulado[i];
+        console.log(`\n📍 ===== INICIANDO PROCESSAMENTO DA PRAÇA ${i + 1}/${pracasSelecionadasSimulado.length} =====`);
+        console.log(`📍 Nome: ${praca.nome_cidade} - ${praca.nome_estado}`);
+        console.log(`📍 ID Cidade: ${praca.id_cidade}`);
+        console.log(`📍 Praça completa:`, JSON.stringify(praca));
         
-        const ibgeResponse = await axios.post('/cidades-ibge', {
-          cidade_st: pracaSelecionadaSimulado.nome_cidade,
-          estado_st: pracaSelecionadaSimulado.nome_estado
-        });
-        
-        console.log('🔍 DEBUG IBGE - Resposta da API:', ibgeResponse.data);
-        
-        if (ibgeResponse.data.success && ibgeResponse.data.ibgeCode) {
-          ibgeCode = ibgeResponse.data.ibgeCode;
-          console.log(`✅ IBGE Code encontrado: ${ibgeCode} para ${pracaSelecionadaSimulado.nome_cidade}`);
-        } else {
-          console.warn(`⚠️ IBGE Code não encontrado, usando id_cidade: ${ibgeCode}`);
-        }
-      } catch (error: any) {
-        console.warn(`⚠️ Erro ao buscar IBGE Code, usando id_cidade: ${ibgeCode}`, error.response?.data || error.message);
-        
-        // Se for erro 400 (múltiplas cidades), tentar novamente com estado
-        if (error.response?.status === 400 && error.response?.data?.error?.includes('Múltiplas cidades')) {
-          console.log('🔄 Tentando novamente com estado específico...');
+        try {
+          const cidadeFormatada = (praca.nome_cidade || '').replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
+          
+          // Buscar código IBGE correto por nome da cidade
+          let ibgeCode = praca.id_cidade; // Fallback
+          
           try {
-            const retryResponse = await axios.post('/cidades-ibge', {
-              cidade_st: pracaSelecionadaSimulado.nome_cidade,
-              estado_st: pracaSelecionadaSimulado.nome_estado
+            const ibgeResponse = await axios.post('/cidades-ibge', {
+              cidade_st: praca.nome_cidade,
+              estado_st: praca.nome_estado
             });
             
-            if (retryResponse.data.success && retryResponse.data.ibgeCode) {
-              ibgeCode = retryResponse.data.ibgeCode;
-              console.log(`✅ IBGE Code encontrado na segunda tentativa: ${ibgeCode} para ${pracaSelecionadaSimulado.nome_cidade}`);
+            if (ibgeResponse.data.success && ibgeResponse.data.ibgeCode) {
+              ibgeCode = ibgeResponse.data.ibgeCode;
+              console.log(`✅ IBGE Code encontrado: ${ibgeCode} para ${praca.nome_cidade}`);
+            } else {
+              console.warn(`⚠️ IBGE Code não encontrado, usando id_cidade: ${ibgeCode}`);
             }
-          } catch (retryError) {
-            console.warn(`⚠️ Erro na segunda tentativa:`, retryError.response?.data || retryError.message);
+          } catch (error: any) {
+            console.warn(`⚠️ Erro ao buscar IBGE Code, usando id_cidade: ${ibgeCode}`, error.response?.data || error.message);
+            
+            // Se for erro 400 (múltiplas cidades), tentar novamente
+            if (error.response?.status === 400 && error.response?.data?.error?.includes('Múltiplas cidades')) {
+              try {
+                const retryResponse = await axios.post('/cidades-ibge', {
+                  cidade_st: praca.nome_cidade,
+                  estado_st: praca.nome_estado
+                });
+                
+                if (retryResponse.data.success && retryResponse.data.ibgeCode) {
+                  ibgeCode = retryResponse.data.ibgeCode;
+                  console.log(`✅ IBGE Code encontrado na segunda tentativa: ${ibgeCode}`);
+                }
+              } catch (retryError: any) {
+                console.warn(`⚠️ Erro na segunda tentativa:`, retryError.response?.data || retryError.message);
+              }
+            }
           }
+          
+          // Adicionar ao array de todas as cidades
+          allRecordsJson.push({
+            planoMidiaDesc_st: `${planoMidiaGrupo_st}_${cidadeFormatada}`,
+            usuarioId_st: user?.id || '',
+            usuarioName_st: user?.name || '',
+            gender_st: targetSalvoLocal.genero,
+            class_st: targetSalvoLocal.classe,
+            age_st: targetSalvoLocal.faixaEtaria,
+            ibgeCode_vl: ibgeCode
+          });
+          
+          pracasComIbge.push({
+            praca,
+            ibgeCode,
+            cidadeFormatada
+          });
+          
+          console.log(`✅ Cidade ${praca.nome_cidade} preparada (IBGE: ${ibgeCode})`);
+        } catch (error) {
+          console.error(`❌ Erro ao preparar ${praca.nome_cidade}:`, error);
+          errosPraças.push({
+            praca,
+            erro: error instanceof Error ? error.message : 'Erro desconhecido'
+          });
         }
       }
       
-      console.log('🔍 DEBUG IBGE - Código final que será usado:', ibgeCode);
-      console.log('🔍 DEBUG IBGE - Tipo do código:', typeof ibgeCode);
-      console.log('🔍 DEBUG IBGE - É igual a 3550308?', ibgeCode === 3550308);
-      console.log('🔍 DEBUG IBGE - É igual a 750?', ibgeCode === 750);
-      console.log('🔍 DEBUG IBGE - Valor exato:', JSON.stringify(ibgeCode));
+      // ETAPA 2: Criar TODOS os planoMidiaDesc_pk em UMA ÚNICA CHAMADA
+      if (allRecordsJson.length === 0) {
+        throw new Error('Nenhuma cidade foi preparada com sucesso');
+      }
       
-      const recordsJson = [{
-        planoMidiaDesc_st: `${planoMidiaGrupo_st}_${cidadeFormatada}`,
-        usuarioId_st: user?.id || '',
-        usuarioName_st: user?.name || '',
-        gender_st: targetSalvoLocal.genero,
-        class_st: targetSalvoLocal.classe,
-        age_st: targetSalvoLocal.faixaEtaria,
-        ibgeCode_vl: ibgeCode
-      }];
-
-      console.log('📋 Criando planoMidiaDesc para:', recordsJson[0]);
+      console.log(`\n📋 Criando ${allRecordsJson.length} planoMidiaDesc_pk em UMA ÚNICA CHAMADA...`);
+      console.log(`📊 Records JSON:`, JSON.stringify(allRecordsJson, null, 2));
 
       const descResponse = await axios.post('/plano-midia-desc', {
         planoMidiaGrupo_pk,
-        recordsJson
+        recordsJson: allRecordsJson  // ← TODAS AS CIDADES DE UMA VEZ!
       });
 
       if (!descResponse.data || !Array.isArray(descResponse.data) || descResponse.data.length === 0) {
-        throw new Error('Erro ao criar planoMidiaDesc específico para a praça');
+        throw new Error(`Erro ao criar planoMidiaDesc_pk`);
       }
 
-      const planoMidiaDesc_pk = descResponse.data[0].new_pk;
-      console.log('✅ ETAPA 1 CONCLUÍDA - planoMidiaDesc_pk criado:', planoMidiaDesc_pk);
-
-      console.log('🔄 ETAPA 2: Salvando roteiro simulado...');
-
-      // Chamar API
-      const response = await axios.post('/roteiro-simulado', {
-        planoMidiaDesc_pk,
-        dadosTabela,
-        pracasSelecionadas: [pracaSelecionadaSimulado], // Apenas a praça selecionada
-        quantidadeSemanas
+      // Armazenar todos os PKs criados
+      descResponse.data.forEach((item: any, idx: number) => {
+        planosMidiaDescPk.push(item.new_pk);
+        console.log(`✅ planoMidiaDesc_pk criado para ${pracasComIbge[idx]?.praca.nome_cidade || `Cidade ${idx + 1}`}: ${item.new_pk}`);
       });
-
-      if (response.data.success) {
-        const resultado = response.data.data;
+      
+      console.log(`📊 Todos os PKs criados:`, planosMidiaDescPk.join(', '));
+      console.log(`📊 Response completo da API:`, JSON.stringify(descResponse.data));
+      
+      // ETAPA 3: Salvar roteiro simulado para cada cidade (isso precisa ser loop)
+      for (let i = 0; i < pracasComIbge.length; i++) {
+        const { praca, ibgeCode } = pracasComIbge[i];
+        const planoMidiaDesc_pk = planosMidiaDescPk[i];
         
-        console.log('✅ ETAPA 2 CONCLUÍDA - Roteiro simulado salvo');
-        console.log('🔄 ETAPA 3: Executando processamento Databricks para roteiro simulado...');
-
-        // Executar Databricks específico para roteiro simulado
         try {
-          // O Databricks precisa processar TODOS os planos do grupo, então enviamos o planoMidiaGrupo_pk
-          const databricksResponse = await axios.post('/databricks-roteiro-simulado', {
-            planoMidiaDesc_pk: planoMidiaGrupo_pk, // O Databricks processa todos os planoMidiaDesc deste grupo
-            date_dh: resultado.data?.date_dh || new Date().toISOString().slice(0, 19).replace('T', ' '),
-            date_dt: resultado.data?.date_dt || new Date().toISOString().slice(0, 10)
+
+          console.log(`🔄 ETAPA 2.${i + 1}: Salvando roteiro simulado para ${praca.nome_cidade}...`);
+
+          // Coletar dados da tabela específica desta praça
+          console.log(`🔍 Buscando tabela para praça ID ${praca.id_cidade} (tipo: ${typeof praca.id_cidade})...`);
+          
+          // Tentar buscar a tabela usando diferentes formatos de ID para garantir compatibilidade
+          let tabelaDaPraca = tabelaSimulado[praca.id_cidade as any];
+          
+          // Se não encontrou, tentar como número
+          if (!tabelaDaPraca) {
+            const idNumero = Number(praca.id_cidade);
+            tabelaDaPraca = tabelaSimulado[idNumero];
+            if (tabelaDaPraca) {
+              console.log(`✅ Tabela encontrada usando ID numérico: ${idNumero}`);
+            }
+          }
+          
+          // Se ainda não encontrou, tentar como string
+          if (!tabelaDaPraca) {
+            const idString = String(praca.id_cidade);
+            tabelaDaPraca = tabelaSimulado[idString as any];
+            if (tabelaDaPraca) {
+              console.log(`✅ Tabela encontrada usando ID string: ${idString}`);
+            }
+          }
+          
+          // Se ainda não encontrou, tentar todas as chaves disponíveis
+          if (!tabelaDaPraca) {
+            console.log(`⚠️ Tentando buscar tabela comparando IDs manualmente...`);
+            const todasChaves = Object.keys(tabelaSimulado);
+            console.log(`📋 Chaves disponíveis:`, todasChaves);
+            console.log(`📋 ID da praça (original):`, praca.id_cidade);
+            console.log(`📋 ID da praça (número):`, Number(praca.id_cidade));
+            console.log(`📋 ID da praça (string):`, String(praca.id_cidade));
+            
+            // Tentar comparar valores (não tipos)
+            for (const chave of todasChaves) {
+              if (Number(chave) === Number(praca.id_cidade) || String(chave) === String(praca.id_cidade)) {
+                tabelaDaPraca = tabelaSimulado[Number(chave) || chave as any];
+                if (tabelaDaPraca) {
+                  console.log(`✅ Tabela encontrada na chave: ${chave}`);
+                  break;
+                }
+              }
+            }
+          }
+          
+          if (!tabelaDaPraca) {
+            const todasChaves = Object.keys(tabelaSimulado);
+            throw new Error(
+              `Tabela não encontrada para a praça ${praca.nome_cidade} (ID: ${praca.id_cidade}, tipo: ${typeof praca.id_cidade}). ` +
+              `Chaves disponíveis: ${todasChaves.join(', ')}`
+            );
+          }
+          
+          if (tabelaDaPraca.length === 0) {
+            throw new Error(`Tabela vazia para a praça ${praca.nome_cidade} (ID: ${praca.id_cidade})`);
+          }
+          
+          console.log(`✅ Tabela encontrada para ${praca.nome_cidade}: ${tabelaDaPraca.length} linhas`);
+          
+          const dadosTabela = tabelaDaPraca.map((linha) => {
+            return {
+              grupoSub_st: linha.grupoSub_st || linha.grupo_st,
+              visibilidade: linha.visibilidade,
+              seDigitalInsercoes_vl: linha.seDigitalInsercoes_vl || 0,
+              seDigitalMaximoInsercoes_vl: linha.seDigitalMaximoInsercoes_vl || 0,
+              // Enviar array de semanas (agora configurável na interface)
+              semanas: linha.semanas || []
+            };
           });
 
-          console.log('✅ ETAPA 3 CONCLUÍDA - Databricks executado');
+          console.log(`📊 Dados da tabela para ${praca.nome_cidade}: ${dadosTabela.length} linhas`);
 
-          let mensagemSucesso = `🎉 ROTEIRO SIMULADO PROCESSADO COM SUCESSO!\n\n`;
-          mensagemSucesso += `📊 RESUMO:\n`;
-          mensagemSucesso += `• ${resultado.registrosProcessados} registros processados\n`;
-          mensagemSucesso += `• ${resultado.semanasConfiguradas} semanas configuradas\n`;
-          mensagemSucesso += `• ${resultado.gruposConfigurados} grupos com mídia\n`;
-          mensagemSucesso += `• ${resultado.detalhes.totalInsecoesCompradas} inserções compradas no total\n\n`;
+          // Chamar API para salvar roteiro simulado desta praça
+          console.log(`📤 Enviando para API /roteiro-simulado:`);
+          console.log(`   - planoMidiaDesc_pk: ${planoMidiaDesc_pk}`);
+          console.log(`   - Praça: ${praca.nome_cidade}`);
+          console.log(`   - Linhas de dados: ${dadosTabela.length}`);
           
-          mensagemSucesso += `🏙️ PRAÇA CONFIGURADA: ${pracaSelecionadaSimulado.nome_cidade} - ${pracaSelecionadaSimulado.nome_estado}\n`;
-          mensagemSucesso += `📋 PLANO MÍDIA DESC PK: ${planoMidiaDesc_pk}\n`;
-          mensagemSucesso += `📺 GRUPOS ATIVOS: ${resultado.detalhes.gruposAtivos.join(', ')}\n\n`;
-          
-          mensagemSucesso += `✅ PLANO MÍDIA DESC CRIADO PARA A PRAÇA!\n`;
-          mensagemSucesso += `✅ DADOS SALVOS NA BASE CALCULADORA!\n`;
-          mensagemSucesso += `✅ PROCESSAMENTO DATABRICKS EXECUTADO!\n`;
-          mensagemSucesso += `🎯 ROTEIRO SIMULADO PRONTO PARA VISUALIZAÇÃO!`;
+          const response = await axios.post('/roteiro-simulado', {
+            planoMidiaDesc_pk,
+            dadosTabela,
+            pracasSelecionadas: [praca],
+            quantidadeSemanas
+          }, {
+            timeout: 60000 // 60 segundos de timeout
+          });
 
-          alert(mensagemSucesso);
-          
-          // Marcar roteiro simulado como salvo
-          setRoteiroSimuladoSalvo(true);
-          
-          // Ativar Aba 6 para visualizar resultados
-          setAba6Habilitada(true);
+          if (response.data.success) {
+            resultadosPraças.push({
+              praca: praca,
+              planoMidiaDesc_pk,
+              resultado: response.data.data
+            });
+            console.log(`✅ Roteiro simulado salvo para ${praca.nome_cidade}`);
+            console.log(`📍 ===== FINALIZANDO PROCESSAMENTO DA PRAÇA ${i + 1}/${pracasSelecionadasSimulado.length} =====\n`);
+          } else {
+            throw new Error(response.data.message || 'Erro desconhecido ao salvar roteiro simulado');
+          }
 
-        } catch (databricksError) {
-          console.error('❌ Erro no processamento Databricks:', databricksError);
+        } catch (error: any) {
+          console.error(`\n❌ ===== ERRO AO PROCESSAR PRAÇA ${i + 1}/${pracasSelecionadasSimulado.length} =====`);
+          console.error(`❌ Praça: ${praca.nome_cidade} (ID: ${praca.id_cidade})`);
+          console.error(`❌ Erro:`, error);
+          console.error(`❌ Erro completo:`, error.response?.data || error.message || 'Erro desconhecido');
+          console.error(`❌ ===== FIM DO ERRO =====\n`);
           
-          let mensagemErro = `⚠️ ROTEIRO SIMULADO SALVO, MAS ERRO NO PROCESSAMENTO!\n\n`;
-          mensagemErro += `✅ Dados salvos na base calculadora\n`;
-          mensagemErro += `❌ Erro no processamento Databricks\n\n`;
-          mensagemErro += `📋 PLANO MÍDIA DESC PK: ${planoMidiaDesc_pk}\n`;
-          mensagemErro += `🏙️ PRAÇA: ${pracaSelecionadaSimulado.nome_cidade}\n\n`;
-          mensagemErro += `💡 Contate o suporte para verificar o processamento.`;
+          errosPraças.push({
+            praca: praca,
+            erro: error.response?.data?.message || error.message || 'Erro desconhecido'
+          });
           
-          alert(mensagemErro);
+          // Continuar processando as outras praças mesmo se uma falhar
+          console.log(`⚠️ Continuando processamento das outras praças...`);
+        }
+      }
+      
+      console.log(`\n📊 ===== RESUMO DO PROCESSAMENTO =====`);
+      console.log(`📊 Total de praças selecionadas: ${pracasSelecionadasSimulado.length}`);
+      console.log(`📊 Praças processadas com sucesso: ${planosMidiaDescPk.length}`);
+      console.log(`📊 Praças com erro: ${errosPraças.length}`);
+      console.log(`📊 Planos criados:`, planosMidiaDescPk.join(', '));
+
+      if (planosMidiaDescPk.length === 0) {
+        throw new Error('Nenhuma praça foi processada com sucesso');
+      }
+
+      console.log(`✅ ETAPAS 1, 2 e 3 CONCLUÍDAS - ${planosMidiaDescPk.length} praça(s) processada(s) com sucesso`);
+      console.log('⏳ Aguardando 2 segundos para garantir que todos os dados foram persistidos...');
+      
+      // Aguardar um pouco para garantir que o SQL Server commitou todos os dados
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      console.log('🔄 ETAPA 4: Executando processamento Databricks para o grupo...');
+
+      // Executar Databricks UMA VEZ para o grupo (processa todos os planoMidiaDesc do grupo)
+      try {
+        const databricksResponse = await axios.post('/databricks-roteiro-simulado', {
+          planoMidiaDesc_pk: planoMidiaGrupo_pk, // O Databricks processa todos os planoMidiaDesc deste grupo
+          date_dh: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          date_dt: new Date().toISOString().slice(0, 10)
+        });
+
+        console.log('✅ ETAPA 4 CONCLUÍDA - Databricks executado');
+        
+        // DEBUG DESABILITADO TEMPORARIAMENTE (erro na query da tabela)
+        console.log('🔍 ETAPA 5 (DEBUG): Pulando debug automático...');
+        console.log('📊 Use o endpoint /teste-view-resultados manualmente se precisar investigar');
+
+        let mensagemSucesso = `🎉 ROTEIRO SIMULADO PROCESSADO COM SUCESSO!\n\n`;
+        mensagemSucesso += `📊 RESUMO:\n`;
+        mensagemSucesso += `• ${planosMidiaDescPk.length} ${planosMidiaDescPk.length === 1 ? 'praça processada' : 'praças processadas'}\n`;
+        
+        let totalRegistros = 0;
+        let totalInsecoes = 0;
+        resultadosPraças.forEach(r => {
+          totalRegistros += r.resultado.registrosProcessados || 0;
+          totalInsecoes += r.resultado.detalhes?.totalInsecoesCompradas || 0;
+        });
+        
+        mensagemSucesso += `• ${totalRegistros} registros processados no total\n`;
+        mensagemSucesso += `• ${resultadosPraças[0]?.resultado.semanasConfiguradas || quantidadeSemanas} semanas configuradas\n`;
+        mensagemSucesso += `• ${totalInsecoes} inserções compradas no total\n\n`;
+        
+        mensagemSucesso += `🏙️ PRAÇAS CONFIGURADAS:\n`;
+        resultadosPraças.forEach((r, idx) => {
+          mensagemSucesso += `  ${idx + 1}. ${r.praca.nome_cidade} - ${r.praca.nome_estado} (PK: ${r.planoMidiaDesc_pk})\n`;
+        });
+        
+        if (errosPraças.length > 0) {
+          mensagemSucesso += `\n⚠️ ERROS EM ${errosPraças.length} PRAÇA(S):\n`;
+          errosPraças.forEach((e, idx) => {
+            mensagemSucesso += `  ${idx + 1}. ${e.praca.nome_cidade}: ${e.erro}\n`;
+          });
         }
         
-      } else {
-        throw new Error(response.data.message || 'Erro desconhecido');
+        mensagemSucesso += `\n✅ PLANO MÍDIA DESC CRIADO PARA ${planosMidiaDescPk.length} PRAÇA(S)!\n`;
+        mensagemSucesso += `✅ DADOS SALVOS NA BASE CALCULADORA!\n`;
+        mensagemSucesso += `✅ PROCESSAMENTO DATABRICKS EXECUTADO!\n`;
+        mensagemSucesso += `🎯 ROTEIRO SIMULADO PRONTO PARA VISUALIZAÇÃO!`;
+
+        alert(mensagemSucesso);
+        
+        // Marcar roteiro simulado como salvo
+        setRoteiroSimuladoSalvo(true);
+        
+        // Marcar Aba 4 como preenchida (permite ir para Aba 6)
+        setAba4Preenchida(true);
+        
+        // Ativar Aba 6 para visualizar resultados
+        setAba6Habilitada(true);
+
+      } catch (databricksError) {
+        console.error('❌ Erro no processamento Databricks:', databricksError);
+        
+        let mensagemErro = `⚠️ ROTEIRO SIMULADO SALVO, MAS ERRO NO PROCESSAMENTO!\n\n`;
+        mensagemErro += `✅ Dados salvos na base calculadora para ${planosMidiaDescPk.length} praça(s)\n`;
+        mensagemErro += `❌ Erro no processamento Databricks\n\n`;
+        
+        if (errosPraças.length > 0) {
+          mensagemErro += `⚠️ ERROS EM ${errosPraças.length} PRAÇA(S):\n`;
+          errosPraças.forEach((e, idx) => {
+            mensagemErro += `  ${idx + 1}. ${e.praca.nome_cidade}: ${e.erro}\n`;
+          });
+          mensagemErro += `\n`;
+        }
+        
+        mensagemErro += `💡 Contate o suporte para verificar o processamento.`;
+        
+        alert(mensagemErro);
+        
+        // Marcar roteiro simulado como salvo (mesmo com erro no Databricks)
+        setRoteiroSimuladoSalvo(true);
+        
+        // Marcar Aba 4 como preenchida (permite ir para Aba 6)
+        setAba4Preenchida(true);
       }
 
     } catch (error) {
@@ -955,8 +1217,30 @@ export const CriarRoteiro: React.FC = () => {
               (row[templateIndices.insercoes_compradas] ? parseInt(row[templateIndices.insercoes_compradas]) : null) : null,
             seDigitalMaximoInsercoes_vl: templateIndices.max_insercoes >= 0 ? 
               (row[templateIndices.max_insercoes] ? parseInt(row[templateIndices.max_insercoes]) : null) : null,
-            seEstaticoVisibilidade_vl: templateIndices.visibilidade_estatico >= 0 ? 
-              (row[templateIndices.visibilidade_estatico] ? parseFloat(row[templateIndices.visibilidade_estatico]) : 100) : 100,
+            seEstaticoVisibilidade_vl: (() => {
+              if (templateIndices.visibilidade_estatico < 0) return null;
+              const visibilidadeTexto = row[templateIndices.visibilidade_estatico]?.toString().trim().toUpperCase();
+              if (!visibilidadeTexto) return null;
+              
+              // Mapear texto para valor numérico (ordem importa! Verificar BAIXA antes de ALTA)
+              if (visibilidadeTexto.includes('BAIXA')) return 25;
+              if (visibilidadeTexto.includes('MÉDIA') || visibilidadeTexto.includes('MEDIA')) return 50;
+              if (visibilidadeTexto.includes('MODERADA')) return 75;
+              if (visibilidadeTexto.includes('ALTA')) return 100;
+              
+              // "Não visibilidade" ou "Sem visibilidade" = null (sem info)
+              if (visibilidadeTexto.includes('NÃO') || visibilidadeTexto.includes('NAO') || visibilidadeTexto.includes('SEM')) return null;
+              
+              // Se for número direto, usar o número
+              const numero = parseFloat(visibilidadeTexto);
+              if (!isNaN(numero)) return numero;
+              
+              // Log para valores não mapeados
+              console.warn(`⚠️ Visibilidade não mapeada na linha ${i + 1}: "${visibilidadeTexto}"`);
+              
+              // Caso contrário, retornar null (sem info)
+              return null;
+            })(),
             semana_st: semanaExcel, // ✅ Usar semana real do Excel
             // Dados enriquecidos
             param_descricao: paramData.descricao,
@@ -1046,8 +1330,10 @@ export const CriarRoteiro: React.FC = () => {
       ]);
 
       if (matrixResponse.data.success) {
+        // sp_baseCalculadoraMatrixDataQuery JÁ retorna os campos corretos
         setDadosMatrix(matrixResponse.data.data);
         console.log(`✅ Dados matrix carregados: ${matrixResponse.data.data.length} registros`);
+        console.log(`📋 TODOS os registros matrix:`, JSON.stringify(matrixResponse.data.data, null, 2));
       }
 
       if (matrixRowResponse.data.success) {
@@ -1349,159 +1635,105 @@ export const CriarRoteiro: React.FC = () => {
     }
   };
 
-  // Função para exportar dados para Excel
-  const exportarParaExcel = () => {
+  // Função para baixar Excel do SharePoint
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
+  
+  const baixarExcelSharePoint = async () => {
+    console.log('🔵 FUNÇÃO CHAMADA: baixarExcelSharePoint');
+    console.log('🔵 planoMidiaGrupo_pk atual:', planoMidiaGrupo_pk);
+    
     try {
-      console.log('📊 Iniciando exportação para Excel...');
-      
-      // Criar workbook
-      const workbook = XLSX.utils.book_new();
-      
-      // 1. Aba: Visão Geral
-      if (dadosResultados.length > 0) {
-        const dadosVisaoGeral = [
-          // Cabeçalho com informações do plano
-          ['PLANO DE MÍDIA - RELATÓRIO DE RESULTADOS'],
-          [''],
-          ['Informações do Plano:'],
-          ['Nome do Plano:', nomeRoteiro || 'N/A'],
-          ['Gênero:', genero || 'Não definido'],
-          ['Classe:', classe || 'Não definida'],
-          ['Faixa Etária:', faixaEtaria || 'Não definida'],
-          ['Período Total:', `${semanasUnicas.length} semanas`],
-          ['Cidades:', pracasUnicas.map(p => p.praca).join(', ')],
-          ['Data de Criação:', new Date().toLocaleDateString('pt-BR')],
-          ['CPMView:', totaisResultados?.grp_vl?.toFixed(3) || '0.000'],
-          [''],
-          // Dados da tabela
-          ['VISÃO GERAL - RESUMO TOTAL'],
-          [''],
-          ['Praça', 'Impactos', 'Cobertura (pessoas)', 'Cobertura (%)', 'Frequência', 'GRP'],
-          ...dadosResultados.map(item => [
-            item.cidade_st,
-            Math.round(item.impactosTotal_vl || 0),
-            Math.round(item.coberturaPessoasTotal_vl || 0),
-            (item.coberturaProp_vl || 0).toFixed(1),
-            (item.frequencia_vl || 0).toFixed(1),
-            (item.grp_vl || 0).toFixed(3)
-          ]),
-          // Linha de totais
-          ['TOTAL', 
-           Math.round(totaisResultados?.impactosTotal_vl || 0),
-           Math.round(totaisResultados?.coberturaPessoasTotal_vl || 0),
-           (totaisResultados?.coberturaProp_vl || 0).toFixed(1),
-           (totaisResultados?.frequencia_vl || 0).toFixed(1),
-           (totaisResultados?.grp_vl || 0).toFixed(3)
-          ]
-        ];
-        
-        const worksheetGeral = XLSX.utils.aoa_to_sheet(dadosVisaoGeral);
-        XLSX.utils.book_append_sheet(workbook, worksheetGeral, 'Visão Geral');
+      // Validar se temos o planoMidiaGrupo_pk
+      if (!planoMidiaGrupo_pk) {
+        console.warn('⚠️ planoMidiaGrupo_pk não encontrado');
+        alert('⚠️ Não foi possível identificar o plano de mídia. Por favor, salve o roteiro primeiro.');
+        return;
       }
-      
-      // 1.1. Aba: Target (se houver dados)
-      if (dadosTarget.length > 0) {
-        const dadosTargetExcel = [
-          // Cabeçalho com informações do plano
-          ['PLANO DE MÍDIA - RELATÓRIO DE TARGET'],
-          [''],
-          ['Informações do Plano:'],
-          ['Nome do Plano:', nomeRoteiro || 'N/A'],
-          ['Gênero:', genero || 'Não definido'],
-          ['Classe:', classe || 'Não definida'],
-          ['Faixa Etária:', faixaEtaria || 'Não definida'],
-          ['Período Total:', `${semanasUnicas.length} semanas`],
-          ['Cidades:', pracasUnicas.map(p => p.praca).join(', ')],
-          ['Data de Criação:', new Date().toLocaleDateString('pt-BR')],
-          ['CPMView:', totaisTarget?.grp_vl?.toFixed(3) || '0.000'],
-          [''],
-          // Dados da tabela
-          ['TARGET - RESUMO TOTAL'],
-          [''],
-          ['Praça', 'Impactos', 'Cobertura (pessoas)', 'Cobertura (%)', 'Frequência', 'GRP'],
-          ...dadosTarget.map(item => [
-            item.cidade_st,
-            Math.round(item.impactosTotal_vl || 0),
-            Math.round(item.coberturaPessoasTotal_vl || 0),
-            (item.coberturaProp_vl || 0).toFixed(1),
-            (item.frequencia_vl || 0).toFixed(1),
-            (item.grp_vl || 0).toFixed(3)
-          ]),
-          // Linha de totais
-          ['TOTAL', 
-           Math.round(totaisTarget?.impactosTotal_vl || 0),
-           Math.round(totaisTarget?.coberturaPessoasTotal_vl || 0),
-           (totaisTarget?.coberturaProp_vl || 0).toFixed(1),
-           (totaisTarget?.frequencia_vl || 0).toFixed(1),
-           (totaisTarget?.grp_vl || 0).toFixed(3)
-          ]
-        ];
-        
-        const worksheetTarget = XLSX.utils.aoa_to_sheet(dadosTargetExcel);
-        XLSX.utils.book_append_sheet(workbook, worksheetTarget, 'Target');
-      }
-      
-      // 2. Aba: Visão por Praça
-      if (dadosSemanais.length > 0) {
-        // Agrupar dados por cidade
-        const dadosPorCidade = dadosSemanais.reduce((acc: any, item: any) => {
-          const cidade = item.cidade_st;
-          if (!acc[cidade]) {
-            acc[cidade] = {};
-          }
-          acc[cidade][item.week_vl] = item;
-          return acc;
-        }, {});
 
-        // Criar dados para cada cidade
-        Object.entries(dadosPorCidade).forEach(([cidade, dadosCidade]: [string, any]) => {
-          const dadosCidadeExcel = [
-            // Cabeçalho da cidade
-            [`VISÃO POR PRAÇA - ${cidade}`],
-            [''],
-            ['Itens', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9', 'W10', 'W11', 'W12', 'TOTAL'],
-            // Impactos IPV
-            ['Impactos IPV', ...Array.from({ length: 12 }, (_, i) => {
-              const semana = dadosCidade[i + 1];
-              return semana?.impactos_vl ? Math.round(semana.impactos_vl) : 0;
-            }), dadosSemanaisSummary.find(s => s.cidade_st === cidade)?.impactosTotal_vl || 0],
-            // Cobertura (N° pessoas)
-            ['Cobertura (N° pessoas)', ...Array.from({ length: 12 }, (_, i) => {
-              const semana = dadosCidade[i + 1];
-              return semana?.coberturaPessoas_vl ? Math.round(semana.coberturaPessoas_vl) : 0;
-            }), dadosSemanaisSummary.find(s => s.cidade_st === cidade)?.coberturaPessoasTotal_vl || 0],
-            // Cobertura
-            ['Cobertura %', ...Array.from({ length: 12 }, (_, i) => {
-              const semana = dadosCidade[i + 1];
-              return semana?.coberturaProp_vl ? semana.coberturaProp_vl.toFixed(1) + '%' : '0.0%';
-            }), dadosSemanaisSummary.find(s => s.cidade_st === cidade) ? 
-              (dadosSemanaisSummary.find(s => s.cidade_st === cidade).coberturaProp_vl || 0).toFixed(1) + '%' : '0.0%'],
-            // Frequência
-            ['Frequência', ...Array.from({ length: 12 }, (_, i) => {
-              const semana = dadosCidade[i + 1];
-              return semana?.frequencia_vl ? semana.frequencia_vl.toFixed(1) : '0.0';
-            }), dadosSemanaisSummary.find(s => s.cidade_st === cidade)?.frequencia_vl?.toFixed(1) || '0.0'],
-            // GRP
-            ['GRP', ...Array.from({ length: 12 }, (_, i) => {
-              const semana = dadosCidade[i + 1];
-              return semana?.grp_vl ? semana.grp_vl.toFixed(3) : '0.000';
-            }), dadosSemanaisSummary.find(s => s.cidade_st === cidade)?.grp_vl?.toFixed(3) || '0.000']
-          ];
-          
-          const worksheetCidade = XLSX.utils.aoa_to_sheet(dadosCidadeExcel);
-          XLSX.utils.book_append_sheet(workbook, worksheetCidade, cidade.substring(0, 31)); // Limitar nome da aba
-        });
+      setDownloadingExcel(true);
+      console.log('📥 Iniciando download do SharePoint...');
+      console.log('📊 planoMidiaGrupo_pk:', planoMidiaGrupo_pk);
+      console.log('🌐 URL da API:', '/sharepoint-download');
+
+      // Chamar API do SharePoint
+      console.log('📤 Enviando requisição para API...');
+      const response = await axios.post('/sharepoint-download', {
+        planoMidiaGrupo_pk: planoMidiaGrupo_pk
+      }, {
+        responseType: 'blob', // Importante para receber arquivo binário
+        timeout: 60000 // 60 segundos
+      });
+
+      console.log('✅ Resposta recebida da API');
+      console.log('📊 Status:', response.status);
+      console.log('📦 Content-Type:', response.headers['content-type']);
+      console.log('📏 Tamanho:', response.data.size, 'bytes');
+
+      // Criar URL temporária para download
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      
+      console.log('🔗 Criando URL de download...');
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Nome do arquivo
+      const nomeArquivo = `Roteiro_Completo_${planoMidiaGrupo_pk}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.setAttribute('download', nomeArquivo);
+      
+      // Fazer download
+      console.log('💾 Iniciando download do arquivo:', nomeArquivo);
+      document.body.appendChild(link);
+      link.click();
+      
+      // Limpar
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        console.log('🧹 Limpeza concluída');
+      }, 100);
+
+      console.log('✅ Download concluído com sucesso!');
+      alert(`✅ Download concluído!\n\nArquivo: ${nomeArquivo}`);
+
+    } catch (error: any) {
+      console.error('❌ ERRO DETALHADO:', error);
+      console.error('❌ Error.response:', error.response);
+      console.error('❌ Error.message:', error.message);
+      console.error('❌ Error.code:', error.code);
+      
+      let mensagemErro = '❌ Erro ao baixar arquivo do SharePoint.\n\n';
+      
+      if (error.response?.status === 404) {
+        mensagemErro += 'Arquivo não encontrado no SharePoint para este roteiro.\n\n';
+        mensagemErro += `planoMidiaGrupo_pk: ${planoMidiaGrupo_pk}\n\n`;
+        mensagemErro += 'Verifique se o arquivo foi carregado no SharePoint com esta PK.';
+      } else if (error.response?.status === 500) {
+        mensagemErro += 'Erro no servidor. Verifique as configurações do Azure.\n\n';
+        // Tentar extrair mensagem do erro
+        try {
+          const errorText = await error.response.data.text();
+          mensagemErro += errorText || 'Erro desconhecido';
+        } catch {
+          mensagemErro += error.response?.data?.message || 'Erro desconhecido';
+        }
+      } else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        mensagemErro += 'Tempo limite excedido. O arquivo pode ser muito grande ou o servidor não está respondendo.';
+      } else if (error.message?.includes('Network Error')) {
+        mensagemErro += 'Erro de rede. Verifique:\n';
+        mensagemErro += '1. Se o servidor está rodando (vercel dev)\n';
+        mensagemErro += '2. Se a API está acessível\n';
+        mensagemErro += '3. Sua conexão com a internet';
+      } else {
+        mensagemErro += error.response?.data?.message || error.message || 'Erro desconhecido';
       }
       
-      // 3. Gerar e baixar arquivo
-      const nomeArquivo = `Resultados_${nomeRoteiro || 'Plano'}_${new Date().toISOString().split('T')[0]}.xlsx`;
-      XLSX.writeFile(workbook, nomeArquivo);
-      
-      console.log('✅ Arquivo Excel gerado com sucesso:', nomeArquivo);
-      
-    } catch (error) {
-      console.error('❌ Erro ao exportar para Excel:', error);
-      alert('Erro ao gerar arquivo Excel. Tente novamente.');
+      alert(mensagemErro);
+    } finally {
+      setDownloadingExcel(false);
+      console.log('🔵 Estado downloadingExcel resetado');
     }
   };
 
@@ -2864,50 +3096,64 @@ export const CriarRoteiro: React.FC = () => {
                             
                             return (
                               <div key={cidade.id_cidade} className="mb-8">
-                                <h5 className="text-sm font-bold text-[#3a3a3a] mb-4">
-                                  • {cidade.nome_cidade}, {cidade.nome_estado}
+                                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 rounded-t-lg border-b border-blue-200">
+                                  <h5 className="text-sm font-bold text-gray-800 flex items-center">
+                                    <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                                    </svg>
+                                    {cidade.nome_cidade}, {cidade.nome_estado}
                                 </h5>
+                                </div>
                                 
-                                <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
+                                <div className="bg-white border-l border-r border-t border-gray-300 rounded-b-lg overflow-hidden shadow-sm">
                                   <table className="w-full text-xs">
                                     <thead>
                                       <tr className="bg-gray-600 text-white">
-                                        <th className="px-3 py-2 text-left font-bold">Grupo</th>
-                                        <th className="px-3 py-2 text-left font-bold">Descrição</th>
-                                        <th className="px-3 py-2 text-right font-bold">Quantidade</th>
+                                        <th className="px-4 py-3 text-left font-bold uppercase tracking-wide">Grupo</th>
+                                        <th className="px-4 py-3 text-left font-bold uppercase tracking-wide">Descrição</th>
+                                        <th className="px-4 py-3 text-right font-bold uppercase tracking-wide">Quantidade</th>
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {Object.entries(inventario.grupos).map(([grupoKey, grupoData]: [string, any]) => 
+                                      {(() => {
+                                        // Filtrar grupos que não começam com P
+                                        const gruposFiltrados = Object.entries(inventario.grupos)
+                                          .filter(([grupoKey]) => !grupoKey.toUpperCase().startsWith('P'));
+                                        
+                                        // Calcular total dos grupos filtrados
+                                        const totalFiltrado = gruposFiltrados.reduce((sum, [_, grupoData]: [string, any]) => {
+                                          return sum + (grupoData.total || 0);
+                                        }, 0);
+                                        
+                                        return (
+                                          <>
+                                            {gruposFiltrados.map(([grupoKey, grupoData]: [string, any]) => 
                                         grupoData.subgrupos.map((subgrupo: any, index: number) => (
-                                          <tr key={`${grupoKey}-${index}`} className="border-b border-gray-200 hover:bg-gray-50">
-                                            <td className="px-3 py-2 font-medium text-[#3a3a3a]">
+                                                <tr key={`${grupoKey}-${index}`} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                                                  <td className="px-4 py-3 font-medium text-[#3a3a3a]">
                                               {subgrupo.codigo}
                                             </td>
-                                            <td className="px-3 py-2 text-[#3a3a3a]">
+                                                  <td className="px-4 py-3 text-[#3a3a3a]">
                                               {subgrupo.descricao}
                                             </td>
-                                            <td className="px-3 py-2 text-right font-medium text-[#3a3a3a]">
+                                                  <td className="px-4 py-3 text-right font-semibold text-[#3a3a3a]">
                                               {subgrupo.quantidade.toLocaleString()}
                                             </td>
                                           </tr>
                                         ))
                                       )}
                                       <tr className="bg-gray-500 text-white font-bold">
-                                        <td className="px-3 py-2">TOTAL</td>
-                                        <td className="px-3 py-2"></td>
-                                        <td className="px-3 py-2 text-right">
-                                          {inventario.total.toLocaleString()}
+                                              <td className="px-4 py-3 uppercase tracking-wide">TOTAL</td>
+                                              <td className="px-4 py-3"></td>
+                                              <td className="px-4 py-3 text-right text-lg">
+                                                {totalFiltrado.toLocaleString()}
                                         </td>
                                       </tr>
+                                          </>
+                                        );
+                                      })()}
                                     </tbody>
                                   </table>
-                                </div>
-                                
-                                <div className="mt-3 flex justify-center">
-                                  <button className="px-4 py-2 bg-gray-300 text-[#3a3a3a] text-xs rounded border border-gray-400 hover:bg-gray-400 transition-colors">
-                                    Solicitar revisão de inventário
-                                  </button>
                                 </div>
                               </div>
                             );
@@ -2955,61 +3201,101 @@ export const CriarRoteiro: React.FC = () => {
 
                   {/* 📊 LOADING EM TEMPO REAL - ABA 4 */}
                   {loadingAba4.ativo && (
-                    <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg shadow-sm">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center">
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-3"></div>
+                    <div className="mb-8 p-8 bg-gradient-to-br from-orange-50 via-orange-50 to-amber-50 border-2 border-orange-200 rounded-2xl shadow-xl">
+                      {/* Header com Progresso */}
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-4">
+                          <div className="relative w-14 h-14">
+                            <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-[#ff4600] to-orange-400 rounded-full opacity-20"></div>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#ff4600] border-t-transparent"></div>
+                            </div>
+                          </div>
                           <div>
-                            <h4 className="text-lg font-bold text-blue-800">{loadingAba4.etapa}</h4>
-                            <p className="text-sm text-blue-600 mt-1">{loadingAba4.detalhes}</p>
+                            <h4 className="text-xl font-bold text-[#3a3a3a]">{loadingAba4.etapa}</h4>
+                            <p className="text-sm text-gray-600 mt-1">{loadingAba4.detalhes}</p>
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-2xl font-bold text-blue-800">{loadingAba4.progresso}%</div>
+                          <div className="text-4xl font-bold bg-gradient-to-r from-[#ff4600] to-orange-500 bg-clip-text text-transparent">
+                            {loadingAba4.progresso}%
+                          </div>
                           {loadingAba4.tempoInicio && (
-                            <div className="text-xs text-blue-600 mt-1">
-                              {Math.floor((new Date().getTime() - loadingAba4.tempoInicio.getTime()) / 1000)}s
+                            <div className="text-xs text-gray-500 mt-1 font-medium">
+                              ⏱️ {Math.floor((new Date().getTime() - loadingAba4.tempoInicio.getTime()) / 1000)}s
                             </div>
                           )}
                         </div>
                       </div>
                       
-                      {/* Barra de progresso */}
-                      <div className="w-full bg-blue-200 rounded-full h-3 mb-4">
+                      {/* Barra de progresso moderna */}
+                      <div className="w-full bg-gray-200 rounded-full h-4 mb-6 shadow-inner">
                         <div 
-                          className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500 ease-out"
+                          className="bg-gradient-to-r from-[#ff4600] via-orange-400 to-amber-400 h-4 rounded-full transition-all duration-500 ease-out shadow-lg"
                           style={{ width: `${loadingAba4.progresso}%` }}
-                        ></div>
+                        >
+                          <div className="w-full h-full bg-gradient-to-r from-transparent via-white to-transparent opacity-30 rounded-full animate-pulse"></div>
+                        </div>
                       </div>
                       
                       {/* Etapas do processo */}
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
-                        <div className={`p-2 rounded text-center ${loadingAba4.progresso >= 10 ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-600'}`}>
-                          📊 Salvando roteiros
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        <div className={`p-3 rounded-xl text-center transition-all duration-300 ${
+                          loadingAba4.progresso >= 10 
+                            ? 'bg-gradient-to-r from-[#ff4600] to-orange-400 text-white shadow-lg scale-105' 
+                            : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          <div className="text-lg mb-1">📊</div>
+                          <div className="text-xs font-semibold">Salvando roteiros</div>
                         </div>
-                        <div className={`p-2 rounded text-center ${loadingAba4.progresso >= 25 ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-600'}`}>
-                          🔄 Consultando dados
+                        <div className={`p-3 rounded-xl text-center transition-all duration-300 ${
+                          loadingAba4.progresso >= 25 
+                            ? 'bg-gradient-to-r from-[#ff4600] to-orange-400 text-white shadow-lg scale-105' 
+                            : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          <div className="text-lg mb-1">🔄</div>
+                          <div className="text-xs font-semibold">Consultando dados</div>
                         </div>
-                        <div className={`p-2 rounded text-center ${loadingAba4.progresso >= 40 ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-600'}`}>
-                          🏢 Banco de Ativos
+                        <div className={`p-3 rounded-xl text-center transition-all duration-300 ${
+                          loadingAba4.progresso >= 40 
+                            ? 'bg-gradient-to-r from-[#ff4600] to-orange-400 text-white shadow-lg scale-105' 
+                            : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          <div className="text-lg mb-1">🏢</div>
+                          <div className="text-xs font-semibold">Banco de Ativos</div>
                         </div>
-                        <div className={`p-2 rounded text-center ${loadingAba4.progresso >= 70 ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-600'}`}>
-                          📋 Criando planos
+                        <div className={`p-3 rounded-xl text-center transition-all duration-300 ${
+                          loadingAba4.progresso >= 70 
+                            ? 'bg-gradient-to-r from-[#ff4600] to-orange-400 text-white shadow-lg scale-105' 
+                            : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          <div className="text-lg mb-1">📋</div>
+                          <div className="text-xs font-semibold">Criando planos</div>
                         </div>
-                        <div className={`p-2 rounded text-center ${loadingAba4.progresso >= 90 ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-600'}`}>
-                          🚀 Databricks
+                        <div className={`p-3 rounded-xl text-center transition-all duration-300 ${
+                          loadingAba4.progresso >= 90 
+                            ? 'bg-gradient-to-r from-[#ff4600] to-orange-400 text-white shadow-lg scale-105' 
+                            : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          <div className="text-lg mb-1">🚀</div>
+                          <div className="text-xs font-semibold">Databricks</div>
                         </div>
                       </div>
                       
                       {loadingAba4.etapa === 'Banco de Ativos' && (
-                        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                          <div className="flex items-center">
-                            <div className="w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center mr-2">
-                              <span className="text-white text-xs font-bold">⚡</span>
+                        <div className="mt-6 p-4 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl shadow-md">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
+                              <span className="text-white text-sm font-bold">⚡</span>
                             </div>
-                            <span className="text-yellow-800 text-sm">
-                              <strong>Processo crítico:</strong> Consultando API externa para dados de passantes. Este processo pode demorar alguns minutos dependendo do tamanho do arquivo.
-                            </span>
+                            <div>
+                              <p className="text-sm font-bold text-amber-900">
+                                Processo crítico em execução
+                              </p>
+                              <p className="text-xs text-amber-700 mt-1">
+                                Consultando API externa para dados de passantes. Este processo pode demorar alguns minutos.
+                              </p>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -3079,30 +3365,39 @@ export const CriarRoteiro: React.FC = () => {
                     {/* Roteiro Completo - Upload de arquivo */}
                     {tipoRoteiro === 'completo' && (
                       <>
-                    {/* Download do template */}
-                    <div className="mb-8">
-                      <div className="flex items-center gap-4">
-                        <a
-                          href="#"
-                          className="text-[#ff4600] hover:text-orange-600 underline font-medium"
+                    {/* Card de Upload */}
+                    <div className="mb-8 bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl border-2 border-orange-200 shadow-sm">
+                      {/* Header com ícone */}
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-12 h-12 bg-[#ff4600] rounded-lg flex items-center justify-center">
+                          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h4 className="text-lg font-bold text-gray-800">Upload do Arquivo Excel</h4>
+                          <p className="text-sm text-gray-600">Carregue seu plano de mídia formatado</p>
+                        </div>
+                      </div>
+
+                      {/* Botão de Download do Template */}
+                      <div className="mb-4">
+                        <button
                           onClick={(e) => {
                             e.preventDefault();
-                            // Aqui você pode implementar o download do template Excel
                             alert('Download do template Excel iniciado');
                           }}
+                          className="flex items-center gap-2 px-4 py-2 text-[#ff4600] hover:text-orange-600 font-medium border border-orange-300 rounded-lg hover:bg-white transition-colors"
                         >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          </svg>
                           Download template Excel
-                        </a>
-                      </div>
+                        </button>
                     </div>
 
-                    {/* Upload do arquivo */}
-                    <div className="mb-8">
-                      <label className="block text-base text-[#3a3a3a] mb-2">
-                        Upload do arquivo Excel
-                      </label>
+                      {/* Área de Upload */}
                       <div className="space-y-3">
-                        <div className="flex items-center gap-4">
                           <input
                             type="file"
                             accept=".xlsx,.xls"
@@ -3116,47 +3411,70 @@ export const CriarRoteiro: React.FC = () => {
                             id="excel-upload"
                             disabled={processandoExcel || uploadCompleto}
                           />
+                        
+                        {/* Botão de Upload */}
                           <label
                             htmlFor="excel-upload"
-                            className={`px-6 py-3 rounded-lg transition-colors ${
+                          className={`flex items-center justify-center gap-2 px-6 py-4 rounded-lg transition-all duration-200 ${
                               processandoExcel
                                 ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
                                 : uploadCompleto
-                                ? 'bg-green-500 text-white cursor-not-allowed'
-                                : 'bg-[#ff4600] text-white hover:bg-orange-600 cursor-pointer'
-                            }`}
-                          >
-                            {processandoExcel ? 'Processando...' : uploadCompleto ? 'Arquivo já enviado' : 'Upload Excel'}
-                          </label>
-                          {arquivoExcel && !processandoExcel && (
-                            <span className="text-sm text-green-600">
-                              ✓ {arquivoExcel.name}
-                            </span>
+                              ? 'bg-green-500 text-white cursor-not-allowed shadow-lg'
+                              : 'bg-[#ff4600] text-white hover:bg-orange-600 cursor-pointer shadow-md hover:shadow-lg'
+                          }`}
+                        >
+                          {processandoExcel ? (
+                            <>
+                              <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
+                              <span className="font-medium">Processando...</span>
+                            </>
+                          ) : uploadCompleto ? (
+                            <>
+                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              </svg>
+                              <span className="font-medium">Upload Concluído</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                              </svg>
+                              <span className="font-medium">Selecionar arquivo Excel</span>
+                            </>
                           )}
-                        </div>
-                        
-                        {uploadCompleto && (
-                          <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-200">
-                            <p>Arquivo já enviado. Para enviar outro arquivo, crie um novo plano.</p>
+                        </label>
+
+                        {/* Nome do arquivo */}
+                        {arquivoExcel && !processandoExcel && uploadCompleto && (
+                          <div className="bg-white border-2 border-green-200 rounded-lg p-4 mt-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                                <svg className="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+                                  <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
+                                </svg>
                           </div>
-                        )}
-                        
-                        {processandoExcel && (
-                          <div className="flex items-center gap-2">
-                            <div className="animate-spin h-4 w-4 border-2 border-[#ff4600] border-t-transparent rounded-full"></div>
-                            <span className="text-sm text-[#ff4600] font-medium">Processando arquivo...</span>
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-800">{arquivoExcel.name}</p>
+                                <p className="text-xs text-gray-500">Arquivo processado com sucesso</p>
+                              </div>
+                              <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            </div>
                           </div>
                         )}
                       </div>
                       
                       {/* Mensagem de status */}
                       {mensagemProcessamento && (
-                        <div className={`mt-3 p-3 rounded-lg text-sm font-medium ${
+                        <div className={`mt-4 p-4 rounded-lg text-sm font-medium border-2 ${
                           mensagemProcessamento.includes('❌') 
-                            ? 'bg-red-100 text-red-700 border border-red-200' 
+                            ? 'bg-red-50 text-red-700 border-red-200' 
                             : mensagemProcessamento.includes('✅')
-                            ? 'bg-green-100 text-green-700 border border-green-200'
-                            : 'bg-blue-100 text-blue-700 border border-blue-200'
+                            ? 'bg-green-50 text-green-700 border-green-200'
+                            : 'bg-blue-50 text-blue-700 border-blue-200'
                         }`}>
                           {mensagemProcessamento}
                         </div>
@@ -3170,37 +3488,46 @@ export const CriarRoteiro: React.FC = () => {
                       <>
                         {/* Praças da Aba 3 */}
                         <div className="mb-8">
-                          <label className="block text-base text-[#3a3a3a] mb-3">
+                          <label className="block text-base font-bold text-[#3a3a3a] mb-4">
                             Praça(s) configurada(s) na Aba 3
                           </label>
                           <div className="relative">
                             {cidadesSalvas.length > 0 ? (
-                              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                                <div className="flex items-center mb-2">
-                                  <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center mr-3">
-                                    <span className="text-white text-sm font-bold">✓</span>
+                              <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl shadow-sm">
+                                <div className="flex items-center gap-3 mb-4">
+                                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center shadow-md">
+                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
                                   </div>
-                                  <span className="font-medium text-blue-800">
-                                    {cidadesSalvas.length} praça(s) configurada(s):
+                                  <span className="font-bold text-blue-800 text-lg">
+                                    {cidadesSalvas.length} praça{cidadesSalvas.length > 1 ? 's' : ''} configurada{cidadesSalvas.length > 1 ? 's' : ''}
                                   </span>
                                 </div>
-                                <div className="ml-9">
+                                <div className="flex flex-wrap gap-2">
                                   {cidadesSalvas.map((cidade, index) => (
-                                    <div key={cidade.id_cidade} className="text-blue-700">
-                                      {index + 1}. {cidade.nome_cidade} - {cidade.nome_estado}
+                                    <div key={cidade.id_cidade} className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border border-blue-300 shadow-sm">
+                                      <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                                        {index + 1}
+                                      </span>
+                                      <span className="text-blue-700 font-medium">
+                                        {cidade.nome_cidade} - {cidade.nome_estado}
+                                      </span>
                                     </div>
                                   ))}
                                 </div>
                               </div>
                             ) : (
-                              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                                <div className="flex items-center">
-                                  <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center mr-3">
-                                    <span className="text-white text-sm font-bold">!</span>
+                              <div className="p-6 bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-200 rounded-xl shadow-sm">
+                                <div className="flex items-start gap-4">
+                                  <div className="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center flex-shrink-0 shadow-md">
+                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
+                                    </svg>
                                   </div>
                                   <div>
-                                    <p className="font-medium text-yellow-800">Configuração necessária</p>
-                                    <p className="text-sm text-yellow-700">
+                                    <p className="font-bold text-yellow-800 text-lg">Configuração necessária</p>
+                                    <p className="text-sm text-yellow-700 mt-1">
                                       Vá para a Aba 3 e configure as praças antes de criar o roteiro simulado.
                                     </p>
                                   </div>
@@ -3210,262 +3537,300 @@ export const CriarRoteiro: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Seleção da Praça Específica */}
+                        {/* Seleção de Múltiplas Praças */}
                         {cidadesSalvas.length > 0 && (
-                          <div className="mb-8">
-                            <label className="block text-base text-[#3a3a3a] mb-3">
-                              Selecione a praça para configurar
+                          <div className="mb-8 bg-white p-6 rounded-xl border-2 border-gray-200 shadow-sm">
+                            <label className="block text-base font-bold text-[#3a3a3a] mb-4">
+                              Selecione as praças para configurar (múltiplas seleções permitidas)
                             </label>
-                            <select 
-                              value={pracaSelecionadaSimulado?.id_cidade || ''}
-                              onChange={(e) => {
-                                const cidadeId = parseInt(e.target.value);
-                                const cidade = cidadesSalvas.find(c => c.id_cidade === cidadeId);
-                                setPracaSelecionadaSimulado(cidade || null);
-                                // Limpar tabela quando mudar de praça
-                                setTabelaSimulado([]);
-                              }}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                              <option value="">Escolha uma praça...</option>
-                              {cidadesSalvas.map((cidade) => (
-                                <option key={cidade.id_cidade} value={cidade.id_cidade}>
-                                  {cidade.nome_cidade} - {cidade.nome_estado}
-                                </option>
-                              ))}
-                            </select>
-                            {pracaSelecionadaSimulado && (
-                              <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                                <div className="flex items-center">
-                                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center mr-2">
-                                    <span className="text-white text-xs font-bold">🎯</span>
-                    </div>
-                                  <span className="text-green-800 font-medium">
-                                    Configurando: {pracaSelecionadaSimulado.nome_cidade} - {pracaSelecionadaSimulado.nome_estado}
-                                  </span>
+                            <div className="space-y-3 max-h-96 overflow-y-auto border-2 border-gray-200 rounded-lg p-4 bg-gray-50">
+                              {cidadesSalvas.map((cidade) => {
+                                const estaPracaSelecionada = pracasSelecionadasSimulado.some(
+                                  p => p.id_cidade === cidade.id_cidade
+                                );
+                                return (
+                                  <label
+                                    key={cidade.id_cidade}
+                                    className="flex items-center gap-3 p-3 bg-white rounded-lg border-2 border-gray-300 hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition-all"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={estaPracaSelecionada}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          // Adicionar praça
+                                          setPracasSelecionadasSimulado([...pracasSelecionadasSimulado, cidade]);
+                                        } else {
+                                          // Remover praça
+                                          setPracasSelecionadasSimulado(
+                                            pracasSelecionadasSimulado.filter(p => p.id_cidade !== cidade.id_cidade)
+                                          );
+                                          // Remover tabela desta praça quando remover - usar número como chave
+                                          setTabelaSimulado((prev) => {
+                                            const novasTabelas = { ...prev };
+                                            const idPraca = Number(cidade.id_cidade);
+                                            delete novasTabelas[idPraca];
+                                            // Também tentar remover se estiver como string
+                                            delete novasTabelas[cidade.id_cidade as any];
+                                            return novasTabelas;
+                                          });
+                                        }
+                                      }}
+                                      className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                    />
+                                    <div className="flex-1">
+                                      <span className="text-sm font-medium text-gray-800">
+                                        {cidade.nome_cidade} - {cidade.nome_estado}
+                                      </span>
+                                    </div>
+                                    {estaPracaSelecionada && (
+                                      <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                      </div>
+                                    )}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            {pracasSelecionadasSimulado.length > 0 && (
+                              <div className="mt-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-lg">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  </svg>
+                                  <p className="text-sm font-medium text-green-800">
+                                    {pracasSelecionadasSimulado.length} {pracasSelecionadasSimulado.length === 1 ? 'praça selecionada' : 'praças selecionadas'}
+                                  </p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {pracasSelecionadasSimulado.map((praca) => (
+                                    <span
+                                      key={praca.id_cidade}
+                                      className="px-3 py-1 bg-green-600 text-white text-xs font-medium rounded-full"
+                                    >
+                                      {praca.nome_cidade} - {praca.nome_estado}
+                                    </span>
+                                  ))}
                                 </div>
                               </div>
                             )}
                           </div>
                         )}
 
-                        {/* Quantidade de Semanas */}
-                        <div className="mb-8">
-                          <label className="block text-base text-[#3a3a3a] mb-3">
-                            Quantidade de semanas
-                          </label>
-                          <select 
-                            value={quantidadeSemanas}
-                            onChange={(e) => setQuantidadeSemanas(Number(e.target.value))}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            {Array.from({ length: 52 }, (_, i) => i + 1).map(semana => (
-                              <option key={semana} value={semana}>
-                                {semana} semana{semana > 1 ? 's' : ''}
-                              </option>
-                            ))}
-                          </select>
-                    </div>
-
-                        {/* Botão para gerar tabela */}
-                        <div className="mb-8">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (cidadesSalvas.length === 0) {
-                                alert('Configure as praças na Aba 3 primeiro');
-                                return;
-                              }
-                              if (!pracaSelecionadaSimulado) {
-                                alert('Selecione uma praça para configurar');
-                                return;
-                              }
-                              gerarTabelaSimulado(quantidadeSemanas);
-                            }}
-                            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400"
-                            disabled={cidadesSalvas.length === 0 || !pracaSelecionadaSimulado}
-                          >
-                            {pracaSelecionadaSimulado 
-                              ? `Configurar vias públicas para ${pracaSelecionadaSimulado.nome_cidade}` 
-                              : 'Selecione uma praça para configurar'
-                            }
-                          </button>
-                        </div>
-
-                        {/* Tabela Simulada */}
-                        {tabelaSimulado.length > 0 && (
-                          <div className="mb-8">
-                            <h4 className="text-lg font-semibold text-[#3a3a3a] mb-4">
-                              Configure as vias públicas de {pracaSelecionadaSimulado?.nome_cidade || 'praça'}
-                            </h4>
-                            <div className="overflow-x-auto border border-gray-300 rounded-lg">
-                              <table className="w-full">
-                                <thead className="bg-blue-600 text-white">
-                                  <tr>
-                                    <th className="px-3 py-2 text-left font-medium text-sm">Grupo</th>
-                                    <th className="px-3 py-2 text-left font-medium text-sm">Descrição</th>
-                                    <th className="px-3 py-2 text-left font-medium text-sm">Visibilidade</th>
-                                    <th className="px-3 py-2 text-center font-medium text-sm">Inserção comprada</th>
-                                    <th className="px-3 py-2 text-center font-medium text-sm">Inserção oferecida</th>
-                                    <th className="px-3 py-2 text-center font-medium text-sm">Digital Inserções</th>
-                                    <th className="px-3 py-2 text-center font-medium text-sm">Digital Máx. Inserções</th>
-                                    <th className="px-3 py-2 text-center font-medium text-sm">Estático Visibilidade</th>
-                                    {Array.from({ length: quantidadeSemanas }, (_, i) => (
-                                      <th key={i} className="px-3 py-2 text-center font-medium text-sm">
-                                        W{i + 1}
-                                      </th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {tabelaSimulado.map((linha, index) => (
-                                    <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                                      <td className="px-3 py-2 text-sm font-medium">{linha.grupo_st}</td>
-                                      <td className="px-3 py-2 text-sm">{linha.grupoDesc_st}</td>
-                                      <td className="px-3 py-2">
-                                        <select 
-                                          value={linha.visibilidade}
-                                          onChange={(e) => {
-                                            const novaTabela = [...tabelaSimulado];
-                                            novaTabela[index].visibilidade = e.target.value;
-                                            setTabelaSimulado(novaTabela);
-                                          }}
-                                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
-                                        >
-                                          <option value="25">Baixa</option>
-                                          <option value="50">Média</option>
-                                          <option value="75">Moderada</option>
-                                          <option value="100">Alta</option>
-                                        </select>
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          value={linha.insercaoComprada || 0}
-                                          onChange={(e) => {
-                                            const novaTabela = [...tabelaSimulado];
-                                            novaTabela[index].insercaoComprada = parseInt(e.target.value) || 0;
-                                            setTabelaSimulado(novaTabela);
-                                          }}
-                                          className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded"
-                                        />
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          value={linha.insercaoOferecida || 0}
-                                          onChange={(e) => {
-                                            const novaTabela = [...tabelaSimulado];
-                                            novaTabela[index].insercaoOferecida = parseInt(e.target.value) || 0;
-                                            setTabelaSimulado(novaTabela);
-                                          }}
-                                          className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded"
-                                        />
-                                      </td>
-                                      {/* 🆕 Novos campos */}
-                                      <td className="px-3 py-2">
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          value={linha.seDigitalInsercoes_vl || 0}
-                                          onChange={(e) => {
-                                            const novaTabela = [...tabelaSimulado];
-                                            novaTabela[index].seDigitalInsercoes_vl = parseInt(e.target.value) || 0;
-                                            setTabelaSimulado(novaTabela);
-                                          }}
-                                          className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded"
-                                          placeholder="Digital"
-                                        />
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          value={linha.seDigitalMaximoInsercoes_vl || 0}
-                                          onChange={(e) => {
-                                            const novaTabela = [...tabelaSimulado];
-                                            novaTabela[index].seDigitalMaximoInsercoes_vl = parseInt(e.target.value) || 0;
-                                            setTabelaSimulado(novaTabela);
-                                          }}
-                                          className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded"
-                                          placeholder="Máx. Digital"
-                                        />
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          max="100"
-                                          value={linha.seEstaticoVisibilidade_vl || 100}
-                                          onChange={(e) => {
-                                            const novaTabela = [...tabelaSimulado];
-                                            novaTabela[index].seEstaticoVisibilidade_vl = parseFloat(e.target.value) || 100;
-                                            setTabelaSimulado(novaTabela);
-                                          }}
-                                          className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded"
-                                          placeholder="Visibilidade"
-                                        />
-                                      </td>
-                                      {Array.from({ length: quantidadeSemanas }, (_, semanaIndex) => (
-                                        <td key={semanaIndex} className="px-3 py-2">
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            value={linha.semanas?.[semanaIndex]?.insercaoComprada || 0}
-                                            onChange={(e) => {
-                                              const novaTabela = [...tabelaSimulado];
-                                              if (!novaTabela[index].semanas) {
-                                                novaTabela[index].semanas = Array.from({ length: quantidadeSemanas }, () => ({
-                                                  insercaoComprada: 0,
-                                                  insercaoOferecida: 0,
-                                                  seDigitalInsercoes_vl: linha.seDigitalInsercoes_vl || 0,
-                                                  seDigitalMaximoInsercoes_vl: linha.seDigitalMaximoInsercoes_vl || 0,
-                                                  seEstaticoVisibilidade_vl: linha.seEstaticoVisibilidade_vl || 100
-                                                }));
-                                              }
-                                              novaTabela[index].semanas[semanaIndex].insercaoComprada = parseInt(e.target.value) || 0;
-                                              setTabelaSimulado(novaTabela);
-                                            }}
-                                            className="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded"
-                                          />
-                                        </td>
-                                      ))}
-                                    </tr>
+                        {/* Card de Configuração */}
+                        {pracasSelecionadasSimulado.length > 0 && (
+                          <div className="mb-8 bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl border-2 border-orange-200 shadow-sm">
+                            <div className="space-y-4">
+                              {/* Seleção de Semanas */}
+                              <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">
+                                  Quantidade de Semanas
+                                </label>
+                                <select 
+                                  value={quantidadeSemanas}
+                                  onChange={(e) => {
+                                    const novasSemanas = parseInt(e.target.value);
+                                    setQuantidadeSemanas(novasSemanas);
+                                    // Regenerar tabelas com novas semanas se já existem
+                                    if (Object.keys(tabelaSimulado).length > 0) {
+                                      gerarTabelaSimulado(novasSemanas);
+                                    }
+                                  }}
+                                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                                >
+                                  {Array.from({length: 12}, (_, i) => i + 1).map(sem => (
+                                    <option key={sem} value={sem}>
+                                      {sem} {sem === 1 ? 'Semana' : 'Semanas'}
+                                    </option>
                                   ))}
-                                </tbody>
-                              </table>
+                                </select>
+                              </div>
+                              
+                              {/* Botão para gerar tabela */}
+                              <div>
+                                <button
+                                  type="button"
+                                  onClick={() => gerarTabelaSimulado(quantidadeSemanas)}
+                                  className="w-full flex items-center justify-center gap-3 px-8 py-4 bg-[#ff4600] text-white rounded-xl hover:bg-orange-600 transition-all duration-200 shadow-lg hover:shadow-xl font-bold text-lg"
+                                >
+                                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                  </svg>
+                                  Configurar vias públicas
+                                </button>
+                              </div>
                             </div>
                           </div>
                         )}
 
+                        {/* Tabelas Simuladas - Uma por Praça */}
+                        {Object.keys(tabelaSimulado).length > 0 && (
+                          <div className="mb-8 space-y-8">
+                            {pracasSelecionadasSimulado.map((praca) => {
+                              // Buscar tabela usando número como chave
+                              const idPracaNumero = Number(praca.id_cidade);
+                              const tabelaDaPraca = tabelaSimulado[idPracaNumero] || tabelaSimulado[praca.id_cidade as any];
+                              if (!tabelaDaPraca || tabelaDaPraca.length === 0) return null;
+                              
+                              return (
+                                <div key={praca.id_cidade} className="mb-8">
+                                  {/* Header da Tabela */}
+                                  <div className="mb-6 p-6 bg-gradient-to-r from-blue-600 to-blue-700 rounded-t-xl border-b-4 border-blue-800">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <h4 className="text-xl font-bold text-white uppercase tracking-wide mb-2">
+                                          Configure as vias públicas
+                                        </h4>
+                                        <p className="text-blue-100">
+                                          📍 {praca.nome_cidade} - {praca.nome_estado}
+                                        </p>
+                                      </div>
+                                      <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center shadow-lg">
+                                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Tabela */}
+                                  <div className="overflow-x-auto border-2 border-gray-300 rounded-b-xl shadow-lg">
+                                    <table className="w-full">
+                                      <thead className="bg-gradient-to-r from-gray-700 to-gray-800 text-white">
+                                        <tr>
+                                          <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-xs">Grupo</th>
+                                          <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-xs">Descrição</th>
+                                          <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Visibilidade</th>
+                                          <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Digital Inserções</th>
+                                          <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Digital Máx. Inserções</th>
+                                          {/* Colunas dinâmicas de semanas */}
+                                          {tabelaDaPraca[0]?.semanas && tabelaDaPraca[0].semanas.map((semana: any, idx: number) => (
+                                            <th key={idx} className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">
+                                              Semana {semana.semana}
+                                            </th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {tabelaDaPraca.map((linha, index) => (
+                                          <tr key={index} className={`border-b border-gray-200 transition-colors ${index % 2 === 0 ? 'bg-white hover:bg-blue-50' : 'bg-gray-50 hover:bg-blue-50'}`}>
+                                            <td className="px-4 py-3 text-sm font-bold text-gray-800">{linha.grupo_st}</td>
+                                            <td className="px-4 py-3 text-sm text-gray-700">{linha.grupoDesc_st}</td>
+                                            <td className="px-4 py-3">
+                                              <select 
+                                                value={linha.visibilidade}
+                                                onChange={(e) => {
+                                                  const novasTabelas = { ...tabelaSimulado };
+                                                  novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
+                                                  novasTabelas[idPracaNumero][index].visibilidade = e.target.value;
+                                                  setTabelaSimulado(novasTabelas);
+                                                }}
+                                                className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                              >
+                                                <option value="25">Baixa</option>
+                                                <option value="50">Média</option>
+                                                <option value="75">Moderada</option>
+                                                <option value="100">Alta</option>
+                                              </select>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                value={linha.seDigitalInsercoes_vl || 0}
+                                                onChange={(e) => {
+                                                  const novasTabelas = { ...tabelaSimulado };
+                                                  novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
+                                                  novasTabelas[idPracaNumero][index].seDigitalInsercoes_vl = parseInt(e.target.value) || 0;
+                                                  setTabelaSimulado(novasTabelas);
+                                                }}
+                                                className="w-full px-3 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                                placeholder="0"
+                                              />
+                                            </td>
+                                            <td className="px-4 py-3">
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                value={linha.seDigitalMaximoInsercoes_vl || 0}
+                                                onChange={(e) => {
+                                                  const novasTabelas = { ...tabelaSimulado };
+                                                  novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
+                                                  novasTabelas[idPracaNumero][index].seDigitalMaximoInsercoes_vl = parseInt(e.target.value) || 0;
+                                                  setTabelaSimulado(novasTabelas);
+                                                }}
+                                                className="w-full px-3 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                                placeholder="0"
+                                              />
+                                            </td>
+                                            {/* Células dinâmicas de semanas */}
+                                            {linha.semanas && linha.semanas.map((semana: any, semanaIdx: number) => (
+                                              <td key={semanaIdx} className="px-2 py-3">
+                                                <input
+                                                  type="number"
+                                                  min="0"
+                                                  value={semana.insercaoComprada || 0}
+                                                  onChange={(e) => {
+                                                    const novasTabelas = { ...tabelaSimulado };
+                                                    novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
+                                                    const valor = parseInt(e.target.value) || 0;
+                                                    novasTabelas[idPracaNumero][index].semanas[semanaIdx].insercaoComprada = valor;
+                                                    setTabelaSimulado(novasTabelas);
+                                                  }}
+                                                  className="w-full px-2 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
+                                                  placeholder="0"
+                                                />
+                                              </td>
+                                            ))}
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
                         {/* Botão Salvar para Roteiro Simulado */}
-                        {tabelaSimulado.length > 0 && (
-                          <div className="mb-8">
+                        {Object.keys(tabelaSimulado).length > 0 && (
+                          <div className="mb-8 flex justify-center">
                             <button
                               type="button"
                               onClick={salvarRoteiroSimulado}
-                              className={`px-6 py-3 rounded-lg transition-colors ${
+                              className={`flex items-center justify-center gap-3 px-8 py-4 rounded-xl transition-all duration-200 font-bold text-lg shadow-lg ${
                                 roteiroSimuladoSalvo 
-                                  ? 'bg-green-500 text-white cursor-default' 
-                                  : 'bg-green-600 text-white hover:bg-green-700 disabled:bg-gray-400'
+                                  ? 'bg-green-500 text-white cursor-default shadow-green-300' 
+                                  : salvandoAba4
+                                  ? 'bg-gray-500 text-white cursor-not-allowed'
+                                  : 'bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700 hover:shadow-xl'
                               }`}
                               disabled={salvandoAba4 || roteiroSimuladoSalvo}
                             >
                               {salvandoAba4 ? (
-                                <div className="flex items-center justify-center">
-                                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                                  Salvando roteiro simulado...
-                                </div>
+                                <>
+                                  <div className="animate-spin h-6 w-6 border-3 border-white border-t-transparent rounded-full"></div>
+                                  <span>Processando...</span>
+                                </>
                               ) : roteiroSimuladoSalvo ? (
-                                <div className="flex items-center justify-center">
-                                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <>
+                                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                   </svg>
-                                  ✓ Roteiro Simulado Salvo
-                                </div>
-                              ) : 'Salvar Roteiro Simulado'}
+                                  <span>Roteiro Simulado Salvo!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                  </svg>
+                                  <span>Salvar Roteiro Simulado</span>
+                                </>
+                              )}
                             </button>
                           </div>
                         )}
@@ -3484,15 +3849,15 @@ export const CriarRoteiro: React.FC = () => {
                           
                           if (validacao.valido) {
                             return (
-                              <div className="p-4 bg-green-100 border border-green-400 rounded-lg">
-                                <div className="flex items-center">
-                                  <div className="mr-3">
-                                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              <div className="p-6 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-xl shadow-sm">
+                                <div className="flex items-center gap-4">
+                                  <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                     </svg>
                                   </div>
-                                  <div>
-                                    <h4 className="font-medium text-green-800">✅ Consistência validada!</h4>
+                                  <div className="flex-1">
+                                    <h4 className="font-bold text-green-800 text-lg mb-1">✅ Consistência Validada!</h4>
                                     <p className="text-sm text-green-700">
                                       As {validacao.detalhes?.totalCidadesAba3} cidades da Aba 3 correspondem exatamente às {validacao.detalhes?.totalPracasExcel} praças do Excel.
                                     </p>
@@ -3502,38 +3867,40 @@ export const CriarRoteiro: React.FC = () => {
                             );
                           } else if (validacao.detalhes) {
                             return (
-                              <div className="p-4 bg-red-100 border border-red-400 rounded-lg">
-                                <div className="flex items-start">
-                                  <div className="mr-3">
-                                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              <div className="p-6 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-300 rounded-xl shadow-sm">
+                                <div className="flex items-start gap-4">
+                                  <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
                                   </div>
                                   <div className="flex-1">
-                                    <h4 className="font-medium text-red-800">❌ Inconsistência detectada!</h4>
-                                    <p className="text-sm text-red-700 mb-3">
+                                    <h4 className="font-bold text-red-800 text-lg mb-2">❌ Inconsistência Detectada!</h4>
+                                    <p className="text-sm text-red-700 mb-4">
                                       As cidades da Aba 3 não correspondem às praças do Excel.
                                     </p>
                                     
+                                    <div className="bg-white rounded-lg p-4 space-y-3">
                                     {validacao.detalhes.cidadesFaltandoNoExcel.length > 0 && (
-                                      <div className="mb-2">
-                                        <p className="text-xs font-medium text-red-800">Cidades da Aba 3 ausentes no Excel:</p>
-                                        <p className="text-xs text-red-700">
+                                        <div className="border-l-4 border-yellow-500 pl-3 py-2 bg-yellow-50 rounded-r">
+                                          <p className="text-xs font-bold text-yellow-800 mb-1">⚠️ Cidades da Aba 3 ausentes no Excel:</p>
+                                          <p className="text-xs text-yellow-700">
                                           {validacao.detalhes.cidadesFaltandoNoExcel.join(', ')}
                                         </p>
                                       </div>
                                     )}
                                     
                                     {validacao.detalhes.pracasSobrandoNoExcel.length > 0 && (
-                                      <div className="mb-2">
-                                        <p className="text-xs font-medium text-red-800">Praças do Excel não selecionadas na Aba 3:</p>
-                                        <p className="text-xs text-red-700">
+                                        <div className="border-l-4 border-blue-500 pl-3 py-2 bg-blue-50 rounded-r">
+                                          <p className="text-xs font-bold text-blue-800 mb-1">ℹ️ Praças do Excel não selecionadas na Aba 3:</p>
+                                          <p className="text-xs text-blue-700">
                                           {validacao.detalhes.pracasSobrandoNoExcel.join(', ')}
                                         </p>
                                       </div>
                                     )}
+                                    </div>
                                     
-                                    <p className="text-xs text-red-700 font-medium">
+                                    <p className="text-xs text-red-700 font-medium mt-4">
                                       📊 Aba 3: {validacao.detalhes.totalCidadesAba3} cidades | Excel: {validacao.detalhes.totalPracasExcel} praças
                                     </p>
                                   </div>
@@ -3628,25 +3995,27 @@ export const CriarRoteiro: React.FC = () => {
                                 .filter(grupo => (grupoComDados.get(grupo.grupoSub_st) || 0) > 0);
                               
                               return (
-                                <div key={pracaIndex} className="bg-white border border-gray-300 rounded-lg overflow-hidden">
+                                <div key={pracaIndex} className="bg-white border-2 border-gray-300 rounded-xl overflow-hidden shadow-lg">
                                   {/* Header da Praça */}
-                                  <div className="bg-gray-50 px-6 py-4 border-b border-gray-300">
+                                  <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 border-b-4 border-blue-800">
                                     <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg">
+                                          {String(pracaIndex + 1).padStart(2, '0')}
+                                        </div>
                                       <div>
-                                        <h4 className="text-lg font-bold text-[#3a3a3a]">
-                                          PRAÇA {String(pracaIndex + 1).padStart(2, '0')}
+                                          <h4 className="text-xl font-bold text-white uppercase tracking-wide">
+                                            Praça {String(pracaIndex + 1)}
                                         </h4>
-                                        <p className="text-sm text-gray-600">
-                                          Praça: {praca.praca} - {praca.uf} | Quantidade de semanas: {semanasPraca.length} semanas
+                                          <p className="text-sm text-blue-100 mt-1">
+                                            📍 {praca.praca} - {praca.uf} | {semanasPraca.length} semana{semanasPraca.length > 1 ? 's' : ''}
                                         </p>
                                       </div>
-                                      <div className="flex items-center gap-2">
-                                        <div 
-                                          className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm"
-                                          style={{ backgroundColor: '#ff4600' }}
-                                        >
-                                          G
                                         </div>
+                                      <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                        </svg>
                                       </div>
                                     </div>
                                   </div>
@@ -3655,14 +4024,14 @@ export const CriarRoteiro: React.FC = () => {
                                   <div className="overflow-x-auto">
                                     <table className="w-full text-sm">
                                       <thead>
-                                        <tr className="bg-blue-600 text-white">
-                                          <th className="px-4 py-3 text-left font-bold">Grupo</th>
-                                          <th className="px-4 py-3 text-left font-bold">Descrição</th>
-                                          <th className="px-4 py-3 text-left font-bold">Visibilidade</th>
-                                          <th className="px-4 py-3 text-left font-bold">Inserção comprada</th>
-                                          <th className="px-4 py-3 text-left font-bold">Inserção oferecida</th>
+                                        <tr className="bg-gradient-to-r from-gray-700 to-gray-800 text-white">
+                                          <th className="px-4 py-3 text-left font-bold uppercase tracking-wide">Grupo</th>
+                                          <th className="px-4 py-3 text-left font-bold uppercase tracking-wide">Descrição</th>
+                                          <th className="px-4 py-3 text-left font-bold uppercase tracking-wide">Visibilidade</th>
+                                          <th className="px-4 py-3 text-left font-bold uppercase tracking-wide">Inserção comprada</th>
+                                          <th className="px-4 py-3 text-left font-bold uppercase tracking-wide">Inserção oferecida</th>
                                           {semanasPraca.map((semana, semanaIndex) => (
-                                            <th key={semanaIndex} className="px-4 py-3 text-left font-bold">
+                                            <th key={semanaIndex} className="px-4 py-3 text-center font-bold uppercase tracking-wide">
                                               W{semanaIndex + 1}
                                             </th>
                                           ))}
@@ -3670,8 +4039,8 @@ export const CriarRoteiro: React.FC = () => {
                                       </thead>
                                       <tbody>
                                         {gruposPraca.map((grupo, grupoIndex) => {
-                                          // Buscar dados específicos para este grupo e praça
-                                          const dadosGrupo = dadosMatrixRow.filter(d => {
+                                          // Buscar dados específicos para este grupo e praça em dadosMatrix (que tem os campos corretos)
+                                          const dadosGrupo = dadosMatrix.filter(d => {
                                             const cidadeNormalizada = normalizarNome(d.cidade_st);
                                             const estadoNormalizado = d.estado_st?.toUpperCase() || '';
                                             return d.grupoSub_st === grupo.grupoSub_st && 
@@ -3685,21 +4054,38 @@ export const CriarRoteiro: React.FC = () => {
                                             console.log('  grupo.grupoSub_st:', grupo.grupoSub_st);
                                             console.log('  praca.praca:', praca.praca);
                                             console.log('  praca.uf:', praca.uf);
-                                            console.log('  dadosMatrixRow total:', dadosMatrixRow.length);
+                                            console.log('  dadosMatrix total:', dadosMatrix.length);
                                             console.log('  dadosGrupo filtrado:', dadosGrupo.length);
-                                            if (dadosMatrixRow.length > 0) {
-                                              console.log('  Exemplo dadosMatrixRow[0]:', dadosMatrixRow[0]);
+                                            if (dadosMatrix.length > 0) {
+                                              console.log('  Exemplo dadosMatrix[0]:', dadosMatrix[0]);
                                             }
                                             if (dadosGrupo.length > 0) {
                                               console.log('  Exemplo dadosGrupo[0]:', dadosGrupo[0]);
                                             }
                                           }
                                           
-                                          // Calcular inserção comprada (soma de todas as semanas) - SEMPRE INTEIRO
-                                          const insercaoComprada = Math.round(dadosGrupo.reduce((acc, d) => acc + (d.qtd_registros || 0), 0));
+                                          // Pegar o primeiro registro do grupo para obter os valores únicos (não somados)
+                                          const primeiroRegistro = dadosGrupo.length > 0 ? dadosGrupo[0] : null;
                                           
-                                          // Inserção oferecida (por enquanto igual à comprada) - SEMPRE INTEIRO
-                                          const insercaoOferecida = insercaoComprada;
+                                          // Debug: verificar campos disponíveis
+                                          if (primeiroRegistro) {
+                                            console.log(`🔍 DEBUG - Grupo ${grupo.grupoSub_st} | Praça ${praca.praca}-${praca.uf}:`, {
+                                              grupoSub_st: primeiroRegistro.grupoSub_st,
+                                              seEstaticoVisibilidade_st: primeiroRegistro.seEstaticoVisibilidade_st,
+                                              seDigitalInsercoes_vl: primeiroRegistro.seDigitalInsercoes_vl,
+                                              seDigitalMaximoInsercoes_vl: primeiroRegistro.seDigitalMaximoInsercoes_vl,
+                                              qtd_registros: primeiroRegistro.qtd_registros
+                                            });
+                                          }
+                                          
+                                          // Visibilidade vem de seEstaticoVisibilidade_st (string)
+                                          const visibilidade = primeiroRegistro?.seEstaticoVisibilidade_st || 'Selecionar';
+                                          
+                                          // Inserção comprada vem de seDigitalInsercoes_vl
+                                          const insercaoComprada = primeiroRegistro?.seDigitalInsercoes_vl ? Math.round(primeiroRegistro.seDigitalInsercoes_vl) : 0;
+                                          
+                                          // Inserção oferecida vem de seDigitalMaximoInsercoes_vl
+                                          const insercaoOferecida = primeiroRegistro?.seDigitalMaximoInsercoes_vl ? Math.round(primeiroRegistro.seDigitalMaximoInsercoes_vl) : 0;
                                           
                                           return (
                                             <tr key={grupoIndex} className="border-b border-gray-200 hover:bg-gray-50">
@@ -3713,7 +4099,7 @@ export const CriarRoteiro: React.FC = () => {
                                                 <input 
                                                   type="text" 
                                                   className="w-full px-2 py-1 border border-gray-300 rounded text-[#3a3a3a] bg-gray-50"
-                                                  value="Selecionar"
+                                                  value={visibilidade}
                                                   readOnly={true}
                                                 />
                                               </td>
@@ -3913,6 +4299,12 @@ export const CriarRoteiro: React.FC = () => {
                   </div>
 
                   {/* Tabelas de resultados */}
+                  <style>{`
+                    @keyframes apple-spin {
+                      from { transform: rotate(0deg); }
+                      to { transform: rotate(360deg); }
+                    }
+                  `}</style>
                   <div className="space-y-8">
                     {/* Visão Geral */}
                     {tipoVisualizacao === 'geral' && (
@@ -3921,10 +4313,14 @@ export const CriarRoteiro: React.FC = () => {
                       {(() => {
                         console.log('🎯 Renderizando Aba 6 - carregandoResultados:', carregandoResultados, 'dadosResultados.length:', dadosResultados.length);
                         return carregandoResultados ? (
-                          <div className="text-center py-8">
-                            <div className="animate-spin h-8 w-8 border-2 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                            <p className="text-gray-500">Carregando dados dos resultados...</p>
-                            <p className="text-sm text-gray-400 mt-2">Aguarde alguns segundos</p>
+                          <div className="text-center py-12">
+                            <div className="mx-auto mb-6" style={{ width: 56, height: 56 }}>
+                              <svg width="56" height="56" viewBox="0 0 24 24" style={{ animation: 'apple-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}>
+                                <circle cx="12" cy="12" r="10" fill="none" stroke="#ff4600" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="60 158" />
+                              </svg>
+                            </div>
+                            <p className="text-gray-600 font-medium">Carregando dados dos resultados...</p>
+                            <p className="text-sm text-gray-400 mt-2">Isso pode levar alguns segundos</p>
                           </div>
                         ) : dadosResultados.length > 0 ? (
                         <div className="overflow-x-auto">
@@ -4005,10 +4401,14 @@ export const CriarRoteiro: React.FC = () => {
                         {(() => {
                           console.log('🎯 Renderizando TARGET - carregandoTarget:', carregandoTarget, 'dadosTarget.length:', dadosTarget.length);
                           return carregandoTarget ? (
-                            <div className="text-center py-8">
-                              <div className="animate-spin h-8 w-8 border-2 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                              <p className="text-gray-500">Carregando dados de target...</p>
-                              <p className="text-sm text-gray-400 mt-2">Aguarde alguns segundos</p>
+                            <div className="text-center py-12">
+                              <div className="mx-auto mb-6" style={{ width: 56, height: 56 }}>
+                                <svg width="56" height="56" viewBox="0 0 24 24" style={{ animation: 'apple-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}>
+                                  <circle cx="12" cy="12" r="10" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="60 158" />
+                                </svg>
+                              </div>
+                              <p className="text-gray-600 font-medium">Carregando dados de target...</p>
+                              <p className="text-sm text-gray-400 mt-2">Isso pode levar alguns segundos</p>
                             </div>
                           ) : dadosTarget.length > 0 ? (
                             <div className="overflow-x-auto">
@@ -4089,10 +4489,14 @@ export const CriarRoteiro: React.FC = () => {
                         {(() => {
                           if (carregandoSemanais) {
                             return (
-                              <div className="text-center py-8">
-                                <div className="animate-spin h-8 w-8 border-2 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                                <p className="text-gray-500">Carregando dados semanais...</p>
-                                <p className="text-sm text-gray-400 mt-2">Aguarde alguns segundos</p>
+                              <div className="text-center py-12">
+                                <div className="mx-auto mb-6" style={{ width: 56, height: 56 }}>
+                                  <svg width="56" height="56" viewBox="0 0 24 24" style={{ animation: 'apple-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}>
+                                    <circle cx="12" cy="12" r="10" fill="none" stroke="#ff4600" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="60 158" />
+                                  </svg>
+                                </div>
+                                <p className="text-gray-600 font-medium">Carregando dados semanais...</p>
+                                <p className="text-sm text-gray-400 mt-2">Isso pode levar alguns segundos</p>
                               </div>
                             );
                           }
@@ -4261,14 +4665,37 @@ export const CriarRoteiro: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Botão Download Excel */}
+                    {/* Botão Download Excel do SharePoint */}
                     <div className="mt-8 flex justify-center">
                       <button
-                        onClick={exportarParaExcel}
-                        className="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium"
+                        onClick={baixarExcelSharePoint}
+                        disabled={downloadingExcel || !planoMidiaGrupo_pk}
+                        className={`px-6 py-3 rounded-lg transition-colors font-medium flex items-center gap-2 ${
+                          downloadingExcel || !planoMidiaGrupo_pk
+                            ? 'bg-gray-400 cursor-not-allowed'
+                            : 'bg-orange-500 text-white hover:bg-orange-600'
+                        }`}
                       >
-                        📊 Download Excel
+                        {downloadingExcel ? (
+                          <>
+                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>Baixando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>📊</span>
+                            <span>Download Excel</span>
+                          </>
+                        )}
                       </button>
+                      {!planoMidiaGrupo_pk && (
+                        <p className="text-sm text-gray-500 mt-2 text-center">
+                          Salve o roteiro primeiro para habilitar o download
+                        </p>
+                      )}
                     </div>
 
                   </div>
