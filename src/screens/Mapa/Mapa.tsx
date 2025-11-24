@@ -43,6 +43,10 @@ interface PontoMidia {
   estaticoDigital_st: 'D' | 'E'; // Digital ou Estático
   grupoSub_st: string;
   grupo_st: string;
+  hexColor_st: string;
+  rgbColorR_vl: number;
+  rgbColorG_vl: number;
+  rgbColorB_vl: number;
   // Outros campos disponíveis na view
   [key: string]: any;
 }
@@ -69,55 +73,6 @@ function wktToLatLngs(wkt: string) {
     return [lat, lon] as [number, number];
   }).filter((x): x is [number, number] => Array.isArray(x) && x.length === 2);
 }
-
-// Função para obter a cor do SubGrupo baseada no Grupo pai
-function getCorSubGrupo(grupoSub_st: string, hexagonos: Hexagono[]): string {
-  if (!grupoSub_st) {
-    console.warn(`⚠️ grupoSub_st está vazio ou undefined`);
-    return '#999999'; // Cinza para indicar erro
-  }
-
-  // Extrair o número do grupo do SubGrupo (ex: G2D -> GRUPO 2, G3ME -> GRUPO 3)
-  const match = grupoSub_st.match(/^G(\d+)/);
-  if (!match) {
-    console.warn(`⚠️ Não foi possível extrair número do grupo de: "${grupoSub_st}"`);
-    return '#999999'; // Cinza para indicar erro
-  }
-  
-  const numeroGrupo = parseInt(match[1]);
-  const grupoDesc = `GRUPO ${numeroGrupo}`;
-  
-  console.log(`🔍 Buscando cor para ${grupoSub_st} (Grupo ${numeroGrupo})`);
-  console.log(`🔍 Hexágonos disponíveis:`, hexagonos.map(h => ({ grupoDesc_st: h.grupoDesc_st, grupo_st: h.grupo_st, cor: h.hexColor_st })));
-  
-  // Tentar buscar por grupoDesc_st primeiro
-  let hexGrupo = hexagonos.find(h => h.grupoDesc_st === grupoDesc);
-  
-  // Se não encontrar, tentar buscar por grupo_st (pode ser "G1", "G2", etc)
-  if (!hexGrupo) {
-    hexGrupo = hexagonos.find(h => h.grupo_st === `G${numeroGrupo}`);
-  }
-  
-  if (hexGrupo) {
-    const cor = hexGrupo.hexColor_st || `rgb(${hexGrupo.rgbColorR_vl},${hexGrupo.rgbColorG_vl},${hexGrupo.rgbColorB_vl})`;
-    console.log(`✅ Cor encontrada para ${grupoSub_st}: ${cor}`);
-    return cor;
-  }
-  
-  console.warn(`⚠️ Hexágono não encontrado para ${grupoDesc}, usando cor padrão`);
-  
-  // Cores padrão por grupo se não encontrar no hexágono
-  const coresPadrao: { [key: number]: string } = {
-    1: '#8b5cf6', // roxo escuro (GRUPO 1)
-    2: '#a78bfa', // roxo claro (GRUPO 2)
-    3: '#3b82f6', // azul (GRUPO 3)
-    5: '#60a5fa', // azul claro (GRUPO 5)
-  };
-  
-  return coresPadrao[numeroGrupo] || '#3b82f6';
-}
-
-
 
 export const Mapa: React.FC = () => {
   const [menuReduzido, setMenuReduzido] = React.useState(false);
@@ -1414,13 +1369,16 @@ export const Mapa: React.FC = () => {
                 ))}
 
                 {/* Pontos de mídia individuais com bordas diferentes */}
-                {pontosMidia.map((ponto, idx) => (
+                {pontosMidia.map((ponto, idx) => {
+                  // Usar a cor que já vem do banco de dados!
+                  const cor = ponto.hexColor_st || `rgb(${ponto.rgbColorR_vl},${ponto.rgbColorG_vl},${ponto.rgbColorB_vl})`;
+                  return (
                   <CircleMarker
                     key={`ponto-${ponto.planoMidia_pk}-${idx}`}
                     center={[ponto.latitude_vl, ponto.longitude_vl]}
                     pathOptions={{ 
                       color: '#ffffff', // Borda branca fina
-                      fillColor: getCorSubGrupo(ponto.grupoSub_st, hexagonos), // Cor herdada do grupo pai
+                      fillColor: cor, // Cor que já vem do banco!
                       fillOpacity: 0.8,
                       weight: 1.5, // Borda fina e clean
                       opacity: 1,
@@ -1530,7 +1488,8 @@ export const Mapa: React.FC = () => {
                       </div>
                     </Popup>
                   </CircleMarker>
-                ))}
+                  );
+                })}
               </MapContainer>
             </div>
             {/* Legendas agrupadas no canto inferior direito */}
@@ -1571,7 +1530,7 @@ export const Mapa: React.FC = () => {
                     {Array.from(new Set(pontosMidia.map(p => p.grupoSub_st).filter(Boolean))).map((subgrupo) => {
                       const ponto = pontosMidia.find(p => p.grupoSub_st === subgrupo);
                       const isDigital = ponto?.estaticoDigital_st === 'D';
-                      const cor = getCorSubGrupo(subgrupo, hexagonos);
+                      const cor = ponto?.hexColor_st || `rgb(${ponto?.rgbColorR_vl},${ponto?.rgbColorG_vl},${ponto?.rgbColorB_vl})`;
                       return (
                         <div key={subgrupo} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                           <svg width={18} height={18} style={{ display: 'block' }}>

@@ -14,17 +14,24 @@ module.exports = async (req, res) => {
 
     const pool = await getPool();
     
-    // Buscar planoMidia_pks usando a mesma lógica da API de hexágonos
-    const planoMidiaResult = await pool.request().query(`
-      SELECT pk FROM serv_product_be180.planoMidia_dm_vw
-      WHERE planoMidiaDesc_vl = ${desc_pk}
+    // Primeiro, buscar TODOS os planoMidia_pk que aparecem nos hexágonos para este desc_pk
+    // Isso garante que pegamos pontos de TODOS os grupos que aparecem no mapa
+    const hexagonosResult = await pool.request().query(`
+      SELECT DISTINCT planoMidia_pk
+      FROM serv_product_be180.BaseCalculadoraHexagonosJoin_dm
+      WHERE planoMidia_pk IN (
+        SELECT pk FROM serv_product_be180.planoMidia_dm_vw
+        WHERE planoMidiaDesc_vl = ${desc_pk}
+      )
     `);
 
-    if (!planoMidiaResult.recordset || planoMidiaResult.recordset.length === 0) {
+    if (!hexagonosResult.recordset || hexagonosResult.recordset.length === 0) {
       return res.status(200).json({ pontos: [] });
     }
 
-    const planoMidiaPks = planoMidiaResult.recordset.map(r => r.pk);
+    const planoMidiaPks = hexagonosResult.recordset.map(r => r.planoMidia_pk);
+    
+    console.log(`📍 [API pontos-midia] planoMidia_pks encontrados nos hexágonos:`, planoMidiaPks);
     
     // Buscar pontos de mídia da view
     const query = `
