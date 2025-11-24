@@ -70,6 +70,33 @@ function wktToLatLngs(wkt: string) {
   }).filter((x): x is [number, number] => Array.isArray(x) && x.length === 2);
 }
 
+// Função para obter a cor do SubGrupo baseada no Grupo pai
+function getCorSubGrupo(grupoSub_st: string, hexagonos: Hexagono[]): string {
+  // Extrair o número do grupo do SubGrupo (ex: G2D -> GRUPO 2, G3ME -> GRUPO 3)
+  const match = grupoSub_st.match(/^G(\d+)/);
+  if (!match) return '#3b82f6'; // Cor padrão se não conseguir extrair
+  
+  const numeroGrupo = parseInt(match[1]);
+  const grupoDesc = `GRUPO ${numeroGrupo}`;
+  
+  // Buscar o hexágono correspondente ao grupo
+  const hexGrupo = hexagonos.find(h => h.grupoDesc_st === grupoDesc);
+  
+  if (hexGrupo) {
+    return hexGrupo.hexColor_st || `rgb(${hexGrupo.rgbColorR_vl},${hexGrupo.rgbColorG_vl},${hexGrupo.rgbColorB_vl})`;
+  }
+  
+  // Cores padrão por grupo se não encontrar no hexágono
+  const coresPadrao: { [key: number]: string } = {
+    1: '#8b5cf6', // roxo escuro
+    2: '#a78bfa', // roxo claro
+    3: '#3b82f6', // azul
+    5: '#60a5fa', // azul claro
+  };
+  
+  return coresPadrao[numeroGrupo] || '#3b82f6';
+}
+
 
 
 export const Mapa: React.FC = () => {
@@ -1373,7 +1400,7 @@ export const Mapa: React.FC = () => {
                     center={[ponto.latitude_vl, ponto.longitude_vl]}
                     pathOptions={{ 
                       color: '#ffffff', // Borda branca fina
-                      fillColor: ponto.estaticoDigital_st === 'D' ? '#3b82f6' : '#10b981', // Azul para Digital, Verde para Estático
+                      fillColor: getCorSubGrupo(ponto.grupoSub_st, hexagonos), // Cor herdada do grupo pai
                       fillOpacity: 0.8,
                       weight: 1.5, // Borda fina e clean
                       opacity: 1,
@@ -1524,6 +1551,7 @@ export const Mapa: React.FC = () => {
                     {Array.from(new Set(pontosMidia.map(p => p.grupoSub_st).filter(Boolean))).map((subgrupo) => {
                       const ponto = pontosMidia.find(p => p.grupoSub_st === subgrupo);
                       const isDigital = ponto?.estaticoDigital_st === 'D';
+                      const cor = getCorSubGrupo(subgrupo, hexagonos);
                       return (
                         <div key={subgrupo} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                           <svg width={18} height={18} style={{ display: 'block' }}>
@@ -1531,7 +1559,7 @@ export const Mapa: React.FC = () => {
                               cx={9} 
                               cy={9} 
                               r={7} 
-                              fill={isDigital ? '#3b82f6' : '#10b981'}
+                              fill={cor}
                               stroke="#ffffff" 
                               strokeWidth={1.5}
                               strokeDasharray={isDigital ? undefined : '3,3'}
