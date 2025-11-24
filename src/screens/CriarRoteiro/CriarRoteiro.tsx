@@ -804,108 +804,93 @@ export const CriarRoteiro: React.FC = () => {
       // Aguardar um pouco para garantir que o SQL Server commitou todos os dados
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      console.log('🔄 ETAPA 4: Executando processamento Databricks para cada praça...');
+      console.log('🔄 ETAPA 4: Executando processamento Databricks para o grupo...');
 
-      // Executar Databricks PARA CADA planoMidiaDesc_pk individual
-      const databricksResultados = [];
-      for (let i = 0; i < planosMidiaDescPk.length; i++) {
-        const planoMidiaDesc_pk = planosMidiaDescPk[i];
-        const praca = resultadosPraças[i]?.praca;
+      // Executar Databricks UMA VEZ para o GRUPO (não para cada cidade individual)
+      try {
+        console.log(`🚀 Executando Databricks para o grupo ${planoMidiaGrupo_pk}...`);
         
-        try {
-          console.log(`🚀 Executando Databricks para ${praca?.nome_cidade || `Praça ${i + 1}`} (PK: ${planoMidiaDesc_pk})...`);
-          
-          const databricksResponse = await axios.post('/databricks-roteiro-simulado', {
-            planoMidiaDesc_pk: planoMidiaDesc_pk, // ← CORRETO! PK individual de cada cidade
-            date_dh: new Date().toISOString().slice(0, 19).replace('T', ' '),
-            date_dt: new Date().toISOString().slice(0, 10)
-          });
-          
-          databricksResultados.push({
-            praca: praca?.nome_cidade,
-            planoMidiaDesc_pk,
-            sucesso: true,
-            dados: databricksResponse.data
-          });
-          
-          console.log(`✅ Databricks executado para ${praca?.nome_cidade || `Praça ${i + 1}`}`);
-        } catch (databricksError) {
-          console.error(`❌ Erro no Databricks para ${praca?.nome_cidade || `Praça ${i + 1}`}:`, databricksError);
-          databricksResultados.push({
-            praca: praca?.nome_cidade,
-            planoMidiaDesc_pk,
-            sucesso: false,
-            erro: databricksError instanceof Error ? databricksError.message : 'Erro desconhecido'
+        const databricksResponse = await axios.post('/databricks-roteiro-simulado', {
+          planoMidiaGrupo_pk: planoMidiaGrupo_pk,  // ← CORRETO! Nome do parâmetro corrigido
+          date_dh: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          date_dt: new Date().toISOString().slice(0, 10)
+        });
+        
+        console.log(`✅ Databricks executado com sucesso para o grupo ${planoMidiaGrupo_pk}`);
+        console.log(`📊 Run ID: ${databricksResponse.data?.run_id || 'N/A'}`);
+        
+        // DEBUG DESABILITADO TEMPORARIAMENTE (erro na query da tabela)
+        console.log('🔍 ETAPA 5 (DEBUG): Pulando debug automático...');
+        console.log('📊 Use o endpoint /teste-view-resultados manualmente se precisar investigar');
+
+        let mensagemSucesso = `🎉 ROTEIRO SIMULADO PROCESSADO COM SUCESSO!\n\n`;
+        mensagemSucesso += `📊 RESUMO:\n`;
+        mensagemSucesso += `• ${planosMidiaDescPk.length} ${planosMidiaDescPk.length === 1 ? 'praça processada' : 'praças processadas'}\n`;
+        
+        let totalRegistros = 0;
+        let totalInsecoes = 0;
+        resultadosPraças.forEach(r => {
+          totalRegistros += r.resultado.registrosProcessados || 0;
+          totalInsecoes += r.resultado.detalhes?.totalInsecoesCompradas || 0;
+        });
+        
+        mensagemSucesso += `• ${totalRegistros} registros processados no total\n`;
+        mensagemSucesso += `• ${resultadosPraças[0]?.resultado.semanasConfiguradas || quantidadeSemanas} semanas configuradas\n`;
+        mensagemSucesso += `• ${totalInsecoes} inserções compradas no total\n\n`;
+        
+        mensagemSucesso += `🏙️ PRAÇAS CONFIGURADAS:\n`;
+        resultadosPraças.forEach((r, idx) => {
+          mensagemSucesso += `  ${idx + 1}. ${r.praca.nome_cidade} - ${r.praca.nome_estado} (PK: ${r.planoMidiaDesc_pk})\n`;
+        });
+        
+        if (errosPraças.length > 0) {
+          mensagemSucesso += `\n⚠️ ERROS EM ${errosPraças.length} PRAÇA(S):\n`;
+          errosPraças.forEach((e, idx) => {
+            mensagemSucesso += `  ${idx + 1}. ${e.praca.nome_cidade}: ${e.erro}\n`;
           });
         }
-      }
+        
+        mensagemSucesso += `\n✅ PLANO MÍDIA DESC CRIADO PARA ${planosMidiaDescPk.length} PRAÇA(S)!\n`;
+        mensagemSucesso += `✅ DADOS SALVOS NA BASE CALCULADORA!\n`;
+        mensagemSucesso += `✅ PROCESSAMENTO DATABRICKS EXECUTADO!\n`;
+        mensagemSucesso += `🎯 ROTEIRO SIMULADO PRONTO PARA VISUALIZAÇÃO!`;
 
-      console.log('✅ ETAPA 4 CONCLUÍDA - Databricks executado para todas as praças');
-      console.log(`📊 Resultados Databricks:`, databricksResultados);
-      
-      // Verificar se houve erros no Databricks
-      const databricksComErro = databricksResultados.filter(r => !r.sucesso);
-      const databricksComSucesso = databricksResultados.filter(r => r.sucesso);
-      
-      // DEBUG DESABILITADO TEMPORARIAMENTE (erro na query da tabela)
-      console.log('🔍 ETAPA 5 (DEBUG): Pulando debug automático...');
-      console.log('📊 Use o endpoint /teste-view-resultados manualmente se precisar investigar');
+        alert(mensagemSucesso);
+        
+        // Marcar roteiro simulado como salvo
+        setRoteiroSimuladoSalvo(true);
+        
+        // Marcar Aba 4 como preenchida (permite ir para Aba 6)
+        setAba4Preenchida(true);
+        
+        // Ativar Aba 6 para visualizar resultados
+        setAba6Habilitada(true);
 
-      let mensagemSucesso = `🎉 ROTEIRO SIMULADO PROCESSADO COM SUCESSO!\n\n`;
-      mensagemSucesso += `📊 RESUMO:\n`;
-      mensagemSucesso += `• ${planosMidiaDescPk.length} ${planosMidiaDescPk.length === 1 ? 'praça processada' : 'praças processadas'}\n`;
-      
-      let totalRegistros = 0;
-      let totalInsecoes = 0;
-      resultadosPraças.forEach(r => {
-        totalRegistros += r.resultado.registrosProcessados || 0;
-        totalInsecoes += r.resultado.detalhes?.totalInsecoesCompradas || 0;
-      });
-      
-      mensagemSucesso += `• ${totalRegistros} registros processados no total\n`;
-      mensagemSucesso += `• ${resultadosPraças[0]?.resultado.semanasConfiguradas || quantidadeSemanas} semanas configuradas\n`;
-      mensagemSucesso += `• ${totalInsecoes} inserções compradas no total\n\n`;
-      
-      mensagemSucesso += `🏙️ PRAÇAS CONFIGURADAS:\n`;
-      resultadosPraças.forEach((r, idx) => {
-        mensagemSucesso += `  ${idx + 1}. ${r.praca.nome_cidade} - ${r.praca.nome_estado} (PK: ${r.planoMidiaDesc_pk})\n`;
-      });
-      
-      mensagemSucesso += `\n📊 DATABRICKS:\n`;
-      mensagemSucesso += `• ${databricksComSucesso.length} praça(s) processada(s) com sucesso\n`;
-      if (databricksComErro.length > 0) {
-        mensagemSucesso += `• ${databricksComErro.length} praça(s) com erro no processamento\n`;
+      } catch (databricksError) {
+        console.error('❌ Erro no processamento Databricks:', databricksError);
+        
+        let mensagemErro = `⚠️ ROTEIRO SIMULADO SALVO, MAS ERRO NO PROCESSAMENTO!\n\n`;
+        mensagemErro += `✅ Dados salvos na base calculadora para ${planosMidiaDescPk.length} praça(s)\n`;
+        mensagemErro += `❌ Erro no processamento Databricks\n\n`;
+        
+        if (errosPraças.length > 0) {
+          mensagemErro += `⚠️ ERROS EM ${errosPraças.length} PRAÇA(S):\n`;
+          errosPraças.forEach((e, idx) => {
+            mensagemErro += `  ${idx + 1}. ${e.praca.nome_cidade}: ${e.erro}\n`;
+          });
+          mensagemErro += `\n`;
+        }
+        
+        mensagemErro += `💡 Contate o suporte para verificar o processamento.`;
+        
+        alert(mensagemErro);
+        
+        // Marcar roteiro simulado como salvo (mesmo com erro no Databricks)
+        setRoteiroSimuladoSalvo(true);
+        
+        // Marcar Aba 4 como preenchida (permite ir para Aba 6)
+        setAba4Preenchida(true);
       }
-      
-      if (errosPraças.length > 0) {
-        mensagemSucesso += `\n⚠️ ERROS EM ${errosPraças.length} PRAÇA(S):\n`;
-        errosPraças.forEach((e, idx) => {
-          mensagemSucesso += `  ${idx + 1}. ${e.praca.nome_cidade}: ${e.erro}\n`;
-        });
-      }
-      
-      if (databricksComErro.length > 0) {
-        mensagemSucesso += `\n⚠️ ERROS NO DATABRICKS:\n`;
-        databricksComErro.forEach((e, idx) => {
-          mensagemSucesso += `  ${idx + 1}. ${e.praca}: ${e.erro}\n`;
-        });
-      }
-      
-      mensagemSucesso += `\n✅ PLANO MÍDIA DESC CRIADO PARA ${planosMidiaDescPk.length} PRAÇA(S)!\n`;
-      mensagemSucesso += `✅ DADOS SALVOS NA BASE CALCULADORA!\n`;
-      mensagemSucesso += `✅ PROCESSAMENTO DATABRICKS EXECUTADO!\n`;
-      mensagemSucesso += `🎯 ROTEIRO SIMULADO PRONTO PARA VISUALIZAÇÃO!`;
-
-      alert(mensagemSucesso);
-      
-      // Marcar roteiro simulado como salvo
-      setRoteiroSimuladoSalvo(true);
-      
-      // Marcar Aba 4 como preenchida (permite ir para Aba 6)
-      setAba4Preenchida(true);
-      
-      // Ativar Aba 6 para visualizar resultados
-      setAba6Habilitada(true);
 
     } catch (error) {
       console.error('❌ Erro ao salvar roteiro simulado:', error);

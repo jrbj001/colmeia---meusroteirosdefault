@@ -13,13 +13,30 @@ async function roteiroSimulado(req, res) {
       quantidadeSemanas 
     } = req.body;
 
-    console.log('🎯 [roteiroSimulado] Iniciando salvamento do roteiro simulado...');
-    console.log('📊 Dados recebidos:', {
-      planoMidiaDesc_pk,
-      quantidadeSemanas,
-      totalLinhas: dadosTabela?.length,
-      pracas: pracasSelecionadas?.length
+    console.log('\n');
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('🔍 [CHAMADA 2/3/4/5] POST /roteiro-simulado');
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('📊 BODY COMPLETO:', JSON.stringify(req.body, null, 2));
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('📊 planoMidiaDesc_pk:', planoMidiaDesc_pk);
+    console.log('📊 Tipo:', typeof planoMidiaDesc_pk);
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('📊 quantidadeSemanas:', quantidadeSemanas);
+    console.log('📊 Tipo:', typeof quantidadeSemanas);
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('📊 dadosTabela (total de linhas):', dadosTabela?.length || 0);
+    console.log('📊 dadosTabela (primeiras 3 linhas):');
+    dadosTabela?.slice(0, 3).forEach((linha, index) => {
+      console.log(`   [${index + 1}]:`, JSON.stringify(linha, null, 6));
     });
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('📊 pracasSelecionadas (total):', pracasSelecionadas?.length || 0);
+    console.log('📊 pracasSelecionadas (dados):');
+    pracasSelecionadas?.forEach((praca, index) => {
+      console.log(`   [${index + 1}]:`, JSON.stringify(praca, null, 6));
+    });
+    console.log('═══════════════════════════════════════════════════════════════');
 
     // Validações básicas
     if (!planoMidiaDesc_pk) {
@@ -81,12 +98,16 @@ async function roteiroSimulado(req, res) {
           const digInsercoes = parseInt(semana.seDigitalInsercoes_vl) || parseInt(seDigitalInsercoes_vl) || 0;
           const digMaxInsercoes = parseInt(semana.seDigitalMaximoInsercoes_vl) || parseInt(seDigitalMaximoInsercoes_vl) || 0;
           
+          // Visibilidade estático - usar o valor da linha (25, 50, 75, 100)
+          const estaticoVisibilidade = parseInt(visibilidade) || 0;
+          
           recordsJson.push({
             week_vl,
             grupoSub_st: codigoGrupo,
             contagem_vl: contagem,
             seDigitalInsercoes_vl: digInsercoes,
-            seDigitalMaximoInsercoes_vl: digMaxInsercoes
+            seDigitalMaximoInsercoes_vl: digMaxInsercoes,
+            seEstaticoVisibilidade_vl: estaticoVisibilidade
           });
         });
       } else {
@@ -94,13 +115,15 @@ async function roteiroSimulado(req, res) {
         // Sempre usar 0 como padrão quando não houver valor
         const insDig = parseInt(seDigitalInsercoes_vl) || 0;
         const maxDig = parseInt(seDigitalMaximoInsercoes_vl) || 0;
+        const estaticoVisibilidade = parseInt(visibilidade) || 0;
         
         recordsJson.push({
           week_vl: 1, // Semana padrão
           grupoSub_st: codigoGrupo,
           contagem_vl: 0, // Sempre 0 quando não houver semanas configuradas
           seDigitalInsercoes_vl: insDig,
-          seDigitalMaximoInsercoes_vl: maxDig
+          seDigitalMaximoInsercoes_vl: maxDig,
+          seEstaticoVisibilidade_vl: estaticoVisibilidade
         });
       }
     });
@@ -139,11 +162,22 @@ async function roteiroSimulado(req, res) {
     // Executar a procedure
     const pool = await getPool();
     
-    console.log('🚀 Executando sp_planoColmeiaSimuladoInsert...');
-    console.log('🔍 ===== PARÂMETROS ENVIADOS =====');
-    console.log('📊 Parâmetro 1 - planoMidiaDesc_pk:', planoMidiaDesc_pk);
-    console.log('📊 Parâmetro 2 - recordsJson (string):', JSON.stringify(recordsJson));
-    console.log('🔍 ===== FIM PARÂMETROS =====');
+    console.log('\n');
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('🚀 EXECUTANDO: sp_planoColmeiaSimuladoInsert');
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('📊 PARÂMETRO 1 - planoMidiaDesc_pk:', planoMidiaDesc_pk);
+    console.log('📊 Tipo:', typeof planoMidiaDesc_pk);
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('📊 PARÂMETRO 2 - recordsJson (total de registros):', recordsJson.length);
+    console.log('📊 recordsJson (TODOS os registros):');
+    recordsJson.forEach((record, index) => {
+      console.log(`   [${index + 1}]:`, JSON.stringify(record, null, 6));
+    });
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('📊 recordsJson (STRING que será enviada):');
+    console.log(JSON.stringify(recordsJson, null, 2));
+    console.log('═══════════════════════════════════════════════════════════════');
     
     const result = await pool.request()
       .input('planoMidiaDesc_pk', planoMidiaDesc_pk)

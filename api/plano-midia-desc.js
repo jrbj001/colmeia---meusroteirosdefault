@@ -8,9 +8,21 @@ module.exports = async function handler(req, res) {
   try {
     const { planoMidiaGrupo_pk, recordsJson } = req.body;
     
-    console.log('🔍 DEBUG plano-midia-desc - Dados recebidos:');
+    console.log('\n');
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('🔍 [CHAMADA 1] POST /plano-midia-desc');
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('📊 BODY COMPLETO:', JSON.stringify(req.body, null, 2));
+    console.log('───────────────────────────────────────────────────────────────');
     console.log('📊 planoMidiaGrupo_pk:', planoMidiaGrupo_pk);
-    console.log('📊 recordsJson:', JSON.stringify(recordsJson, null, 2));
+    console.log('📊 Tipo:', typeof planoMidiaGrupo_pk);
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('📊 recordsJson (total de registros):', recordsJson?.length || 0);
+    console.log('📊 recordsJson (dados):');
+    recordsJson?.forEach((record, index) => {
+      console.log(`   [${index + 1}]:`, JSON.stringify(record, null, 6));
+    });
+    console.log('═══════════════════════════════════════════════════════════════');
     
     if (!planoMidiaGrupo_pk || !recordsJson) {
       return res.status(400).json({ error: 'planoMidiaGrupo_pk e recordsJson são obrigatórios' });
