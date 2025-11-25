@@ -369,168 +369,169 @@ export const RelatorioPorPraca: React.FC = () => {
                 
                 {/* Grid com altura fixa e scroll */}
                 <div className="shadow-sm rounded-lg border border-[#c1c1c1] bg-white overflow-hidden flex flex-col" style={{ height: '600px' }}>
-                  {/* Cabeçalho fixo com scroll horizontal */}
-                  <div className="bg-[#f7f7f7] border-b-2 border-[#c1c1c1] flex-shrink-0 overflow-x-auto">
-                    <table className="w-full border-collapse" style={{ minWidth: '1600px' }}>
-                      <thead>
-                        <tr>
-                          <th className="border-r border-[#c1c1c1] px-4 py-3 text-left font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap" style={{ width: '150px' }} onClick={() => handleSort('ranking')}>
-                            <div className="flex items-center">
-                              Ranking
-                              {getSortIcon('ranking')}
-                            </div>
-                          </th>
-                          <th className="border-r border-[#c1c1c1] px-4 py-3 text-left font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap" style={{ width: '200px' }} onClick={() => handleSort('exibidor_nome')}>
-                            <div className="flex items-center">
-                              Exibidor
-                              {getSortIcon('exibidor_nome')}
-                            </div>
-                          </th>
-                          <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap" style={{ width: '100px' }} onClick={() => handleSort('pontos_indoor')}>
-                            <div className="flex items-center justify-end">
-                              Pts Indoor
-                              {getSortIcon('pontos_indoor')}
-                            </div>
-                          </th>
-                          <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap" style={{ width: '120px' }} onClick={() => handleSort('pontos_vias_publicas')}>
-                            <div className="flex items-center justify-end">
-                              Pts Vias Púb.
-                              {getSortIcon('pontos_vias_publicas')}
-                            </div>
-                          </th>
-                          <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap" style={{ width: '100px' }} onClick={() => handleSort('total')}>
-                            <div className="flex items-center justify-end">
-                              Total
-                              {getSortIcon('total')}
-                            </div>
-                          </th>
-                          <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap" style={{ width: '100px' }} onClick={() => handleSort('percentual_total')}>
-                            <div className="flex items-center justify-end">
-                              % Total
-                              {getSortIcon('percentual_total')}
-                            </div>
-                          </th>
-                          <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap" style={{ width: '100px' }} onClick={() => handleSort('quantidade_pracas')}>
-                            <div className="flex items-center justify-end">
-                              Praças
-                              {getSortIcon('quantidade_pracas')}
-                            </div>
-                          </th>
-                          <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap" style={{ width: '100px' }} onClick={() => handleSort('tipos_midia_unicos')}>
-                            <div className="flex items-center justify-end">
-                              Tipos Mídia
-                              {getSortIcon('tipos_midia_unicos')}
-                            </div>
-                          </th>
-                          <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap" style={{ width: '120px' }} onClick={() => handleSort('fluxo_medio_passantes')}>
-                            <div className="flex items-center justify-end">
-                              Fluxo Médio
-                              {getSortIcon('fluxo_medio_passantes')}
-                            </div>
-                          </th>
-                          <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap" style={{ width: '120px' }} onClick={() => handleSort('total_impacto_ipv')}>
-                            <div className="flex items-center justify-end">
-                              Impacto IPV
-                              {getSortIcon('total_impacto_ipv')}
-                            </div>
-                          </th>
-                          <th className="px-4 py-3 text-left font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap" style={{ width: '120px' }} onClick={() => handleSort('classe_social_predominante')}>
-                            <div className="flex items-center">
-                              Classe Social
-                              {getSortIcon('classe_social_predominante')}
-                            </div>
-                          </th>
-                        </tr>
-                      </thead>
-                    </table>
-                  </div>
-                  
-                  {/* Corpo da tabela com scroll */}
-                  <div className="flex-1 overflow-y-auto overflow-x-auto">
-                    <table className="w-full border-collapse" style={{ minWidth: '1600px' }}>
+                  {/* Container único com scroll horizontal sincronizado */}
+                  <div className="flex-1 overflow-y-auto overflow-x-auto" id="table-scroll-container">
+                    {/* Cabeçalho com scroll horizontal */}
+                    <div className="bg-[#f7f7f7] border-b-2 border-[#c1c1c1] sticky top-0 z-10">
+                      <table className="border-collapse" style={{ minWidth: '100%', width: 'max-content' }}>
+                        <thead>
+                          <tr>
+                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-left font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '150px' }} onClick={() => handleSort('ranking')}>
+                              <div className="flex items-center">
+                                Ranking
+                                {getSortIcon('ranking')}
+                              </div>
+                            </th>
+                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-left font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '250px' }} onClick={() => handleSort('exibidor_nome')}>
+                              <div className="flex items-center">
+                                Exibidor
+                                {getSortIcon('exibidor_nome')}
+                              </div>
+                            </th>
+                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '150px' }} onClick={() => handleSort('pontos_indoor')}>
+                              <div className="flex items-center justify-end">
+                                Pts Indoor
+                                {getSortIcon('pontos_indoor')}
+                              </div>
+                            </th>
+                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '180px' }} onClick={() => handleSort('pontos_vias_publicas')}>
+                              <div className="flex items-center justify-end">
+                                Pts Vias Púb.
+                                {getSortIcon('pontos_vias_publicas')}
+                              </div>
+                            </th>
+                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '150px' }} onClick={() => handleSort('total')}>
+                              <div className="flex items-center justify-end">
+                                Total
+                                {getSortIcon('total')}
+                              </div>
+                            </th>
+                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '150px' }} onClick={() => handleSort('percentual_total')}>
+                              <div className="flex items-center justify-end">
+                                % Total
+                                {getSortIcon('percentual_total')}
+                              </div>
+                            </th>
+                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '150px' }} onClick={() => handleSort('quantidade_pracas')}>
+                              <div className="flex items-center justify-end">
+                                Praças
+                                {getSortIcon('quantidade_pracas')}
+                              </div>
+                            </th>
+                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '150px' }} onClick={() => handleSort('tipos_midia_unicos')}>
+                              <div className="flex items-center justify-end">
+                                Tipos Mídia
+                                {getSortIcon('tipos_midia_unicos')}
+                              </div>
+                            </th>
+                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '180px' }} onClick={() => handleSort('fluxo_medio_passantes')}>
+                              <div className="flex items-center justify-end">
+                                Fluxo Médio
+                                {getSortIcon('fluxo_medio_passantes')}
+                              </div>
+                            </th>
+                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '180px' }} onClick={() => handleSort('total_impacto_ipv')}>
+                              <div className="flex items-center justify-end">
+                                Impacto IPV
+                                {getSortIcon('total_impacto_ipv')}
+                              </div>
+                            </th>
+                            <th className="px-4 py-3 text-left font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '180px' }} onClick={() => handleSort('classe_social_predominante')}>
+                              <div className="flex items-center">
+                                Classe Social
+                                {getSortIcon('classe_social_predominante')}
+                              </div>
+                            </th>
+                          </tr>
+                        </thead>
+                      </table>
+                    </div>
+                    
+                    {/* Corpo da tabela */}
+                    <table className="border-collapse" style={{ minWidth: '100%', width: 'max-content' }}>
                       <tbody>
                         {dadosOrdenados.map((item, index) => (
                           <tr key={index} className="hover:bg-gray-50 border-b border-[#e5e5e5] transition-colors">
                             <td className="border-r border-[#c1c1c1] px-4 py-3 text-center text-[#3a3a3a] font-bold" style={{ width: '150px' }}>
                               #{item.ranking || index + 1}
                             </td>
-                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-[#3a3a3a] font-medium" style={{ width: '200px' }}>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-[#3a3a3a] font-medium" style={{ width: '250px' }}>
                               {item.exibidor_nome || item.exibidor_code || '-'}
                             </td>
-                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '100px' }}>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '150px' }}>
                               {formatarNumero(item.pontos_indoor || 0)}
                             </td>
-                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '120px' }}>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '180px' }}>
                               {formatarNumero(item.pontos_vias_publicas || 0)}
                             </td>
-                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] font-semibold" style={{ width: '100px' }}>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] font-semibold" style={{ width: '150px' }}>
                               {formatarNumero(item.total)}
                             </td>
-                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] font-medium" style={{ width: '100px' }}>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] font-medium" style={{ width: '150px' }}>
                               {formatarPercentual(item.percentual_total || 0)}
                             </td>
-                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '100px' }}>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '150px' }}>
                               {formatarNumero(item.quantidade_pracas || 0)}
                             </td>
-                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '100px' }}>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '150px' }}>
                               {formatarNumero(item.tipos_midia_unicos || 0)}
                             </td>
-                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '120px' }}>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '180px' }}>
                               {formatarNumeroGrande(item.fluxo_medio_passantes || 0)}
                             </td>
-                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '120px' }}>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '180px' }}>
                               {formatarNumeroGrande(item.total_impacto_ipv || 0)}
                             </td>
-                            <td className="px-4 py-3 text-left text-[#3a3a3a]" style={{ width: '120px' }}>
+                            <td className="px-4 py-3 text-left text-[#3a3a3a]" style={{ width: '180px' }}>
                               {item.classe_social_predominante || '-'}
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                  </div>
-                  
-                  {/* Rodapé fixo com total */}
-                  <div className="bg-[#f7f7f7] border-t-2 border-[#c1c1c1] flex-shrink-0 overflow-x-auto">
-                    <table className="w-full border-collapse" style={{ minWidth: '1600px' }}>
-                      <tbody>
-                        <tr className="font-bold">
-                          <td className="border-r border-[#c1c1c1] px-4 py-3 text-center text-[#3a3a3a]" style={{ width: '150px' }}>
-                            TOTAL
-                          </td>
-                          <td className="border-r border-[#c1c1c1] px-4 py-3 text-[#3a3a3a]" style={{ width: '200px' }}>
-                            -
-                          </td>
-                          <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '100px' }}>
-                            {formatarNumero(dados.reduce((sum, item) => sum + (item.pontos_indoor || 0), 0))}
-                          </td>
-                          <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '120px' }}>
-                            {formatarNumero(dados.reduce((sum, item) => sum + (item.pontos_vias_publicas || 0), 0))}
-                          </td>
-                          <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] text-lg" style={{ width: '100px' }}>
-                            {formatarNumero(totalGeral)}
-                          </td>
-                          <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '100px' }}>
-                            100.00%
-                          </td>
-                          <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '100px' }}>
-                            {formatarNumero(dados.reduce((sum, item) => sum + (item.quantidade_pracas || 0), 0))}
-                          </td>
-                          <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '100px' }}>
-                            -
-                          </td>
-                          <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '120px' }}>
-                            {formatarNumeroGrande(Math.round(dados.reduce((sum, item) => sum + (item.fluxo_medio_passantes || 0), 0) / dados.length))}
-                          </td>
-                          <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '120px' }}>
-                            {formatarNumeroGrande(dados.reduce((sum, item) => sum + (item.total_impacto_ipv || 0), 0))}
-                          </td>
-                          <td className="px-4 py-3 text-left text-[#3a3a3a]" style={{ width: '120px' }}>
-                            -
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                    
+                    {/* Rodapé com total */}
+                    <div className="bg-[#f7f7f7] border-t-2 border-[#c1c1c1] sticky bottom-0 z-10">
+                      <table className="border-collapse" style={{ minWidth: '100%', width: 'max-content' }}>
+                        <tbody>
+                          <tr className="font-bold">
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-center text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '150px' }}>
+                              TOTAL
+                            </td>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '250px' }}>
+                              -
+                            </td>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '150px' }}>
+                              {formatarNumero(dados.reduce((sum, item) => sum + (item.pontos_indoor || 0), 0))}
+                            </td>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '180px' }}>
+                              {formatarNumero(dados.reduce((sum, item) => sum + (item.pontos_vias_publicas || 0), 0))}
+                            </td>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] text-lg bg-[#f7f7f7]" style={{ width: '150px' }}>
+                              {formatarNumero(totalGeral)}
+                            </td>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '150px' }}>
+                              100.00%
+                            </td>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '150px' }}>
+                              {formatarNumero(dados.reduce((sum, item) => sum + (item.quantidade_pracas || 0), 0))}
+                            </td>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '150px' }}>
+                              -
+                            </td>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '180px' }}>
+                              {formatarNumeroGrande(Math.round(dados.reduce((sum, item) => sum + (item.fluxo_medio_passantes || 0), 0) / dados.length))}
+                            </td>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '180px' }}>
+                              {formatarNumeroGrande(dados.reduce((sum, item) => sum + (item.total_impacto_ipv || 0), 0))}
+                            </td>
+                            <td className="px-4 py-3 text-left text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '180px' }}>
+                              -
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
 
