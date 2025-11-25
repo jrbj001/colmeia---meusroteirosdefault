@@ -1,0 +1,2 @@
+export { BancoDeAtivos } from './BancoDeAtivos';
+

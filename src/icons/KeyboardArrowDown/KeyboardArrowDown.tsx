@@ -21,7 +21,7 @@ export const KeyboardArrowDown = ({ className }: Props): JSX.Element => {
     >
       <path
         d="M12 15.4L6 9.4L7.4 8L12 12.6L16.6 8L18 9.4L12 15.4Z"
-        fill="#1D1B20"
+        fill="currentColor"
       />
     </svg>
   );

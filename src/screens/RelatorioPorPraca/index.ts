@@ -1,0 +1,2 @@
+export { RelatorioPorPraca } from './RelatorioPorPraca';
+
