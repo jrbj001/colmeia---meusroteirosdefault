@@ -14,6 +14,7 @@ import { VisualizarResultados } from "./screens/VisualizarResultados";
 import { BancoDeAtivos } from "./screens/BancoDeAtivos";
 import { RelatorioPorPraca } from "./screens/RelatorioPorPraca";
 import { RelatorioPorExibidor } from "./screens/RelatorioPorExibidor";
+import { PaginaEmDesenvolvimento } from "./components/PaginaEmDesenvolvimento";
 import '../tailwind.css';
 import 'leaflet/dist/leaflet.css';
 
@@ -101,12 +102,14 @@ createRoot(document.getElementById("app") as HTMLElement).render(
               path="/banco-de-ativos/cadastrar/grupo-midia" 
               element={
                 <ProtectedRoute>
-                  <div className="min-h-screen flex items-center justify-center">
-                    <div className="text-center">
-                      <h1 className="text-2xl font-bold mb-4">Cadastrar Grupo de Mídia</h1>
-                      <p className="text-gray-600">Página em desenvolvimento</p>
-                    </div>
-                  </div>
+                  <PaginaEmDesenvolvimento 
+                    titulo="Cadastrar Grupo de Mídia"
+                    breadcrumbItems={[
+                      { label: "Home", path: "/" },
+                      { label: "Banco de ativos", path: "/banco-de-ativos" },
+                      { label: "Cadastrar Grupo de Mídia" }
+                    ]}
+                  />
                 </ProtectedRoute>
               } 
             />
@@ -114,12 +117,14 @@ createRoot(document.getElementById("app") as HTMLElement).render(
               path="/banco-de-ativos/cadastrar/tipo-midia" 
               element={
                 <ProtectedRoute>
-                  <div className="min-h-screen flex items-center justify-center">
-                    <div className="text-center">
-                      <h1 className="text-2xl font-bold mb-4">Cadastrar Tipo de Mídia</h1>
-                      <p className="text-gray-600">Página em desenvolvimento</p>
-                    </div>
-                  </div>
+                  <PaginaEmDesenvolvimento 
+                    titulo="Cadastrar Tipo de Mídia"
+                    breadcrumbItems={[
+                      { label: "Home", path: "/" },
+                      { label: "Banco de ativos", path: "/banco-de-ativos" },
+                      { label: "Cadastrar Tipo de Mídia" }
+                    ]}
+                  />
                 </ProtectedRoute>
               } 
             />
@@ -127,12 +132,14 @@ createRoot(document.getElementById("app") as HTMLElement).render(
               path="/banco-de-ativos/cadastrar/exibidor" 
               element={
                 <ProtectedRoute>
-                  <div className="min-h-screen flex items-center justify-center">
-                    <div className="text-center">
-                      <h1 className="text-2xl font-bold mb-4">Cadastrar Exibidor</h1>
-                      <p className="text-gray-600">Página em desenvolvimento</p>
-                    </div>
-                  </div>
+                  <PaginaEmDesenvolvimento 
+                    titulo="Cadastrar Exibidor"
+                    breadcrumbItems={[
+                      { label: "Home", path: "/" },
+                      { label: "Banco de ativos", path: "/banco-de-ativos" },
+                      { label: "Cadastrar Exibidor" }
+                    ]}
+                  />
                 </ProtectedRoute>
               } 
             />
@@ -140,12 +147,14 @@ createRoot(document.getElementById("app") as HTMLElement).render(
               path="/banco-de-ativos/importar/arquivo" 
               element={
                 <ProtectedRoute>
-                  <div className="min-h-screen flex items-center justify-center">
-                    <div className="text-center">
-                      <h1 className="text-2xl font-bold mb-4">Importar Arquivo</h1>
-                      <p className="text-gray-600">Página em desenvolvimento</p>
-                    </div>
-                  </div>
+                  <PaginaEmDesenvolvimento 
+                    titulo="Importar Arquivo"
+                    breadcrumbItems={[
+                      { label: "Home", path: "/" },
+                      { label: "Banco de ativos", path: "/banco-de-ativos" },
+                      { label: "Importar Arquivo" }
+                    ]}
+                  />
                 </ProtectedRoute>
               } 
             />
