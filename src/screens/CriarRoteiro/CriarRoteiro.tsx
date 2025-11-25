@@ -815,7 +815,7 @@ export const CriarRoteiro: React.FC = () => {
           date_dh: new Date().toISOString().slice(0, 19).replace('T', ' '),
           date_dt: new Date().toISOString().slice(0, 10)
         });
-        
+
         console.log(`✅ Databricks executado com sucesso para o grupo ${planoMidiaGrupo_pk}`);
         console.log(`📊 Run ID: ${databricksResponse.data?.run_id || 'N/A'}`);
         

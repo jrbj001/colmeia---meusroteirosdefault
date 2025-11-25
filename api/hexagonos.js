@@ -68,13 +68,42 @@ module.exports = async (req, res) => {
     if (result.recordset.length > 0) {
       console.log(`🔷 [API hexagonos] Amostra do primeiro hexágono:`, result.recordset[0]);
       
-      // Estatísticas de fluxo
-      const fluxos = result.recordset.map(h => h.calculatedFluxoEstimado_vl || 0);
-      const minFluxo = Math.min(...fluxos);
-      const maxFluxo = Math.max(...fluxos);
-      const avgFluxo = fluxos.reduce((a, b) => a + b, 0) / fluxos.length;
+      // Estatísticas de fluxo - ANÁLISE COMPLETA
+      const fluxosCalculados = result.recordset.map(h => h.calculatedFluxoEstimado_vl || 0).filter(f => f > 0);
+      const fluxosEstimados = result.recordset.map(h => h.fluxoEstimado_vl || 0).filter(f => f > 0);
       
-      console.log(`🔷 [API hexagonos] Fluxo - Min: ${minFluxo}, Max: ${maxFluxo}, Média: ${avgFluxo.toFixed(0)}`);
+      console.log(`\n🔷 [API hexagonos] Análise de fluxo (${result.recordset.length} hexágonos):`);
+      if (fluxosCalculados.length > 0) {
+        const min = Math.min(...fluxosCalculados);
+        const max = Math.max(...fluxosCalculados);
+        const avg = fluxosCalculados.reduce((a, b) => a + b, 0) / fluxosCalculados.length;
+        console.log(`   calculatedFluxoEstimado_vl: Min: ${min.toLocaleString('pt-BR')}, Max: ${max.toLocaleString('pt-BR')}, Média: ${avg.toFixed(0).toLocaleString('pt-BR')} (${fluxosCalculados.length}/${result.recordset.length} hexágonos)`);
+      }
+      if (fluxosEstimados.length > 0) {
+        const min = Math.min(...fluxosEstimados);
+        const max = Math.max(...fluxosEstimados);
+        const avg = fluxosEstimados.reduce((a, b) => a + b, 0) / fluxosEstimados.length;
+        console.log(`   fluxoEstimado_vl: Min: ${min.toLocaleString('pt-BR')}, Max: ${max.toLocaleString('pt-BR')}, Média: ${avg.toFixed(0).toLocaleString('pt-BR')} (${fluxosEstimados.length}/${result.recordset.length} hexágonos)`);
+      }
+      
+      // Comparação entre os dois campos se ambos existirem
+      if (fluxosCalculados.length > 0 && fluxosEstimados.length > 0) {
+        const hexagonosComAmbos = result.recordset.filter(h => 
+          (h.calculatedFluxoEstimado_vl || 0) > 0 && (h.fluxoEstimado_vl || 0) > 0
+        );
+        if (hexagonosComAmbos.length > 0) {
+          const diferencas = hexagonosComAmbos.map(h => {
+            const calculado = h.calculatedFluxoEstimado_vl;
+            const estimado = h.fluxoEstimado_vl;
+            const diff = estimado - calculado;
+            const percentual = calculado > 0 ? (diff / calculado) * 100 : 0;
+            return { calculado, estimado, diff, percentual };
+          });
+          const mediaDiff = diferencas.reduce((sum, d) => sum + d.diff, 0) / diferencas.length;
+          const mediaPercentual = diferencas.reduce((sum, d) => sum + d.percentual, 0) / diferencas.length;
+          console.log(`   Comparação: fluxoEstimado_vl é ${mediaDiff > 0 ? 'MAIOR' : 'MENOR'} que calculatedFluxoEstimado_vl em média (${mediaDiff > 0 ? '+' : ''}${mediaPercentual.toFixed(1)}%)`);
+        }
+      }
     }
     
     res.status(200).json({ hexagonos: Array.isArray(result.recordset) ? result.recordset : [] });

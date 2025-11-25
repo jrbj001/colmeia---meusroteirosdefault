@@ -39,7 +39,10 @@ interface PontoMidia {
   planoMidia_pk: number;
   latitude_vl: number;
   longitude_vl: number;
-  calculatedFluxoEstimado_vl: number;
+  calculatedFluxoEstimado_vl?: number; // Fluxo calculado (fallback)
+  fluxo_vl?: number; // Fluxo real do ponto (prioridade 1)
+  fluxoPassantes_vl?: number; // Fluxo de passantes real (prioridade 2)
+  fluxoEstimado_vl?: number; // Fluxo estimado (prioridade 3)
   estaticoDigital_st: 'D' | 'E'; // Digital ou Estático
   grupoSub_st: string;
   grupo_st: string;
@@ -72,6 +75,131 @@ function wktToLatLngs(wkt: string) {
     if (isNaN(lat) || isNaN(lon)) return undefined;
     return [lat, lon] as [number, number];
   }).filter((x): x is [number, number] => Array.isArray(x) && x.length === 2);
+}
+
+// Função para verificar se um ponto está dentro de um polígono (usando ray casting algorithm)
+function pontoDentroPoligono(ponto: [number, number], poligono: [number, number][]): boolean {
+  if (poligono.length < 3) return false;
+  
+  const [lat, lon] = ponto;
+  let dentro = false;
+  
+  for (let i = 0, j = poligono.length - 1; i < poligono.length; j = i++) {
+    const [latI, lonI] = poligono[i];
+    const [latJ, lonJ] = poligono[j];
+    
+    const intersect = ((latI > lat) !== (latJ > lat)) &&
+      (lon < (lonJ - lonI) * (lat - latI) / (latJ - latI) + lonI);
+    
+    if (intersect) dentro = !dentro;
+  }
+  
+  return dentro;
+}
+
+// Função para calcular distância entre dois pontos (Haversine)
+function calcularDistancia(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Raio da Terra em km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c * 1000; // Retorna em metros
+}
+
+// Função para verificar se um ponto está dentro de um hexágono de outro grupo
+// IMPORTANTE: Esta função permite MÚLTIPLOS pontos do mesmo grupo dentro do mesmo hexágono
+// Retorna true APENAS se o ponto estiver dentro de um hexágono do mesmo grupo
+// Retorna false se estiver dentro de hexágono de outro grupo ou não estiver dentro de nenhum
+function validarPontoNoHexagonoCorreto(
+  ponto: PontoMidia, 
+  hexagonos: Hexagono[]
+): boolean {
+  const pontoCoords: [number, number] = [ponto.latitude_vl, ponto.longitude_vl];
+  let estaDentroHexagonoMesmoGrupo = false;
+  let estaDentroHexagonoOutroGrupo = false;
+  let hexagonoConflitante: Hexagono | null = null;
+  let hexagonoValido: Hexagono | null = null; // Armazenar hexágono válido para debug
+  
+  // Verificar TODOS os hexágonos para ver se o ponto está dentro de algum
+  // NOTA: Um hexágono pode conter MÚLTIPLOS pontos do mesmo grupo
+  for (const hex of hexagonos) {
+    if (!hex.geometry_8) continue;
+    
+    const poligono = wktToLatLngs(hex.geometry_8);
+    if (poligono.length < 3) continue;
+    
+    const estaDentro = pontoDentroPoligono(pontoCoords, poligono);
+    
+    if (estaDentro) {
+      if (hex.grupo_st === ponto.grupo_st) {
+        // Está dentro de hexágono do mesmo grupo
+        // Múltiplos pontos podem estar no mesmo hexágono - isso é esperado e correto
+        estaDentroHexagonoMesmoGrupo = true;
+        hexagonoValido = hex;
+      } else {
+        // Está dentro de hexágono de OUTRO grupo - isso é um problema
+        estaDentroHexagonoOutroGrupo = true;
+        hexagonoConflitante = hex;
+      }
+    }
+  }
+  
+  // Se está dentro de hexágono de outro grupo, NÃO renderizar
+  if (estaDentroHexagonoOutroGrupo) {
+    console.warn(`🚫 [Mapa] Ponto ${ponto.planoMidia_pk} (grupo ${ponto.grupo_st}, subgrupo ${ponto.grupoSub_st}) está dentro de hexágono ${hexagonoConflitante?.hexagon_pk} do grupo ${hexagonoConflitante?.grupo_st} - BLOQUEADO`);
+    return false;
+  }
+  
+  // Se está dentro de hexágono do mesmo grupo, renderizar
+  // NOTA: Múltiplos pontos do mesmo grupo podem estar no mesmo hexágono
+  if (estaDentroHexagonoMesmoGrupo) {
+    if (hexagonoValido) {
+      console.log(`✅ [Mapa] Ponto ${ponto.planoMidia_pk} (grupo ${ponto.grupo_st}, subgrupo ${ponto.grupoSub_st}) está dentro de hexágono ${hexagonoValido.hexagon_pk} do mesmo grupo - permitindo renderizar (múltiplos pontos por hexágono são permitidos)`);
+    }
+    return true;
+  }
+  
+  // Ponto não está dentro de nenhum hexágono
+  // Verificar se está próximo de algum hexágono do mesmo grupo
+  const hexagonosMesmoGrupo = hexagonos.filter(h => h.grupo_st === ponto.grupo_st);
+  
+  if (hexagonosMesmoGrupo.length === 0) {
+    console.warn(`⚠️ [Mapa] Ponto ${ponto.planoMidia_pk} (grupo ${ponto.grupo_st}) não tem hexágonos do mesmo grupo disponíveis - não renderizando`);
+    return false;
+  }
+  
+  // Calcular distância para o hexágono mais próximo do mesmo grupo
+  let menorDistancia = Infinity;
+  let hexagonoMaisProximo: Hexagono | null = null;
+  
+  for (const hex of hexagonosMesmoGrupo) {
+    const distancia = calcularDistancia(
+      ponto.latitude_vl, 
+      ponto.longitude_vl,
+      hex.hex_centroid_lat,
+      hex.hex_centroid_lon
+    );
+    
+    if (distancia < menorDistancia) {
+      menorDistancia = distancia;
+      hexagonoMaisProximo = hex;
+    }
+  }
+  
+  // Se está próximo (dentro de 1km) de um hexágono do mesmo grupo, permitir renderizar
+  // Aumentamos a tolerância para 1km para considerar imprecisões de coordenadas
+  if (menorDistancia < 1000 && hexagonoMaisProximo) {
+    console.log(`✅ [Mapa] Ponto ${ponto.planoMidia_pk} (grupo ${ponto.grupo_st}) está próximo (${menorDistancia.toFixed(0)}m) de hexágono ${hexagonoMaisProximo.hexagon_pk} do mesmo grupo - permitindo renderizar`);
+    return true;
+  }
+  
+  // Ponto não está dentro nem próximo de hexágono do mesmo grupo - não renderizar
+  console.warn(`⚠️ [Mapa] Ponto ${ponto.planoMidia_pk} (grupo ${ponto.grupo_st}, subgrupo ${ponto.grupoSub_st}) não está dentro nem próximo (distância mínima: ${menorDistancia.toFixed(0)}m) de hexágono do mesmo grupo - não renderizando`);
+  return false;
 }
 
 export const Mapa: React.FC = () => {
@@ -481,6 +609,7 @@ export const Mapa: React.FC = () => {
   }, [debouncedCidadeSelecionada, debouncedSemanaSelecionada, descPks]);
 
   // useEffect para carregar pontos de mídia individuais
+  // IMPORTANTE: Os pontos devem ser filtrados pelos grupos dos hexágonos
   React.useEffect(() => {
     if (!debouncedCidadeSelecionada) {
       setPontosMidia([]);
@@ -493,16 +622,80 @@ export const Mapa: React.FC = () => {
       return;
     }
 
+    // Só carregar pontos se houver hexágonos carregados
+    // Os pontos devem derivar dos grupos dos hexágonos
+    if (hexagonos.length === 0) {
+      setPontosMidia([]);
+      return;
+    }
+
     console.log("🗺️ Carregando pontos de mídia para desc_pk:", descPk);
+    console.log("🗺️ Grupos dos hexágonos disponíveis:", Array.from(new Set(hexagonos.map(h => h.grupo_st).filter(Boolean))));
     setLoadingPontos(true);
 
     api.get(`pontos-midia?desc_pk=${descPk}`)
       .then(res => {
         const pontosData = res.data.pontos || [];
-        console.log(`🗺️ Pontos de mídia carregados: ${pontosData.length}`);
+        console.log(`🗺️ Pontos de mídia carregados (antes do filtro): ${pontosData.length}`);
         
-        // Debug: contar por SubGrupo
-        const porSubGrupo = pontosData.reduce((acc: any, p: PontoMidia) => {
+        // Filtrar pontos pelos grupos dos hexágonos
+        // Garantir que apenas pontos dos grupos dos hexágonos sejam exibidos
+        const gruposHexagonos = new Set(hexagonos.map(h => h.grupo_st).filter(Boolean));
+        
+        // Processar e normalizar pontos para garantir que subgrupos derivem dos grupos
+        const pontosFiltrados = pontosData
+          .filter((p: PontoMidia) => {
+            // O ponto deve pertencer a um dos grupos dos hexágonos
+            if (!p.grupo_st || !gruposHexagonos.has(p.grupo_st)) {
+              return false;
+            }
+            return true;
+          })
+          .map((p: PontoMidia) => {
+            // Garantir que o subgrupo derive do grupo
+            // O subgrupo DEVE começar com o código do grupo (ex: G1D, G1E, G2D, etc)
+            if (!p.grupoSub_st) {
+              // Se não tem subgrupo, derivar do grupo + tipo
+              const tipo = p.estaticoDigital_st || 'D';
+              const novoSubgrupo = `${p.grupo_st}${tipo}`;
+              console.log(`🔧 [Frontend] Derivando subgrupo para ponto ${p.planoMidia_pk}: ${novoSubgrupo}`);
+              return {
+                ...p,
+                grupoSub_st: novoSubgrupo
+              };
+            }
+            
+            // Verificar se o subgrupo deriva do grupo
+            if (!p.grupoSub_st.startsWith(p.grupo_st)) {
+              console.warn(`⚠️ [Frontend] Ponto ${p.planoMidia_pk}: subgrupo "${p.grupoSub_st}" não deriva do grupo "${p.grupo_st}"`);
+              
+              // Corrigir derivando do grupo + tipo
+              const tipo = p.estaticoDigital_st || 'D';
+              const novoSubgrupo = `${p.grupo_st}${tipo}`;
+              console.log(`🔧 [Frontend] Corrigindo subgrupo: "${p.grupoSub_st}" → "${novoSubgrupo}"`);
+              
+              return {
+                ...p,
+                grupoSub_st: novoSubgrupo
+              };
+            }
+            
+            // Subgrupo válido, retornar como está
+            return p;
+          });
+        
+        console.log(`🗺️ Pontos de mídia após filtro por grupos: ${pontosFiltrados.length}`);
+        
+        // Debug: contar por Grupo (agora priorizando grupo sobre subgrupo)
+        const porGrupo = pontosFiltrados.reduce((acc: any, p: PontoMidia) => {
+          const grupo = p.grupo_st || 'Sem Grupo';
+          acc[grupo] = (acc[grupo] || 0) + 1;
+          return acc;
+        }, {});
+        console.log(`🗺️ [Frontend] Pontos por Grupo:`, porGrupo);
+        
+        // Debug: contar por SubGrupo (derivado do grupo)
+        const porSubGrupo = pontosFiltrados.reduce((acc: any, p: PontoMidia) => {
           const sub = p.grupoSub_st || 'Sem SubGrupo';
           acc[sub] = (acc[sub] || 0) + 1;
           return acc;
@@ -510,14 +703,14 @@ export const Mapa: React.FC = () => {
         console.log(`🗺️ [Frontend] Pontos por SubGrupo:`, porSubGrupo);
         
         // Debug: contar por tipo
-        const porTipo = pontosData.reduce((acc: any, p: PontoMidia) => {
+        const porTipo = pontosFiltrados.reduce((acc: any, p: PontoMidia) => {
           const tipo = p.estaticoDigital_st || 'Sem Tipo';
           acc[tipo] = (acc[tipo] || 0) + 1;
           return acc;
         }, {});
         console.log(`🗺️ [Frontend] Pontos por Tipo (D/E):`, porTipo);
         
-        setPontosMidia(pontosData);
+        setPontosMidia(pontosFiltrados);
       })
       .catch(err => {
         console.error("Erro ao carregar pontos de mídia:", err);
@@ -526,7 +719,7 @@ export const Mapa: React.FC = () => {
       .finally(() => {
         setLoadingPontos(false);
       });
-  }, [debouncedCidadeSelecionada, descPks]);
+  }, [debouncedCidadeSelecionada, descPks, hexagonos]);
 
   // Calcular o range de fluxo para normalizar o tamanho dos pontos
   const minFluxo = hexagonos.length > 0 ? Math.min(...hexagonos.map(h => h.calculatedFluxoEstimado_vl)) : 0;
@@ -538,9 +731,33 @@ export const Mapa: React.FC = () => {
     return 6 + 14 * ((fluxo - minFluxo) / (maxFluxo - minFluxo));
   }
 
-  // Calcular tamanho dos pontos de mídia baseado no fluxo
-  const minFluxoPontos = pontosMidia.length > 0 ? Math.min(...pontosMidia.map(p => p.calculatedFluxoEstimado_vl || 0)) : 0;
-  const maxFluxoPontos = pontosMidia.length > 0 ? Math.max(...pontosMidia.map(p => p.calculatedFluxoEstimado_vl || 0)) : 1;
+  // Calcular tamanho dos pontos de mídia baseado no fluxo REAL do ponto
+  // Função auxiliar para obter o fluxo do ponto com priorização correta
+  // Baseado na análise: fluxoEstimado_vl parece ser o campo mais completo e confiável
+  // Prioridade: fluxo_vl > fluxoPassantes_vl > fluxoEstimado_vl > calculatedFluxoEstimado_vl
+  // IMPORTANTE: Esta função DEVE retornar o fluxo INDIVIDUAL do ponto, nunca o do hexágono
+  const getFluxoRealPonto = (p: PontoMidia) => {
+    // Verificar se o campo existe e tem valor válido (não null, não undefined)
+    // NUNCA usar valores do hexágono aqui - apenas campos do próprio ponto
+    if (p.fluxo_vl !== null && p.fluxo_vl !== undefined && p.fluxo_vl > 0) {
+      return p.fluxo_vl;
+    }
+    if (p.fluxoPassantes_vl !== null && p.fluxoPassantes_vl !== undefined && p.fluxoPassantes_vl > 0) {
+      return p.fluxoPassantes_vl;
+    }
+    // fluxoEstimado_vl parece ser o campo mais completo baseado na análise
+    if (p.fluxoEstimado_vl !== null && p.fluxoEstimado_vl !== undefined && p.fluxoEstimado_vl > 0) {
+      return p.fluxoEstimado_vl;
+    }
+    // calculatedFluxoEstimado_vl como último recurso
+    if (p.calculatedFluxoEstimado_vl !== null && p.calculatedFluxoEstimado_vl !== undefined && p.calculatedFluxoEstimado_vl > 0) {
+      return p.calculatedFluxoEstimado_vl;
+    }
+    return 0;
+  };
+  
+  const minFluxoPontos = pontosMidia.length > 0 ? Math.min(...pontosMidia.map(getFluxoRealPonto)) : 0;
+  const maxFluxoPontos = pontosMidia.length > 0 ? Math.max(...pontosMidia.map(getFluxoRealPonto)) : 1;
 
   function getRadiusPonto(fluxo: number) {
     // Raio mínimo 4, máximo 12 (menor que hexágonos para não sobrepor)
@@ -1085,311 +1302,122 @@ export const Mapa: React.FC = () => {
                       opacity: 0.8
                     }}
                   >
-                    <Popup>
-                      <div style={{ minWidth: 280, maxWidth: 320 }}>
-                        {/* Header com ranking */}
-                        <div style={{ 
-                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
-                          color: 'white', 
-                          padding: '12px 16px', 
-                          borderRadius: '8px 8px 0 0',
-                          margin: '-10px -10px 0 -10px'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>
-                                🎯 Área Estratégica
-                              </div>
-                              <div style={{ fontSize: 12, opacity: 0.9 }}>
-                                Hexágono #{hex.hexagon_pk}
-                              </div>
-                            </div>
-                            <div style={{ 
-                              background: 'rgba(255,255,255,0.2)', 
-                              padding: '4px 8px', 
-                              borderRadius: '12px',
-                              fontSize: 11,
-                              fontWeight: 600
-                            }}>
-                              {(() => {
-                                const ranking = getHexagonRanking(hex, hexagonos);
-                                return `${ranking.emoji} ${ranking.text}`;
-                              })()}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Conteúdo principal */}
-                        <div style={{ padding: '16px', background: '#f8fafc' }}>
-                          {/* Métricas principais */}
-                          <div style={{ marginBottom: 16 }}>
-                            <div style={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justifyContent: 'space-between',
-                              marginBottom: 8
-                            }}>
-                              <div>
-                                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
-                                  <svg style={{ width: 14, height: 14 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                  </svg>
-                                  Fluxo Total da Área
-                                </div>
-                                <div style={{ fontSize: 16, fontWeight: 700, color: '#1e293b' }}>
-                                  {formatNumber(hex.fluxoEstimado_vl)}
-                                </div>
-                              </div>
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                  <svg style={{ width: 14, height: 14 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                                  </svg>
-                                  vs Média
-                                </div>
-                                <div style={{ 
-                                  fontSize: 14, 
-                                  fontWeight: 600,
-                                  color: (() => {
-                                    const vsMedia = getFluxoVsMedia(hex, hexagonos);
-                                    return vsMedia.color;
-                                  })()
-                                }}>
-                                  {(() => {
-                                    const vsMedia = getFluxoVsMedia(hex, hexagonos);
-                                    return `${vsMedia.emoji} ${vsMedia.text}`;
-                                  })()}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Informações contextuais */}
-                          <div style={{ 
-                            display: 'grid', 
-                            gridTemplateColumns: '1fr 1fr', 
-                            gap: 12,
-                            marginBottom: 16
-                          }}>
-                            <div style={{ 
-                              background: 'white', 
-                              padding: 12, 
-                              borderRadius: 8, 
-                              border: '1px solid #e2e8f0',
-                              textAlign: 'center'
-                            }}>
-                              <div style={{ marginBottom: 4, display: 'flex', justifyContent: 'center' }}>
-                                <svg style={{ width: 24, height: 24 }} fill="none" stroke="currentColor" viewBox="0 0 24 24" color="#64748b">
-                                  {hex.calculatedFluxoEstimado_vl > 150000 && (
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                                  )}
-                                  {hex.calculatedFluxoEstimado_vl > 100000 && hex.calculatedFluxoEstimado_vl <= 150000 && (
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
-                                  )}
-                                  {hex.calculatedFluxoEstimado_vl > 50000 && hex.calculatedFluxoEstimado_vl <= 100000 && (
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                                  )}
-                                  {hex.calculatedFluxoEstimado_vl <= 50000 && (
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                                  )}
-                                </svg>
-                              </div>
-                              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
-                                {(() => {
-                                  const tipoRegiao = getTipoRegiao(hex);
-                                  return tipoRegiao.text;
-                                })()}
-                              </div>
-                            </div>
-                            
-                            <div style={{ 
-                              background: 'white', 
-                              padding: 12, 
-                              borderRadius: 8, 
-                              border: '1px solid #e2e8f0',
-                              textAlign: 'center'
-                            }}>
-                              <div style={{ marginBottom: 4, display: 'flex', justifyContent: 'center' }}>
-                                <svg style={{ width: 24, height: 24 }} fill="none" stroke="currentColor" viewBox="0 0 24 24" color="#64748b">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                                </svg>
-                              </div>
-                              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
-                                {getAreaAproximada(hex)}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Métricas de eficiência */}
-                          <div style={{ 
-                            display: 'grid', 
-                            gridTemplateColumns: '1fr 1fr 1fr', 
-                            gap: 8,
-                            marginBottom: 16
-                          }}>
-                            <div style={{ 
-                              background: 'white', 
-                              padding: 10, 
-                              borderRadius: 8, 
-                              border: '1px solid #e2e8f0',
-                              textAlign: 'center'
-                            }}>
-                              <div style={{ marginBottom: 4, display: 'flex', justifyContent: 'center' }}>
-                                <svg style={{ width: 20, height: 20 }} fill="none" stroke="currentColor" viewBox="0 0 24 24" color={getEficiencia(hex, hexagonos).color}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
-                              </div>
-                              <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, marginBottom: 2 }}>
-                                Eficiência
-                              </div>
-                              <div style={{ 
-                                fontSize: 11, 
-                                fontWeight: 700,
-                                color: (() => {
-                                  const eficiencia = getEficiencia(hex, hexagonos);
-                                  return eficiencia.color;
-                                })()
-                              }}>
-                                {(() => {
-                                  const eficiencia = getEficiencia(hex, hexagonos);
-                                  return eficiencia.text;
-                                })()}
-                              </div>
-                            </div>
-                            
-                            <div style={{ 
-                              background: 'white', 
-                              padding: 10, 
-                              borderRadius: 8, 
-                              border: '1px solid #e2e8f0',
-                              textAlign: 'center'
-                            }}>
-                              <div style={{ marginBottom: 4, display: 'flex', justifyContent: 'center' }}>
-                                <svg style={{ width: 20, height: 20 }} fill="none" stroke="currentColor" viewBox="0 0 24 24" color={getCobertura(hex).color}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                </svg>
-                              </div>
-                              <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, marginBottom: 2 }}>
-                                Cobertura
-                              </div>
-                              <div style={{ 
-                                fontSize: 11, 
-                                fontWeight: 700,
-                                color: (() => {
-                                  const cobertura = getCobertura(hex);
-                                  return cobertura.color;
-                                })()
-                              }}>
-                                {(() => {
-                                  const cobertura = getCobertura(hex);
-                                  return cobertura.text;
-                                })()}
-                              </div>
-                            </div>
-                            
-                            <div style={{ 
-                              background: 'white', 
-                              padding: 10, 
-                              borderRadius: 8, 
-                              border: '1px solid #e2e8f0',
-                              textAlign: 'center'
-                            }}>
-                              <div style={{ marginBottom: 4, display: 'flex', justifyContent: 'center' }}>
-                                <svg style={{ width: 20, height: 20 }} fill="none" stroke="currentColor" viewBox="0 0 24 24" color={getPontosDisponiveis(hex).color}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
-                              </div>
-                              <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, marginBottom: 2 }}>
-                                Pontos
-                              </div>
-                              <div style={{ 
-                                fontSize: 11, 
-                                fontWeight: 700,
-                                color: (() => {
-                                  const pontos = getPontosDisponiveis(hex);
-                                  return pontos.color;
-                                })()
-                              }}>
-                                {(() => {
-                                  const pontos = getPontosDisponiveis(hex);
-                                  return pontos.text;
-                                })()}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Dados de planejamento */}
-                          <div style={{ 
-                            background: 'white', 
-                            padding: 12, 
-                            borderRadius: 8, 
-                            border: '1px solid #e2e8f0',
-                            marginBottom: 12
-                          }}>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                              Dados de Planejamento
-                            </div>
-                            <div style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.4 }}>
-                              <div style={{ marginBottom: 4 }}>
-                                <strong>Grupo:</strong> {hex.grupoDesc_st || 'Não definido'}
-                              </div>
-                              <div style={{ marginBottom: 4 }}>
-                                <strong>Plano:</strong> {hex.planoMidiaDesc_st || 'Não definido'}
-                              </div>
-                              {hex.count_vl && (
-                                <div style={{ marginBottom: 4 }}>
-                                  <strong>Pontos:</strong> {formatNumber(hex.count_vl)}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Coordenadas (colapsadas) */}
-                          <details style={{ fontSize: 10, color: '#9ca3af' }}>
-                            <summary style={{ cursor: 'pointer', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <svg style={{ width: 12, height: 12 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                              </svg>
-                              Coordenadas (clique para expandir)
-                            </summary>
-                            <div style={{ marginTop: 4, padding: 8, background: '#f1f5f9', borderRadius: 4 }}>
-                              <div><strong>Lat:</strong> {hex.hex_centroid_lat.toFixed(6)}</div>
-                              <div><strong>Lon:</strong> {hex.hex_centroid_lon.toFixed(6)}</div>
-                            </div>
-                          </details>
-                        </div>
-                      </div>
-                    </Popup>
                   </Polygon>
                 ))}
 
                 {/* Pontos de mídia individuais com bordas diferentes */}
-                {pontosMidia.map((ponto, idx) => {
-                  // Buscar a cor do hexágono correspondente ao grupo_st do ponto
-                  const hexGrupo = hexagonos.find(h => h.grupo_st === ponto.grupo_st);
-                  const cor = hexGrupo 
-                    ? (hexGrupo.hexColor_st || `rgb(${hexGrupo.rgbColorR_vl},${hexGrupo.rgbColorG_vl},${hexGrupo.rgbColorB_vl})`)
-                    : '#999999'; // Fallback cinza se não encontrar
+                {/* IMPORTANTE: Os pontos já foram filtrados pelos grupos dos hexágonos */}
+                {/* Só renderizar pontos se houver hexágonos disponíveis */}
+                {hexagonos.length > 0 && pontosMidia.length > 0 && (() => {
+                  // Criar um mapa de cores por grupo dos hexágonos para acesso rápido
+                  const coresPorGrupo = new Map<string, string>();
+                  hexagonos.forEach(hex => {
+                    if (hex.grupo_st && !coresPorGrupo.has(hex.grupo_st)) {
+                      const cor = hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`;
+                      coresPorGrupo.set(hex.grupo_st, cor);
+                    }
+                  });
                   
-                  return (
-                  <CircleMarker
-                    key={`ponto-${ponto.planoMidia_pk}-${idx}`}
-                    center={[ponto.latitude_vl, ponto.longitude_vl]}
-                    pathOptions={{ 
-                      color: '#ffffff', // Borda branca fina
-                      fillColor: cor, // Cor do hexágono do grupo!
-                      fillOpacity: 0.8,
-                      weight: 1.5, // Borda fina e clean
-                      opacity: 1,
-                      dashArray: ponto.estaticoDigital_st === 'E' ? '3, 3' : undefined // Tracejado para Estático
-                    }}
-                    radius={getRadiusPonto(ponto.calculatedFluxoEstimado_vl || 0)}
-                  >
+                  console.log(`🎨 [Mapa] Cores por grupo disponíveis:`, Array.from(coresPorGrupo.entries()));
+                  console.log(`🎨 [Mapa] Total de pontos para renderizar: ${pontosMidia.length}`);
+                  console.log(`🔷 [Mapa] Total de hexágonos: ${hexagonos.length}`);
+                  
+                  // Armazenar pontos que foram realmente renderizados para usar na legenda
+                  const pontosRenderizados: PontoMidia[] = [];
+                  
+                  // IMPORTANTE: O fluxo agregado será calculado DURANTE a renderização
+                  // Isso garante que apenas pontos que passaram em TODAS as validações sejam contados
+                  const fluxoAgregadoPorHexagono = new Map<number, { total: number, count: number, pontos: PontoMidia[] }>();
+                  
+                  console.log(`📊 [Mapa] Total de pontos recebidos: ${pontosMidia.length}`);
+                  console.log(`📊 [Mapa] Fluxo agregado será calculado apenas para pontos RENDERIZADOS`);
+                  
+                  // Mapa para rastrear quantos pontos estão em cada hexágono
+                  const pontosPorHexagono = new Map<number, number>();
+                  
+                  const pontosJSX = pontosMidia.map((ponto, idx) => {
+                    // VALIDAÇÃO 1: Garantir que o subgrupo deriva do grupo
+                    if (ponto.grupoSub_st && !ponto.grupoSub_st.startsWith(ponto.grupo_st)) {
+                      console.warn(`⚠️ [Mapa] Ponto ${ponto.planoMidia_pk} com subgrupo "${ponto.grupoSub_st}" que não deriva do grupo "${ponto.grupo_st}" - não renderizando`);
+                      return null;
+                    }
+                    
+                    // VALIDAÇÃO 2: Verificar se o grupo do ponto existe nos hexágonos
+                    const corGrupo = coresPorGrupo.get(ponto.grupo_st);
+                    if (!corGrupo) {
+                      console.warn(`⚠️ [Mapa] Ponto ${ponto.planoMidia_pk} com grupo ${ponto.grupo_st} não encontrado nos hexágonos. Grupos disponíveis:`, Array.from(coresPorGrupo.keys()));
+                      return null;
+                    }
+                    
+                    // VALIDAÇÃO 3: Verificar se o ponto está dentro de um hexágono do mesmo grupo
+                    // Isso garante que não apareçam pontos de um grupo dentro de hexágonos de outro grupo
+                    const podeRenderizar = validarPontoNoHexagonoCorreto(ponto, hexagonos);
+                    if (!podeRenderizar) {
+                      // Ponto está dentro de hexágono de outro grupo ou não há hexágonos do mesmo grupo
+                      return null;
+                    }
+                    
+                    // SEMPRE usar a cor do grupo do hexágono, nunca a cor do ponto
+                    const cor = corGrupo;
+                    
+                    // Adicionar à lista de pontos renderizados para usar na legenda
+                    pontosRenderizados.push(ponto);
+                    
+                    // Identificar em qual hexágono este ponto está (para estatísticas e exibição)
+                    const pontoCoords: [number, number] = [ponto.latitude_vl, ponto.longitude_vl];
+                    let hexagonoDoPonto: Hexagono | null = null;
+                    for (const hex of hexagonos) {
+                      if (hex.grupo_st === ponto.grupo_st && hex.geometry_8) {
+                        const poligono = wktToLatLngs(hex.geometry_8);
+                        if (poligono.length >= 3 && pontoDentroPoligono(pontoCoords, poligono)) {
+                          pontosPorHexagono.set(hex.hexagon_pk, (pontosPorHexagono.get(hex.hexagon_pk) || 0) + 1);
+                          hexagonoDoPonto = hex;
+                          
+                          // IMPORTANTE: Adicionar este ponto ao fluxo agregado APENAS se ele passou em todas as validações
+                          // Isso garante que o fluxo agregado reflita apenas os pontos realmente renderizados
+                          if (!fluxoAgregadoPorHexagono.has(hex.hexagon_pk)) {
+                            fluxoAgregadoPorHexagono.set(hex.hexagon_pk, { total: 0, count: 0, pontos: [] });
+                          }
+                          const fluxoPontoIndividual = getFluxoRealPonto(ponto);
+                          const agregado = fluxoAgregadoPorHexagono.get(hex.hexagon_pk)!;
+                          agregado.total += fluxoPontoIndividual;
+                          agregado.count += 1;
+                          agregado.pontos.push(ponto);
+                          
+                          console.log(`✅ [Mapa] Ponto ${ponto.planoMidia_pk} (fluxo: ${fluxoPontoIndividual.toLocaleString('pt-BR')}, grupo: ${ponto.grupo_st}, subgrupo: ${ponto.grupoSub_st}) RENDERIZADO no hexágono ${hex.hexagon_pk}. Total agregado agora: ${agregado.total.toLocaleString('pt-BR')} (${agregado.count} pontos renderizados)`);
+                          break;
+                        }
+                      }
+                    }
+                    
+                    // Armazenar hexágono do ponto para usar no popup
+                    // Também armazenar o fluxo agregado calculado (agora calculado apenas dos pontos renderizados)
+                    (ponto as any).hexagonoAssociado = hexagonoDoPonto;
+                    if (hexagonoDoPonto && fluxoAgregadoPorHexagono.has(hexagonoDoPonto.hexagon_pk)) {
+                      const agregado = fluxoAgregadoPorHexagono.get(hexagonoDoPonto.hexagon_pk)!;
+                      (ponto as any).hexagonoFluxoAgregado = agregado.total;
+                      (ponto as any).hexagonoTotalPontos = agregado.count;
+                    }
+                    
+                    // Debug: verificar se a cor está correta
+                    if (idx < 5) { // Log apenas os primeiros 5 pontos
+                      console.log(`✅ [Mapa] Ponto ${ponto.planoMidia_pk}: grupo=${ponto.grupo_st}, subgrupo=${ponto.grupoSub_st}, cor=${cor}`);
+                    }
+                  
+                    return (
+                      <CircleMarker
+                        key={`ponto-${ponto.planoMidia_pk}-${idx}`}
+                        center={[ponto.latitude_vl, ponto.longitude_vl]}
+                        pathOptions={{ 
+                          color: '#ffffff', // Borda branca fina
+                          fillColor: cor, // SEMPRE cor do grupo do hexágono!
+                          fillOpacity: 0.8,
+                          weight: 1.5, // Borda fina e clean
+                          opacity: 1,
+                          dashArray: ponto.estaticoDigital_st === 'E' ? '3, 3' : undefined // Tracejado para Estático
+                        }}
+                        radius={getRadiusPonto(getFluxoRealPonto(ponto))}
+                      >
                     <Popup maxWidth={350}>
                       <div style={{ 
                         minWidth: 280, 
@@ -1421,31 +1449,95 @@ export const Mapa: React.FC = () => {
                           marginBottom: '8px'
                         }}>
                           <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.6 }}>
-                            <div style={{ marginBottom: 6 }}>
-                              <strong style={{ color: '#111827' }}>SubGrupo:</strong> {ponto.grupoSub_st || 'N/A'}
+                            {/* Grupo e SubGrupo */}
+                            <div style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #e5e7eb' }}>
+                              <div style={{ marginBottom: 6 }}>
+                                <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>Grupo</div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span style={{ 
+                                    display: 'inline-block', 
+                                    width: 16, 
+                                    height: 16, 
+                                    borderRadius: '50%', 
+                                    background: cor,
+                                    border: '2px solid #fff',
+                                    boxShadow: '0 0 0 1px rgba(0,0,0,0.1)'
+                                  }}></span>
+                                  <span style={{ fontWeight: 600, color: '#111827', fontSize: 13 }}>{ponto.grupo_st || 'N/A'}</span>
+                                </div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>SubGrupo</div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                  <span style={{ fontWeight: 600, color: '#111827', fontSize: 13 }}>{ponto.grupoSub_st || 'N/A'}</span>
+                                  {ponto.grupo_st && ponto.grupoSub_st && (
+                                    ponto.grupoSub_st.startsWith(ponto.grupo_st) ? (
+                                      <span style={{ fontSize: 9, color: '#10b981', fontWeight: 600, padding: '2px 6px', background: '#d1fae5', borderRadius: '4px' }}>
+                                        ✓ Derivado de {ponto.grupo_st}
+                                      </span>
+                                    ) : (
+                                      <span style={{ fontSize: 9, color: '#ef4444', fontWeight: 600, padding: '2px 6px', background: '#fee2e2', borderRadius: '4px' }}>
+                                        ⚠ Não deriva de {ponto.grupo_st}
+                                      </span>
+                                    )
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <div style={{ marginBottom: 6 }}>
-                              <strong style={{ color: '#111827' }}>Grupo:</strong> {ponto.grupo_st || 'N/A'}
-                            </div>
+                            
+                            {/* Hexágono associado */}
+                            {(() => {
+                              const hexAssociado = (ponto as any).hexagonoAssociado;
+                              if (hexAssociado) {
+                                return (
+                                  <div style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #e5e7eb' }}>
+                                    <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>Hexágono</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <span style={{ fontWeight: 500, color: '#111827', fontSize: 11 }}>
+                                        #{hexAssociado.hexagon_pk}
+                                      </span>
+                                      <span style={{ fontSize: 9, color: '#6b7280' }}>
+                                        ({hexAssociado.grupo_st})
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
+                            
+                            {/* Informações do ponto */}
                             {ponto.nome_st && (
                               <div style={{ marginBottom: 6 }}>
-                                <strong style={{ color: '#111827' }}>Nome:</strong> {ponto.nome_st}
+                                <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2 }}>Nome do Ponto</div>
+                                <div style={{ fontWeight: 500, color: '#111827', fontSize: 11 }}>{ponto.nome_st}</div>
                               </div>
                             )}
-                            {ponto.tipo_st && (
-                              <div style={{ marginBottom: 6 }}>
-                                <strong style={{ color: '#111827' }}>Tipo:</strong> {ponto.tipo_st}
-                              </div>
-                            )}
-                            {ponto.formato_st && (
-                              <div style={{ marginBottom: 6 }}>
-                                <strong style={{ color: '#111827' }}>Formato:</strong> {ponto.formato_st}
+                            
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+                              {ponto.tipo_st && (
+                                <div>
+                                  <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2 }}>Tipo</div>
+                                  <div style={{ fontWeight: 500, color: '#111827', fontSize: 11 }}>{ponto.tipo_st}</div>
+                                </div>
+                              )}
+                              {ponto.formato_st && (
+                                <div>
+                                  <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2 }}>Formato</div>
+                                  <div style={{ fontWeight: 500, color: '#111827', fontSize: 11 }}>{ponto.formato_st}</div>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {ponto.planoMidia_pk && (
+                              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #e5e7eb', fontSize: 10, color: '#9ca3af' }}>
+                                ID do Ponto: {ponto.planoMidia_pk}
                               </div>
                             )}
                           </div>
                         </div>
 
-                        {/* Fluxo */}
+                        {/* Fluxo - Usar o fluxo real do ponto */}
                         <div style={{ 
                           background: '#eff6ff',
                           padding: '10px',
@@ -1454,12 +1546,214 @@ export const Mapa: React.FC = () => {
                           border: '1px solid #dbeafe'
                         }}>
                           <div style={{ fontSize: 11, color: '#1e40af', fontWeight: 600, marginBottom: 4 }}>
-                            👥 Fluxo Estimado
+                            👥 Fluxo do Ponto
                           </div>
                           <div style={{ fontSize: 16, fontWeight: 700, color: '#1e3a8a' }}>
-                            {(ponto.calculatedFluxoEstimado_vl || 0).toLocaleString('pt-BR')}
+                            {(() => {
+                              // CRÍTICO: Garantir que estamos usando o fluxo INDIVIDUAL do ponto
+                              // Não usar valores do hexágono aqui - apenas campos do próprio ponto
+                              const fluxoReal = getFluxoRealPonto(ponto);
+                              
+                              // DEBUG: Verificar se o fluxo está correto e não foi alterado pelo hexágono
+                              if ((ponto as any).hexagonoAssociado) {
+                                const hex = (ponto as any).hexagonoAssociado;
+                                const fluxoHex = hex.fluxoEstimado_vl || hex.calculatedFluxoEstimado_vl || 0;
+                                
+                                // Se o fluxo do ponto for igual ao do hexágono, pode ser um problema
+                                if (Math.abs(fluxoReal - fluxoHex) < 1 && fluxoReal > 0) {
+                                  console.warn(`⚠️ [Popup] ATENÇÃO: Ponto ${ponto.planoMidia_pk} tem fluxo igual ao hexágono ${hex.hexagon_pk}!`);
+                                  console.warn(`   Fluxo do Ponto: ${fluxoReal.toLocaleString('pt-BR')}`);
+                                  console.warn(`   Fluxo do Hexágono: ${fluxoHex.toLocaleString('pt-BR')}`);
+                                  console.warn(`   Campos do ponto:`, {
+                                    fluxo_vl: ponto.fluxo_vl,
+                                    fluxoPassantes_vl: ponto.fluxoPassantes_vl,
+                                    fluxoEstimado_vl: ponto.fluxoEstimado_vl,
+                                    calculatedFluxoEstimado_vl: ponto.calculatedFluxoEstimado_vl
+                                  });
+                                }
+                              }
+                              
+                              return fluxoReal.toLocaleString('pt-BR');
+                            })()}
                           </div>
+                          {/* Mostrar fonte do fluxo */}
+                          {(() => {
+                            const temFluxoVl = ponto.fluxo_vl !== null && ponto.fluxo_vl !== undefined && ponto.fluxo_vl > 0;
+                            const temFluxoPassantes = ponto.fluxoPassantes_vl !== null && ponto.fluxoPassantes_vl !== undefined && ponto.fluxoPassantes_vl > 0;
+                            const temFluxoEstimado = ponto.fluxoEstimado_vl !== null && ponto.fluxoEstimado_vl !== undefined && ponto.fluxoEstimado_vl > 0;
+                            const usaCalculated = ponto.calculatedFluxoEstimado_vl !== null && ponto.calculatedFluxoEstimado_vl !== undefined && ponto.calculatedFluxoEstimado_vl > 0 && !temFluxoVl && !temFluxoPassantes && !temFluxoEstimado;
+                            
+                            let fonteTexto = '';
+                            if (temFluxoVl) {
+                              fonteTexto = 'Fluxo real (fluxo_vl)';
+                            } else if (temFluxoPassantes) {
+                              fonteTexto = 'Fluxo de passantes (fluxoPassantes_vl)';
+                            } else if (temFluxoEstimado) {
+                              fonteTexto = 'Fluxo estimado (fluxoEstimado_vl)';
+                            } else if (usaCalculated) {
+                              fonteTexto = 'Fluxo calculado (calculatedFluxoEstimado_vl)';
+                            }
+                            
+                            if (fonteTexto) {
+                              return (
+                                <div style={{ fontSize: 9, color: '#64748b', marginTop: 4, fontStyle: 'italic' }}>
+                                  {fonteTexto}
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
+
+                        {/* Informações do Hexágono - Comparação de Fluxos */}
+                        {(ponto as any).hexagonoAssociado && (() => {
+                          const hex = (ponto as any).hexagonoAssociado;
+                          
+                          // CRÍTICO: O fluxo do ponto DEVE ser o fluxo INDIVIDUAL do ponto, não do hexágono
+                          // Garantir que estamos usando o fluxo REAL do ponto, não o do hexágono
+                          const fluxoPonto = getFluxoRealPonto(ponto);
+                          
+                          // DEBUG: Log para verificar se o fluxo está correto
+                          console.log(`🔍 [Popup] Ponto ${ponto.planoMidia_pk}: fluxo individual = ${fluxoPonto.toLocaleString('pt-BR')}, hexágono ${hex.hexagon_pk}`);
+                          
+                          // PRIORIDADE 1: Usar fluxo agregado calculado dos pontos dentro do hexágono
+                          // Isso representa a soma real dos fluxos de todos os pontos dentro do hexágono
+                          const fluxoAgregadoPontos = (ponto as any).hexagonoFluxoAgregado;
+                          const totalPontosNoHexagono = (ponto as any).hexagonoTotalPontos || 1;
+                          
+                          console.log(`🔍 [Popup] Hexágono ${hex.hexagon_pk}: fluxo agregado = ${fluxoAgregadoPontos?.toLocaleString('pt-BR') || 'N/A'}, total pontos = ${totalPontosNoHexagono}`);
+                          
+                          // PRIORIDADE 2: Usar fluxo do hexágono do banco (fluxoEstimado_vl ou calculatedFluxoEstimado_vl)
+                          // Este é o fluxo da área geográfica do hexágono
+                          const fluxoHexagonoBanco = (hex.fluxoEstimado_vl !== null && hex.fluxoEstimado_vl !== undefined && hex.fluxoEstimado_vl > 0) 
+                            ? hex.fluxoEstimado_vl 
+                            : (hex.calculatedFluxoEstimado_vl || 0);
+                          
+                          // Usar o fluxo agregado se disponível, senão usar o do banco
+                          const fluxoHexagono = fluxoAgregadoPontos || fluxoHexagonoBanco;
+                          const usandoFluxoAgregado = !!fluxoAgregadoPontos;
+                          
+                          // Identificar qual campo está sendo usado
+                          const campoHexagono = usandoFluxoAgregado 
+                            ? `${totalPontosNoHexagono} ponto${totalPontosNoHexagono > 1 ? 's' : ''} renderizado${totalPontosNoHexagono > 1 ? 's' : ''} no hexágono`
+                            : ((hex.fluxoEstimado_vl !== null && hex.fluxoEstimado_vl !== undefined && hex.fluxoEstimado_vl > 0)
+                              ? 'fluxoEstimado_vl (banco)'
+                              : 'calculatedFluxoEstimado_vl (banco)');
+                          
+                          const campoPonto = (() => {
+                            if (ponto.fluxo_vl !== null && ponto.fluxo_vl !== undefined && ponto.fluxo_vl > 0) return 'fluxo_vl';
+                            if (ponto.fluxoPassantes_vl !== null && ponto.fluxoPassantes_vl !== undefined && ponto.fluxoPassantes_vl > 0) return 'fluxoPassantes_vl';
+                            if (ponto.fluxoEstimado_vl !== null && ponto.fluxoEstimado_vl !== undefined && ponto.fluxoEstimado_vl > 0) return 'fluxoEstimado_vl';
+                            return 'calculatedFluxoEstimado_vl';
+                          })();
+                          
+                          const diferenca = fluxoHexagono - fluxoPonto;
+                          const percentualDiferenca = fluxoPonto > 0 ? ((diferenca / fluxoPonto) * 100) : 0;
+                          
+                          // Verificar se estão usando campos compatíveis
+                          const camposCompatíveis = campoPonto === 'fluxoEstimado_vl' && campoHexagono.includes('fluxoEstimado_vl');
+                          
+                          return (
+                            <div style={{ 
+                              background: '#f0f9ff',
+                              padding: '10px',
+                              borderRadius: '6px',
+                              marginBottom: '8px',
+                              border: '1px solid #bae6fd'
+                            }}>
+                              <div style={{ fontSize: 11, color: '#0369a1', fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <svg style={{ width: 14, height: 14 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                                </svg>
+                                Hexágono Associado
+                              </div>
+                              <div style={{ fontSize: 10, color: '#0c4a6e', lineHeight: 1.5 }}>
+                                <div style={{ marginBottom: 4 }}>
+                                  <strong>ID:</strong> #{hex.hexagon_pk}
+                                </div>
+                                <div style={{ marginBottom: 4 }}>
+                                  <strong>Grupo:</strong> {hex.grupo_st} ({hex.grupoDesc_st || 'N/A'})
+                                </div>
+                                
+                                {/* Comparação de Fluxos */}
+                                <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #bae6fd' }}>
+                                  <div style={{ fontSize: 9, color: '#0369a1', marginBottom: 4, fontWeight: 600 }}>
+                                    📊 Comparação de Fluxos
+                                  </div>
+                                  <div style={{ marginBottom: 3 }}>
+                                    <div style={{ fontSize: 9, color: '#64748b' }}>Fluxo do Ponto ({campoPonto}):</div>
+                                    <div style={{ fontWeight: 600, color: '#059669' }}>
+                                      {formatNumber(fluxoPonto)}
+                                    </div>
+                                  </div>
+                                  <div style={{ marginBottom: 3 }}>
+                                    <div style={{ fontSize: 9, color: '#64748b' }}>
+                                      Fluxo do Hexágono ({campoHexagono}):
+                                      {usandoFluxoAgregado && totalPontosNoHexagono > 1 && (
+                                        <span style={{ fontSize: 8, color: '#059669', marginLeft: 4, fontWeight: 600 }}>
+                                          ({totalPontosNoHexagono} ponto{totalPontosNoHexagono > 1 ? 's' : ''} renderizado{totalPontosNoHexagono > 1 ? 's' : ''})
+                                        </span>
+                                      )}
+                                      {usandoFluxoAgregado && totalPontosNoHexagono === 1 && (
+                                        <span style={{ fontSize: 8, color: '#64748b', marginLeft: 4, fontStyle: 'italic' }}>
+                                          (1 ponto renderizado)
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div style={{ fontWeight: 600, color: '#3b82f6' }}>
+                                      {formatNumber(fluxoHexagono)}
+                                    </div>
+                                    {usandoFluxoAgregado && (
+                                      <div style={{ fontSize: 8, color: '#64748b', marginTop: 2, fontStyle: 'italic' }}>
+                                        {totalPontosNoHexagono > 1 
+                                          ? `Soma dos fluxos dos ${totalPontosNoHexagono} pontos renderizados dentro do hexágono`
+                                          : 'Fluxo do único ponto renderizado dentro do hexágono'}
+                                      </div>
+                                    )}
+                                    {!usandoFluxoAgregado && fluxoHexagonoBanco > 0 && (
+                                      <div style={{ fontSize: 8, color: '#64748b', marginTop: 2, fontStyle: 'italic' }}>
+                                        Fluxo da área geográfica (do banco de dados)
+                                      </div>
+                                    )}
+                                  </div>
+                                  {!camposCompatíveis && !usandoFluxoAgregado && (
+                                    <div style={{ 
+                                      marginTop: 4, 
+                                      padding: '4px 6px', 
+                                      background: '#fef3c7',
+                                      borderRadius: '4px',
+                                      fontSize: 8,
+                                      color: '#92400e'
+                                    }}>
+                                      ⚠️ Campos diferentes: Ponto usa {campoPonto}, Hexágono usa {campoHexagono}
+                                    </div>
+                                  )}
+                                  {diferenca !== 0 && (
+                                    <div style={{ 
+                                      marginTop: 4, 
+                                      padding: '4px 6px', 
+                                      background: diferenca > 0 ? '#dbeafe' : '#fee2e2',
+                                      borderRadius: '4px',
+                                      fontSize: 9
+                                    }}>
+                                      <div style={{ color: diferenca > 0 ? '#1e40af' : '#991b1b' }}>
+                                        {diferenca > 0 ? '✓' : '⚠️'} Diferença: {diferenca > 0 ? '+' : ''}{formatNumber(diferenca)}
+                                        {Math.abs(percentualDiferenca) > 10 && (
+                                          <span> ({percentualDiferenca > 0 ? '+' : ''}{percentualDiferenca.toFixed(1)}%)</span>
+                                        )}
+                                      </div>
+                                      <div style={{ fontSize: 8, color: '#64748b', marginTop: 2 }}>
+                                        {diferenca > 0 
+                                          ? 'Hexágono contém fluxo agregado da área' 
+                                          : 'Verificar dados - hexágono menor que ponto'}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                         {/* Localização */}
                         {(ponto.cidade_st || ponto.estado_st || ponto.bairro_st) && (
@@ -1470,8 +1764,9 @@ export const Mapa: React.FC = () => {
                             paddingTop: 8,
                             borderTop: '1px solid #e5e7eb'
                           }}>
+                            <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4, fontWeight: 600 }}>Localização</div>
                             {ponto.cidade_st && ponto.estado_st && (
-                              <div>📍 {ponto.cidade_st}/{ponto.estado_st}</div>
+                              <div style={{ marginBottom: 3 }}>📍 {ponto.cidade_st}/{ponto.estado_st}</div>
                             )}
                             {ponto.bairro_st && (
                               <div>🏘️ {ponto.bairro_st}</div>
@@ -1492,72 +1787,216 @@ export const Mapa: React.FC = () => {
                       </div>
                     </Popup>
                   </CircleMarker>
-                  );
-                })}
+                    );
+                  })
+                  .filter(Boolean); // Remover nulls
+                  
+                  console.log(`✅ [Mapa] Total de pontos renderizados: ${pontosRenderizados.length} de ${pontosMidia.length}`);
+                  
+                  // Identificar hexágonos sem pontos
+                  const hexagonosSemPontos = hexagonos.filter(hex => !pontosPorHexagono.has(hex.hexagon_pk));
+                  if (hexagonosSemPontos.length > 0) {
+                    console.log(`ℹ️ [Mapa] ${hexagonosSemPontos.length} hexágono(s) sem pontos de mídia (isso pode ser normal se a área não tem pontos cadastrados):`, 
+                      hexagonosSemPontos.map(h => `Hex ${h.hexagon_pk} (${h.grupo_st})`).join(', '));
+                  }
+                  
+                  // Estatísticas de pontos por hexágono
+                  const hexagonosComPontos = Array.from(pontosPorHexagono.entries());
+                  if (hexagonosComPontos.length > 0) {
+                    const maxPontosPorHex = Math.max(...hexagonosComPontos.map(([_, count]) => count));
+                    const hexagonosComMultiplosPontos = hexagonosComPontos.filter(([_, count]) => count > 1);
+                    console.log(`📊 [Mapa] Estatísticas: Máximo de pontos por hexágono: ${maxPontosPorHex}, Hexágonos com múltiplos pontos: ${hexagonosComMultiplosPontos.length}`);
+                  }
+                  
+                  // Log final do fluxo agregado calculado (apenas pontos renderizados)
+                  console.log(`\n📊 [Mapa] RESUMO FINAL - Fluxo agregado por hexágono (apenas pontos RENDERIZADOS):`);
+                  fluxoAgregadoPorHexagono.forEach((agregado, hexPk) => {
+                    const hex = hexagonos.find(h => h.hexagon_pk === hexPk);
+                    const fluxoHexBanco = hex?.fluxoEstimado_vl || hex?.calculatedFluxoEstimado_vl || 0;
+                    console.log(`   Hexágono ${hexPk} (${hex?.grupo_st || 'N/A'}):`);
+                    console.log(`      - Pontos RENDERIZADOS: ${agregado.count}`);
+                    console.log(`      - Fluxo agregado (soma dos pontos): ${agregado.total.toLocaleString('pt-BR')}`);
+                    console.log(`      - Fluxo do banco: ${fluxoHexBanco.toLocaleString('pt-BR')}`);
+                    agregado.pontos.forEach((p, idx) => {
+                      const fluxoP = getFluxoRealPonto(p);
+                      console.log(`      - Ponto ${idx + 1}: ${p.planoMidia_pk} (fluxo: ${fluxoP.toLocaleString('pt-BR')})`);
+                    });
+                  });
+                  
+                  return pontosJSX;
+                })()}
               </MapContainer>
             </div>
             {/* Legendas agrupadas no canto inferior direito */}
             {hexagonos.length > 0 && (
               <div style={{ position: 'absolute', bottom: 96, right: 64, display: 'flex', gap: 24, flexWrap: 'wrap', zIndex: 1000 }}>
-                {/* Legenda do tamanho */}
-                <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
-                  <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>📏 Tamanho dos Pontos</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <svg width={24} height={24} style={{ display: 'block' }}>
-                      <circle cx={12} cy={12} r={6} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
-                    </svg>
-                    <span style={{ fontSize: 11, color: '#444' }}>Menor fluxo<br/><strong>{formatNumber(minFluxo)}</strong></span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <svg width={40} height={40} style={{ display: 'block' }}>
-                      <circle cx={20} cy={20} r={20} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
-                    </svg>
-                    <span style={{ fontSize: 11, color: '#444' }}>Maior fluxo<br/><strong>{formatNumber(maxFluxo)}</strong></span>
-                  </div>
-                </div>
+                {/* Legenda do tamanho - usando fluxo real dos pontos */}
+                {pontosMidia.length > 0 && (() => {
+                  const fluxosReais = pontosMidia.map(getFluxoRealPonto);
+                  const minFluxoReal = Math.min(...fluxosReais);
+                  const maxFluxoReal = Math.max(...fluxosReais);
+                  
+                  return (
+                    <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
+                      <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>📏 Tamanho dos Pontos</div>
+                      <div style={{ fontSize: 9, color: '#666', marginBottom: 6, fontStyle: 'italic' }}>
+                        Baseado no fluxo real
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <svg width={24} height={24} style={{ display: 'block' }}>
+                          <circle cx={12} cy={12} r={6} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
+                        </svg>
+                        <span style={{ fontSize: 11, color: '#444' }}>Menor fluxo<br/><strong>{formatNumber(minFluxoReal)}</strong></span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <svg width={40} height={40} style={{ display: 'block' }}>
+                          <circle cx={20} cy={20} r={20} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
+                        </svg>
+                        <span style={{ fontSize: 11, color: '#444' }}>Maior fluxo<br/><strong>{formatNumber(maxFluxoReal)}</strong></span>
+                      </div>
+                    </div>
+                  );
+                })()}
                 
                 {/* Legenda de grupos (Hexágonos) */}
-                <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
-                  <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>🎨 Grupos (Hexágonos)</div>
-                  {Array.from(new Map(hexagonos.map(h => [h.grupoDesc_st, h]))).map(([grupo, hex]) => (
-                    <div key={grupo} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <span style={{ display: 'inline-block', width: 18, height: 18, borderRadius: '50%', background: hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`, border: '2px solid #888' }}></span>
-                      <span style={{ fontSize: 11, color: '#444' }}>{grupo || 'Sem grupo'}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Legenda de SubGrupos (Pontos) */}
-                {pontosMidia.length > 0 && (
-                  <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
-                    <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>📍 SubGrupos (Pontos)</div>
-                    {Array.from(new Set(pontosMidia.map(p => p.grupoSub_st).filter(Boolean))).map((subgrupo) => {
-                      const ponto = pontosMidia.find(p => p.grupoSub_st === subgrupo);
-                      const isDigital = ponto?.estaticoDigital_st === 'D';
-                      // Buscar cor do hexágono do grupo
-                      const hexGrupo = hexagonos.find(h => h.grupo_st === ponto?.grupo_st);
-                      const cor = hexGrupo 
-                        ? (hexGrupo.hexColor_st || `rgb(${hexGrupo.rgbColorR_vl},${hexGrupo.rgbColorG_vl},${hexGrupo.rgbColorB_vl})`)
-                        : '#999999';
-                      return (
-                        <div key={subgrupo} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                          <svg width={18} height={18} style={{ display: 'block' }}>
-                            <circle 
-                              cx={9} 
-                              cy={9} 
-                              r={7} 
-                              fill={cor}
-                              stroke="#ffffff" 
-                              strokeWidth={1.5}
-                              strokeDasharray={isDigital ? undefined : '3,3'}
-                            />
-                          </svg>
-                          <span style={{ fontSize: 11, color: '#444' }}>{subgrupo}</span>
+                {(() => {
+                  // Filtrar pontos renderizados para obter apenas os grupos que realmente aparecem no mapa
+                  const pontosParaLegenda = pontosMidia.filter(ponto => {
+                    // Aplicar as mesmas validações usadas na renderização
+                    if (!ponto.grupo_st || !ponto.grupoSub_st) return false;
+                    if (!ponto.grupoSub_st.startsWith(ponto.grupo_st)) return false;
+                    
+                    // Verificar se o grupo existe nos hexágonos
+                    const hexagonoComGrupo = hexagonos.find(h => h.grupo_st === ponto.grupo_st);
+                    if (!hexagonoComGrupo) return false;
+                    
+                    // Validar se o ponto está no hexágono correto
+                    return validarPontoNoHexagonoCorreto(ponto, hexagonos);
+                  });
+                  
+                  // Obter grupos únicos dos pontos renderizados
+                  const gruposRenderizados = new Set(pontosParaLegenda.map(p => p.grupo_st).filter(Boolean));
+                  
+                  // Filtrar hexágonos para mostrar apenas grupos que têm pontos renderizados
+                  const hexagonosParaLegenda = hexagonos.filter(hex => 
+                    hex.grupo_st && gruposRenderizados.has(hex.grupo_st)
+                  );
+                  
+                  if (hexagonosParaLegenda.length === 0) return null;
+                  
+                  return (
+                    <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
+                      <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>🎨 Grupos (Hexágonos)</div>
+                      {Array.from(new Map(hexagonosParaLegenda.map(h => [h.grupoDesc_st, h]))).map(([grupo, hex]) => (
+                        <div key={grupo} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <span style={{ display: 'inline-block', width: 18, height: 18, borderRadius: '50%', background: hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`, border: '2px solid #888' }}></span>
+                          <span style={{ fontSize: 11, color: '#444' }}>{grupo || 'Sem grupo'}</span>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                {/* Legenda de SubGrupos (Pontos) - Agrupados por Grupo */}
+                {(() => {
+                  // Usar apenas os pontos que foram realmente renderizados no mapa
+                  // Filtrar pontosMidia usando a mesma lógica de validação usada na renderização
+                  const pontosParaLegenda = pontosMidia.filter(ponto => {
+                    // Aplicar as mesmas validações usadas na renderização
+                    if (!ponto.grupo_st || !ponto.grupoSub_st) return false;
+                    if (!ponto.grupoSub_st.startsWith(ponto.grupo_st)) return false;
+                    
+                    // Verificar se o grupo existe nos hexágonos
+                    const hexagonoComGrupo = hexagonos.find(h => h.grupo_st === ponto.grupo_st);
+                    if (!hexagonoComGrupo) return false;
+                    
+                    // Validar se o ponto está no hexágono correto
+                    return validarPontoNoHexagonoCorreto(ponto, hexagonos);
+                  });
+                  
+                  if (pontosParaLegenda.length === 0) return null;
+                  
+                  // Agrupar subgrupos por grupo para mostrar a hierarquia
+                  // IMPORTANTE: Garantir que apenas subgrupos que derivam dos grupos sejam mostrados
+                  const subgruposPorGrupo = new Map<string, Array<{ subgrupo: string; ponto: PontoMidia }>>();
+                  
+                  pontosParaLegenda.forEach((ponto: PontoMidia) => {
+                    // Validar que o ponto tem grupo e subgrupo válidos
+                    if (!ponto.grupo_st || !ponto.grupoSub_st) return;
+                    
+                    // Validar que o subgrupo deriva do grupo
+                    if (!ponto.grupoSub_st.startsWith(ponto.grupo_st)) {
+                      console.warn(`⚠️ [Legenda] Ignorando subgrupo "${ponto.grupoSub_st}" que não deriva do grupo "${ponto.grupo_st}"`);
+                      return;
+                    }
+                    
+                    if (!subgruposPorGrupo.has(ponto.grupo_st)) {
+                      subgruposPorGrupo.set(ponto.grupo_st, []);
+                    }
+                    
+                    const subgrupos = subgruposPorGrupo.get(ponto.grupo_st)!;
+                    if (!subgrupos.find(s => s.subgrupo === ponto.grupoSub_st)) {
+                      subgrupos.push({ subgrupo: ponto.grupoSub_st, ponto });
+                    }
+                  });
+                  
+                  // Ordenar subgrupos dentro de cada grupo
+                  subgruposPorGrupo.forEach((subgrupos, grupo) => {
+                    subgrupos.sort((a, b) => a.subgrupo.localeCompare(b.subgrupo));
+                  });
+                  
+                  return (
+                    <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 160 }}>
+                      <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 8 }}>📍 SubGrupos (Pontos)</div>
+                      <div style={{ fontSize: 9, color: '#666', marginBottom: 6, fontStyle: 'italic' }}>
+                        Derivados dos grupos
+                      </div>
+                      {Array.from(subgruposPorGrupo.entries())
+                        .sort(([grupoA], [grupoB]) => grupoA.localeCompare(grupoB))
+                        .map(([grupo, subgrupos]) => {
+                        const hexGrupo = hexagonos.find(h => h.grupo_st === grupo);
+                        const corGrupo = hexGrupo 
+                          ? (hexGrupo.hexColor_st || `rgb(${hexGrupo.rgbColorR_vl},${hexGrupo.rgbColorG_vl},${hexGrupo.rgbColorB_vl})`)
+                          : '#999999';
+                        
+                        return (
+                          <div key={grupo} style={{ marginBottom: 8 }}>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: '#666', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: corGrupo, border: '1px solid #888' }}></span>
+                              {grupo} → {subgrupos.length} subgrupo(s)
+                            </div>
+                            {subgrupos.map(({ subgrupo, ponto }) => {
+                              const isDigital = ponto.estaticoDigital_st === 'D';
+                              return (
+                                <div key={subgrupo} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, marginLeft: 16 }}>
+                                  <svg width={16} height={16} style={{ display: 'block' }}>
+                                    <circle 
+                                      cx={8} 
+                                      cy={8} 
+                                      r={6} 
+                                      fill={corGrupo}
+                                      stroke="#ffffff" 
+                                      strokeWidth={1.5}
+                                      strokeDasharray={isDigital ? undefined : '3,3'}
+                                    />
+                                  </svg>
+                                  <span style={{ fontSize: 10, color: '#444' }}>
+                                    {subgrupo}
+                                    {subgrupo.startsWith(grupo) && (
+                                      <span style={{ fontSize: 8, color: '#999', marginLeft: 4 }}>
+                                        ({subgrupo.substring(grupo.length)})
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
 
                 {/* Legenda de tipos de mídia */}
                 {pontosMidia.length > 0 && (
