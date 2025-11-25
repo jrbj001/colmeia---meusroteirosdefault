@@ -45,6 +45,7 @@ export const RelatorioPorPraca: React.FC = () => {
     'exibidor_nome', 'pontos_indoor', 'pontos_vias_publicas', 'total', 
     'quantidade_pracas', 'percentual_total', 'fluxo_medio_passantes'
   ]));
+  const [loadingExcel, setLoadingExcel] = useState(false);
 
   useEffect(() => {
     carregarCidades();
@@ -215,60 +216,137 @@ export const RelatorioPorPraca: React.FC = () => {
     );
   };
 
-  const downloadExcel = () => {
+  const downloadExcel = async () => {
     if (dados.length === 0) {
       alert('Não há dados para exportar');
       return;
     }
 
-    // Preparar dados para Excel (usar dados ordenados)
-    const dadosExcel = dadosOrdenados.map(item => ({
-      'Ranking': item.ranking || 0,
-      'Exibidor': item.exibidor_nome || item.exibidor_code || '',
-      'Código': item.exibidor_code || '',
-      'Pontos Indoor': item.pontos_indoor || 0,
-      'Pontos Vias Públicas': item.pontos_vias_publicas || 0,
-      'Total': item.total || 0,
-      '% do Total': item.percentual_total || 0,
-      'Quantidade de Praças': item.quantidade_pracas || 0,
-      'Tipos de Mídia Únicos': item.tipos_midia_unicos || 0,
-      'Fluxo Médio Passantes': item.fluxo_medio_passantes || 0,
-      'Total Impacto IPV': item.total_impacto_ipv || 0,
-      'Classe Social Predominante': item.classe_social_predominante || '',
-      'Tipos Indoor': item.indoor || '',
-      'Tipos Vias Públicas': item.vias_publicas || ''
-    }));
+    try {
+      setLoadingExcel(true);
 
-    // Adicionar linha de total
-    dadosExcel.push({
-      'Ranking': '',
-      'Exibidor': 'TOTAL',
-      'Código': '',
-      'Pontos Indoor': dados.reduce((sum, item) => sum + (item.pontos_indoor || 0), 0),
-      'Pontos Vias Públicas': dados.reduce((sum, item) => sum + (item.pontos_vias_publicas || 0), 0),
-      'Total': totalGeral,
-      '% do Total': 100,
-      'Quantidade de Praças': dados.reduce((sum, item) => sum + (item.quantidade_pracas || 0), 0),
-      'Tipos de Mídia Únicos': '',
-      'Fluxo Médio Passantes': Math.round(dados.reduce((sum, item) => sum + (item.fluxo_medio_passantes || 0), 0) / dados.length),
-      'Total Impacto IPV': dados.reduce((sum, item) => sum + (item.total_impacto_ipv || 0), 0),
-      'Classe Social Predominante': '',
-      'Tipos Indoor': '',
-      'Tipos Vias Públicas': ''
-    });
+      // Simular um pequeno delay para melhor UX
+      await new Promise(resolve => setTimeout(resolve, 300));
 
-    const worksheet = XLSX.utils.json_to_sheet(dadosExcel);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Relatório por Praça");
+      // Função auxiliar para garantir valores válidos
+      const getValue = (value: any, defaultValue: any = '') => {
+        if (value === null || value === undefined) return defaultValue;
+        if (typeof value === 'number' && isNaN(value)) return defaultValue;
+        return value;
+      };
 
-    const nomeCidade = cidadeSelecionada.split(' - ')[0];
-    const filename = `Relatorio_Por_Praca_${nomeCidade}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      // Preparar dados para Excel (usar dados ordenados)
+      const dadosExcel = dadosOrdenados.map(item => {
+        const percentual = typeof item.percentual_total === 'number' && !isNaN(item.percentual_total)
+          ? Number(item.percentual_total.toFixed(2))
+          : 0;
 
-    XLSX.writeFile(workbook, filename);
+        // Priorizar nome do exibidor, usar código apenas como fallback
+        // Se exibidor_nome existe, não está vazio E é diferente do código, usa o nome
+        const nomeExibidor = (item.exibidor_nome && 
+                              item.exibidor_nome.trim() !== '' && 
+                              item.exibidor_nome !== item.exibidor_code)
+          ? item.exibidor_nome 
+          : (item.exibidor_code || '');
+
+        return {
+          'Ranking': getValue(item.ranking, 0),
+          'Exibidor': getValue(nomeExibidor, ''),
+          'Código': getValue(item.exibidor_code, ''),
+          'Pontos Indoor': getValue(item.pontos_indoor, 0),
+          'Pontos Vias Públicas': getValue(item.pontos_vias_publicas, 0),
+          'Total': getValue(item.total, 0),
+          '% do Total': percentual,
+          'Quantidade de Praças': getValue(item.quantidade_pracas, 0),
+          'Tipos de Mídia Únicos': getValue(item.tipos_midia_unicos, 0),
+          'Fluxo Médio Passantes': getValue(item.fluxo_medio_passantes, 0),
+          'Total Impacto IPV': getValue(item.total_impacto_ipv, 0),
+          'Classe Social Predominante': getValue(item.classe_social_predominante, ''),
+          'Tipos Indoor': getValue(item.indoor, ''),
+          'Tipos Vias Públicas': getValue(item.vias_publicas, '')
+        };
+      });
+
+      // Adicionar linha de total
+      const totalPontosIndoor = dados.reduce((sum, item) => sum + (Number(item.pontos_indoor) || 0), 0);
+      const totalPontosViasPublicas = dados.reduce((sum, item) => sum + (Number(item.pontos_vias_publicas) || 0), 0);
+      const totalQuantidadePracas = dados.reduce((sum, item) => sum + (Number(item.quantidade_pracas) || 0), 0);
+      const totalImpactoIPV = dados.reduce((sum, item) => sum + (Number(item.total_impacto_ipv) || 0), 0);
+      const somaFluxoPassantes = dados.reduce((sum, item) => sum + (Number(item.fluxo_medio_passantes) || 0), 0);
+      const mediaFluxoPassantes = dados.length > 0 ? Math.round(somaFluxoPassantes / dados.length) : 0;
+
+      dadosExcel.push({
+        'Ranking': '',
+        'Exibidor': 'TOTAL',
+        'Código': '',
+        'Pontos Indoor': totalPontosIndoor,
+        'Pontos Vias Públicas': totalPontosViasPublicas,
+        'Total': totalGeral || 0,
+        '% do Total': 100,
+        'Quantidade de Praças': totalQuantidadePracas,
+        'Tipos de Mídia Únicos': '',
+        'Fluxo Médio Passantes': mediaFluxoPassantes,
+        'Total Impacto IPV': totalImpactoIPV,
+        'Classe Social Predominante': '',
+        'Tipos Indoor': '',
+        'Tipos Vias Públicas': ''
+      });
+
+      // Criar worksheet
+      const worksheet = XLSX.utils.json_to_sheet(dadosExcel);
+      
+      // Ajustar largura das colunas
+      if (worksheet['!cols'] === undefined) {
+        worksheet['!cols'] = [];
+      }
+      worksheet['!cols'] = [
+        { wch: 10 }, // Ranking
+        { wch: 30 }, // Exibidor
+        { wch: 15 }, // Código
+        { wch: 15 }, // Pontos Indoor
+        { wch: 20 }, // Pontos Vias Públicas
+        { wch: 12 }, // Total
+        { wch: 12 }, // % do Total
+        { wch: 18 }, // Quantidade de Praças
+        { wch: 18 }, // Tipos de Mídia Únicos
+        { wch: 20 }, // Fluxo Médio Passantes
+        { wch: 18 }, // Total Impacto IPV
+        { wch: 25 }, // Classe Social Predominante
+        { wch: 30 }, // Tipos Indoor
+        { wch: 30 }  // Tipos Vias Públicas
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Relatório por Praça");
+
+      // Gerar nome do arquivo
+      const nomeCidade = cidadeSelecionada ? cidadeSelecionada.split(' - ')[0].trim() : 'Cidade';
+      const dataAtual = new Date().toISOString().split('T')[0];
+      const nomeArquivo = nomeCidade.replace(/[^a-zA-Z0-9]/g, '_') || 'Cidade';
+      const filename = `Relatorio_Por_Praca_${nomeArquivo}_${dataAtual}.xlsx`;
+
+      // Exportar arquivo
+      XLSX.writeFile(workbook, filename);
+      
+      console.log('✅ Arquivo Excel exportado com sucesso:', filename);
+    } catch (error: any) {
+      console.error('❌ Erro ao exportar Excel:', error);
+      console.error('Stack trace:', error?.stack);
+      alert(`Erro ao exportar arquivo Excel: ${error?.message || 'Erro desconhecido'}. Verifique o console para mais detalhes.`);
+    } finally {
+      setLoadingExcel(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-white flex font-sans">
+    <>
+      <style>{`
+        @keyframes apple-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+      <div className="min-h-screen bg-white flex font-sans">
       <Sidebar menuReduzido={menuReduzido} setMenuReduzido={setMenuReduzido} />
       <div className={`fixed top-0 z-20 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? "left-20" : "left-64"}`} />
       <div className={`flex-1 transition-all duration-300 min-h-screen w-full ${menuReduzido ? "ml-20" : "ml-64"} flex flex-col`}>
@@ -539,9 +617,35 @@ export const RelatorioPorPraca: React.FC = () => {
                 <div className="mt-6">
                   <button
                     onClick={downloadExcel}
-                    className="px-6 py-3 bg-[#ff4600] text-white rounded-lg font-medium hover:bg-[#e03700] transition-colors duration-200"
+                    disabled={loadingExcel || dados.length === 0}
+                    className="px-6 py-3 bg-[#ff4600] text-white rounded-lg font-medium hover:bg-[#e03700] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    Download Excel
+                    {loadingExcel ? (
+                      <>
+                        <svg 
+                          width="20" 
+                          height="20" 
+                          viewBox="0 0 24 24" 
+                          className="animate-spin"
+                          style={{ animation: 'apple-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}
+                        >
+                          <circle
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeDasharray="60 158"
+                            opacity="0.8"
+                          />
+                        </svg>
+                        <span>Gerando Excel...</span>
+                      </>
+                    ) : (
+                      <span>Download Excel</span>
+                    )}
                   </button>
                 </div>
               </div>
@@ -566,6 +670,7 @@ export const RelatorioPorPraca: React.FC = () => {
         </div>
       </div>
     </div>
+    </>
   );
 };
 

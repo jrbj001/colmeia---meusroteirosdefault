@@ -76,19 +76,164 @@ module.exports = async (req, res) => {
     
     console.log('🔍 [banco-ativos-relatorio-praca] Variações de busca:', variacoesCidade);
     
+    // Primeiro, vamos verificar a estrutura da tabela media_points
+    try {
+      const estruturaQuery = await pool.query(`
+        SELECT column_name, data_type, is_nullable
+        FROM information_schema.columns
+        WHERE table_name = 'media_points'
+        ORDER BY ordinal_position
+      `);
+      console.log('📋 [banco-ativos-relatorio-praca] Estrutura da tabela media_points:');
+      estruturaQuery.rows.forEach(col => {
+        console.log(`  - ${col.column_name} (${col.data_type}, nullable: ${col.is_nullable})`);
+      });
+      
+      // Verificar se há alguma coluna que possa conter nome do exibidor
+      const colunasPossiveis = estruturaQuery.rows.filter(col => 
+        col.column_name.toLowerCase().includes('name') ||
+        col.column_name.toLowerCase().includes('nome') ||
+        col.column_name.toLowerCase().includes('exibidor') ||
+        col.column_name.toLowerCase().includes('exhibitor') ||
+        col.column_name.toLowerCase().includes('title') ||
+        col.column_name.toLowerCase().includes('label')
+      );
+      if (colunasPossiveis.length > 0) {
+        console.log('🔍 [banco-ativos-relatorio-praca] Colunas que podem conter nome do exibidor:', colunasPossiveis.map(c => c.column_name));
+      }
+      
+      // Buscar um exemplo de registro para ver os valores
+      const exemploQuery = await pool.query(`
+        SELECT *
+        FROM media_points
+        WHERE code IS NOT NULL
+        LIMIT 1
+      `);
+      if (exemploQuery.rows.length > 0) {
+        const exemplo = exemploQuery.rows[0];
+        console.log('📋 [banco-ativos-relatorio-praca] Exemplo de registro da tabela media_points:');
+        Object.keys(exemplo).forEach(key => {
+          const value = exemplo[key];
+          const tipo = typeof value;
+          const preview = tipo === 'string' && value && value.length > 50 
+            ? value.substring(0, 50) + '...' 
+            : value;
+          console.log(`  - ${key}: ${preview} (${tipo})`);
+        });
+      }
+      
+      // Verificar se existe tabela de exibidores relacionada
+      const tabelasPossiveis = ['media_exhibitors', 'exhibitors', 'media_exhibitor', 'exhibitor'];
+      for (const tabelaNome of tabelasPossiveis) {
+        try {
+          const tabelaExiste = await pool.query(`
+            SELECT EXISTS (
+              SELECT FROM information_schema.tables 
+              WHERE table_name = $1
+            )
+          `, [tabelaNome]);
+          
+          if (tabelaExiste.rows[0].exists) {
+            console.log(`✅ [banco-ativos-relatorio-praca] Tabela encontrada: ${tabelaNome}`);
+            
+            // Verificar estrutura dessa tabela
+            const estruturaExhibitor = await pool.query(`
+              SELECT column_name, data_type
+              FROM information_schema.columns
+              WHERE table_name = $1
+              ORDER BY ordinal_position
+            `, [tabelaNome]);
+            
+            console.log(`📋 [banco-ativos-relatorio-praca] Estrutura da tabela ${tabelaNome}:`);
+            estruturaExhibitor.rows.forEach(col => {
+              console.log(`  - ${col.column_name} (${col.data_type})`);
+            });
+            
+            // Buscar exemplo de registro
+            const exemploExhibitor = await pool.query(`
+              SELECT *
+              FROM ${tabelaNome}
+              LIMIT 1
+            `);
+            
+            if (exemploExhibitor.rows.length > 0) {
+              console.log(`📋 [banco-ativos-relatorio-praca] Exemplo de registro da tabela ${tabelaNome}:`);
+              Object.keys(exemploExhibitor.rows[0]).forEach(key => {
+                const value = exemploExhibitor.rows[0][key];
+                const preview = typeof value === 'string' && value && value.length > 50 
+                  ? value.substring(0, 50) + '...' 
+                  : value;
+                console.log(`  - ${key}: ${preview}`);
+              });
+            }
+            break; // Se encontrou, para de procurar
+          }
+        } catch (err) {
+          // Tabela não existe ou erro ao verificar, continua
+        }
+      }
+    } catch (err) {
+      console.log('⚠️ [banco-ativos-relatorio-praca] Erro ao verificar estrutura:', err.message);
+    }
+    
+    // Verificar se existe tabela media_exhibitors
+    let tabelaExhibitorExiste = false;
+    let nomeColunaExhibitor = 'name';
+    try {
+      const verificarTabela = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_name = 'media_exhibitors'
+        )
+      `);
+      tabelaExhibitorExiste = verificarTabela.rows[0].exists;
+      
+      if (tabelaExhibitorExiste) {
+        // Verificar qual coluna tem o nome
+        const colunas = await pool.query(`
+          SELECT column_name
+          FROM information_schema.columns
+          WHERE table_name = 'media_exhibitors'
+          AND (column_name ILIKE '%name%' OR column_name ILIKE '%nome%' OR column_name ILIKE '%title%')
+        `);
+        if (colunas.rows.length > 0) {
+          nomeColunaExhibitor = colunas.rows[0].column_name;
+          console.log(`✅ [banco-ativos-relatorio-praca] Usando coluna '${nomeColunaExhibitor}' da tabela media_exhibitors`);
+        }
+      }
+    } catch (err) {
+      console.log('⚠️ [banco-ativos-relatorio-praca] Erro ao verificar tabela media_exhibitors:', err.message);
+    }
+    
     // Query para buscar dados do relatório por praça
     // Agrupar por exibidor e separar tipos de mídia em Indoor e Vias públicas
     // Usar busca flexível com ILIKE (case-insensitive)
+    
+    // Construir partes da query dinamicamente
+    const joinExhibitor = tabelaExhibitorExiste 
+      ? 'LEFT JOIN media_exhibitors me ON me.id = mp.media_exhibitor_id' 
+      : '';
+    
+    const selectExibidorNomeNoPonto = tabelaExhibitorExiste
+      ? `me.${nomeColunaExhibitor} AS exibidor_nome_temp,`
+      : '';
+    
+    const selectExibidorNomeAgrupado = tabelaExhibitorExiste
+      ? `MAX(exibidor_nome_temp) FILTER (WHERE exibidor_nome_temp IS NOT NULL AND exibidor_nome_temp != '') AS exibidor_nome,`
+      : '';
+    
     const query = `
       WITH tipos_por_ponto AS (
         SELECT 
           mp.code AS exibidor_code,
+          mp.media_exhibitor_id,
           mp.id AS ponto_id,
           mp.district,
           mp.pedestrian_flow,
           mp.total_ipv_impact,
           mp.social_class_geo,
           mt.name AS tipo_midia,
+          ${selectExibidorNomeNoPonto}
           CASE 
             WHEN mt.name ILIKE '%indoor%' OR mt.name ILIKE '%shopping%' OR mt.name ILIKE '%mall%' OR mt.name ILIKE '%centro comercial%' OR mt.name ILIKE '%interno%'
             THEN 'indoor'
@@ -99,6 +244,7 @@ module.exports = async (req, res) => {
         FROM media_points mp
         LEFT JOIN media_types mt ON mp.media_type_id = mt.id
         LEFT JOIN cities c ON mp.city_id = c.id
+        ${joinExhibitor}
         WHERE mp.is_deleted = false
           AND mp.is_active = true
           AND (${condicoesCidade})
@@ -107,8 +253,7 @@ module.exports = async (req, res) => {
       tipos_agrupados AS (
         SELECT 
           exibidor_code,
-          STRING_AGG(DISTINCT tipo_midia, ', ') FILTER (WHERE categoria = 'indoor') AS indoor,
-          STRING_AGG(DISTINCT tipo_midia, ', ') FILTER (WHERE categoria = 'vias_publicas') AS vias_publicas,
+          ${selectExibidorNomeAgrupado}
           COUNT(DISTINCT ponto_id) FILTER (WHERE categoria = 'indoor') AS pontos_indoor,
           COUNT(DISTINCT ponto_id) FILTER (WHERE categoria = 'vias_publicas') AS pontos_vias_publicas,
           COUNT(DISTINCT ponto_id) AS total,
@@ -116,12 +261,14 @@ module.exports = async (req, res) => {
           COUNT(DISTINCT tipo_midia) AS tipos_midia_unicos,
           AVG(pedestrian_flow) FILTER (WHERE pedestrian_flow IS NOT NULL) AS fluxo_medio_passantes,
           SUM(total_ipv_impact) FILTER (WHERE total_ipv_impact IS NOT NULL) AS total_impacto_ipv,
-          MODE() WITHIN GROUP (ORDER BY social_class_geo) FILTER (WHERE social_class_geo IS NOT NULL) AS classe_social_predominante
+          MODE() WITHIN GROUP (ORDER BY social_class_geo) FILTER (WHERE social_class_geo IS NOT NULL) AS classe_social_predominante,
+          STRING_AGG(DISTINCT tipo_midia, ', ') FILTER (WHERE categoria = 'indoor') AS indoor,
+          STRING_AGG(DISTINCT tipo_midia, ', ') FILTER (WHERE categoria = 'vias_publicas') AS vias_publicas
         FROM tipos_por_ponto
         GROUP BY exibidor_code
       )
       SELECT 
-        ta.exibidor_code AS exibidor_nome,
+        COALESCE(ta.exibidor_nome, ta.exibidor_code) AS exibidor_nome,
         ta.exibidor_code,
         COALESCE(ta.indoor, '') AS indoor,
         COALESCE(ta.vias_publicas, '') AS vias_publicas,
@@ -139,37 +286,18 @@ module.exports = async (req, res) => {
     
     const result = await pool.query(query, parametrosCidade);
     
-    // Tentar buscar nomes dos exibidores se a tabela existir
-    let nomesExibidores = {};
+    // Log para debug - verificar se os nomes estão vindo
     if (result.rows.length > 0) {
-      try {
-        const codigos = result.rows.map(r => r.exibidor_code).filter(Boolean);
-        if (codigos.length > 0) {
-          const placeholders = codigos.map((_, i) => `$${i + 1}`).join(', ');
-          const nomesResult = await pool.query(`
-            SELECT code, name 
-            FROM exhibitors 
-            WHERE code IN (${placeholders})
-          `, codigos);
-          
-          nomesResult.rows.forEach((row) => {
-            nomesExibidores[row.code] = row.name;
-          });
-        }
-      } catch (err) {
-        // Se a tabela não existir, usar o código como nome
-        console.log('⚠️ Tabela exhibitors não encontrada, usando código como nome:', err.message);
-      }
+      const exemplo = result.rows[0];
+      console.log('📋 [banco-ativos-relatorio-praca] Exemplo de dados retornados:');
+      console.log('  - Exibidor code:', exemplo.exibidor_code);
+      console.log('  - Exibidor nome:', exemplo.exibidor_nome);
+      console.log('  - Total:', exemplo.total);
+      
+      // Contar quantos têm nome diferente do código
+      const comNome = result.rows.filter(r => r.exibidor_nome && r.exibidor_nome !== r.exibidor_code).length;
+      console.log(`  - Exibidores com nome encontrado: ${comNome} de ${result.rows.length}`);
     }
-    
-    // Atualizar nomes dos exibidores
-    result.rows.forEach((row) => {
-      if (nomesExibidores[row.exibidor_code]) {
-        row.exibidor_nome = nomesExibidores[row.exibidor_code];
-      } else {
-        row.exibidor_nome = row.exibidor_code;
-      }
-    });
     
     console.log('✅ [banco-ativos-relatorio-praca] Dados encontrados:', result.rows.length);
     
