@@ -1,0 +1,3 @@
+export { RelatorioPorExibidor } from './RelatorioPorExibidor';
+
+

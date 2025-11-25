@@ -6,6 +6,8 @@ import api from "../../config/axios";
 import * as XLSX from 'xlsx';
 
 interface RelatorioData {
+  praca_nome: string;
+  cidade: string;
   exibidor_nome: string;
   exibidor_code: string;
   indoor: string | null;
@@ -13,7 +15,6 @@ interface RelatorioData {
   pontos_indoor: number;
   pontos_vias_publicas: number;
   total: number;
-  quantidade_pracas: number;
   tipos_midia_unicos: number;
   fluxo_medio_passantes: number;
   total_impacto_ipv: number;
@@ -22,40 +23,37 @@ interface RelatorioData {
   ranking?: number; // Calculado no frontend
 }
 
-interface Cidade {
-  id_cidade: number;
-  nome_cidade: string;
-  nome_estado: string;
+interface Exibidor {
+  id_exibidor: string;
+  nome_exibidor: string;
+  codigo_exibidor: string;
 }
 
-export const RelatorioPorPraca: React.FC = () => {
+export const RelatorioPorExibidor: React.FC = () => {
   const [menuReduzido, setMenuReduzido] = useState(false);
-  const [cidadeSelecionada, setCidadeSelecionada] = useState<string>("");
-  const [cidades, setCidades] = useState<Cidade[]>([]);
-  const [cidadesFiltradas, setCidadesFiltradas] = useState<Cidade[]>([]);
+  const [exibidorSelecionado, setExibidorSelecionado] = useState<string>("");
+  const [exibidores, setExibidores] = useState<Exibidor[]>([]);
+  const [exibidoresFiltrados, setExibidoresFiltrados] = useState<Exibidor[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [dados, setDados] = useState<RelatorioData[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingCidades, setLoadingCidades] = useState(false);
+  const [loadingExibidores, setLoadingExibidores] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [totalGeral, setTotalGeral] = useState<number>(0);
+  const [exibidorNome, setExibidorNome] = useState<string>("");
   const [sortColumn, setSortColumn] = useState<keyof RelatorioData>('total');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [colunasVisiveis, setColunasVisiveis] = useState<Set<string>>(new Set([
-    'exibidor_nome', 'pontos_indoor', 'pontos_vias_publicas', 'total', 
-    'quantidade_pracas', 'percentual_total', 'fluxo_medio_passantes'
-  ]));
   const [loadingExcel, setLoadingExcel] = useState(false);
 
   useEffect(() => {
-    carregarCidades();
+    carregarExibidores();
   }, []);
 
   // Fechar dropdown ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      if (!target.closest('.cidade-dropdown-container')) {
+      if (!target.closest('.exibidor-dropdown-container')) {
         setShowDropdown(false);
       }
     };
@@ -66,42 +64,42 @@ export const RelatorioPorPraca: React.FC = () => {
     }
   }, [showDropdown]);
 
-  const carregarCidades = async () => {
+  const carregarExibidores = async () => {
     try {
-      setLoadingCidades(true);
-      const response = await api.get('/cidades-praca');
-      setCidades(response.data);
-      setCidadesFiltradas(response.data);
+      setLoadingExibidores(true);
+      const response = await api.get('/exibidores-praca');
+      setExibidores(response.data);
+      setExibidoresFiltrados(response.data);
     } catch (err: any) {
-      console.error('Erro ao carregar cidades:', err);
+      console.error('Erro ao carregar exibidores:', err);
     } finally {
-      setLoadingCidades(false);
+      setLoadingExibidores(false);
     }
   };
 
-  const filtrarCidades = (termo: string) => {
+  const filtrarExibidores = (termo: string) => {
     if (!termo.trim()) {
-      setCidadesFiltradas(cidades);
+      setExibidoresFiltrados(exibidores);
       return;
     }
 
     const termoLower = termo.toLowerCase();
-    const filtradas = cidades.filter(
-      (cidade) =>
-        cidade.nome_cidade.toLowerCase().includes(termoLower) ||
-        cidade.nome_estado.toLowerCase().includes(termoLower)
+    const filtrados = exibidores.filter(
+      (exibidor) =>
+        exibidor.nome_exibidor.toLowerCase().includes(termoLower) ||
+        exibidor.codigo_exibidor.toLowerCase().includes(termoLower)
     );
-    setCidadesFiltradas(filtradas);
+    setExibidoresFiltrados(filtrados);
   };
 
-  const handleSelecionarCidade = (cidade: Cidade) => {
-    setCidadeSelecionada(`${cidade.nome_cidade} - ${cidade.nome_estado}`);
+  const handleSelecionarExibidor = (exibidor: Exibidor) => {
+    setExibidorSelecionado(exibidor.nome_exibidor || exibidor.codigo_exibidor);
     setShowDropdown(false);
   };
 
   const pesquisar = async () => {
-    if (!cidadeSelecionada) {
-      alert('Por favor, selecione uma cidade');
+    if (!exibidorSelecionado) {
+      alert('Por favor, selecione um exibidor');
       return;
     }
 
@@ -109,18 +107,16 @@ export const RelatorioPorPraca: React.FC = () => {
       setLoading(true);
       setErro(null);
       
-      // Extrair apenas o nome da cidade (antes do hífen)
-      const nomeCidade = cidadeSelecionada.split(' - ')[0];
-      
-      const response = await api.post('/banco-ativos-relatorio-praca', {
-        cidade: nomeCidade
+      const response = await api.post('/banco-ativos-relatorio-exibidor', {
+        exibidor: exibidorSelecionado
       });
 
       if (response.data && response.data.success) {
         const dadosBrutos = response.data.data;
         const totalGeralCalculado = response.data.totalGeral || 0;
+        const nomeExibidor = response.data.exibidor || exibidorSelecionado;
         
-        // Calcular percentual e ranking para cada exibidor
+        // Calcular percentual e ranking para cada praça/cidade
         const dadosComCalculos = dadosBrutos.map((item: any, index: number) => ({
           ...item,
           percentual_total: totalGeralCalculado > 0 ? (item.total / totalGeralCalculado) * 100 : 0,
@@ -137,6 +133,7 @@ export const RelatorioPorPraca: React.FC = () => {
         
         setDados(dadosOrdenados);
         setTotalGeral(totalGeralCalculado);
+        setExibidorNome(nomeExibidor);
         // Resetar ordenação para padrão
         setSortColumn('total');
         setSortDirection('desc');
@@ -170,10 +167,8 @@ export const RelatorioPorPraca: React.FC = () => {
 
   const handleSort = (column: keyof RelatorioData) => {
     if (sortColumn === column) {
-      // Se já está ordenando por esta coluna, inverte a direção
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
-      // Nova coluna, começa com descendente
       setSortColumn(column);
       setSortDirection('desc');
     }
@@ -186,7 +181,6 @@ export const RelatorioPorPraca: React.FC = () => {
       let aValue: any = a[sortColumn];
       let bValue: any = b[sortColumn];
       
-      // Para strings, fazer comparação alfabética
       if (typeof aValue === 'string' && typeof bValue === 'string') {
         aValue = aValue || '';
         bValue = bValue || '';
@@ -194,7 +188,6 @@ export const RelatorioPorPraca: React.FC = () => {
         return sortDirection === 'asc' ? comparison : -comparison;
       }
       
-      // Para números
       const aNum = Number(aValue) || 0;
       const bNum = Number(bValue) || 0;
       return sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
@@ -224,121 +217,111 @@ export const RelatorioPorPraca: React.FC = () => {
 
     try {
       setLoadingExcel(true);
-
-      // Simular um pequeno delay para melhor UX
       await new Promise(resolve => setTimeout(resolve, 300));
 
-      // Função auxiliar para garantir valores válidos
       const getValue = (value: any, defaultValue: any = '') => {
         if (value === null || value === undefined) return defaultValue;
         if (typeof value === 'number' && isNaN(value)) return defaultValue;
         return value;
       };
 
-      // Preparar dados para Excel (usar dados ordenados)
       const dadosExcel = dadosOrdenados.map(item => {
         const percentual = typeof item.percentual_total === 'number' && !isNaN(item.percentual_total)
           ? Number(item.percentual_total.toFixed(2))
           : 0;
 
-        // Priorizar nome do exibidor, usar código apenas como fallback
-        // Se exibidor_nome existe, não está vazio E é diferente do código, usa o nome
-        const nomeExibidor = (item.exibidor_nome && 
-                              item.exibidor_nome.trim() !== '' && 
-                              item.exibidor_nome !== item.exibidor_code)
-          ? item.exibidor_nome 
-          : (item.exibidor_code || '');
-
         return {
           'Ranking': getValue(item.ranking, 0),
-          'Exibidor': getValue(nomeExibidor, ''),
+          'Praça/Cidade': getValue(item.praca_nome || item.cidade, ''),
           'Pts Indoor': getValue(item.pontos_indoor, 0),
           'Pts Vias Púb.': getValue(item.pontos_vias_publicas, 0),
           'Total': getValue(item.total, 0),
           '% Total': percentual,
-          'Praças': getValue(item.quantidade_pracas, 0),
           'Tipos Mídia': getValue(item.tipos_midia_unicos, 0),
           'Fluxo Médio': getValue(item.fluxo_medio_passantes, 0),
           'Impacto IPV': getValue(item.total_impacto_ipv, 0),
           'Classe Social': getValue(item.classe_social_predominante, ''),
-          // Colunas extras para referência
-          'Código': getValue(item.exibidor_code, ''),
+          'Código Exibidor': getValue(item.exibidor_code, ''),
           'Tipos Indoor': getValue(item.indoor, ''),
           'Tipos Vias Públicas': getValue(item.vias_publicas, '')
         };
       });
 
-      // Adicionar linha de total
       const totalPontosIndoor = dados.reduce((sum, item) => sum + (Number(item.pontos_indoor) || 0), 0);
       const totalPontosViasPublicas = dados.reduce((sum, item) => sum + (Number(item.pontos_vias_publicas) || 0), 0);
-      const totalQuantidadePracas = dados.reduce((sum, item) => sum + (Number(item.quantidade_pracas) || 0), 0);
       const totalImpactoIPV = dados.reduce((sum, item) => sum + (Number(item.total_impacto_ipv) || 0), 0);
       const somaFluxoPassantes = dados.reduce((sum, item) => sum + (Number(item.fluxo_medio_passantes) || 0), 0);
       const mediaFluxoPassantes = dados.length > 0 ? Math.round(somaFluxoPassantes / dados.length) : 0;
 
       dadosExcel.push({
         'Ranking': '',
-        'Exibidor': 'TOTAL',
+        'Praça/Cidade': 'TOTAL',
         'Pts Indoor': totalPontosIndoor,
         'Pts Vias Púb.': totalPontosViasPublicas,
         'Total': totalGeral || 0,
         '% Total': 100,
-        'Praças': totalQuantidadePracas,
         'Tipos Mídia': '',
         'Fluxo Médio': mediaFluxoPassantes,
         'Impacto IPV': totalImpactoIPV,
         'Classe Social': '',
-        // Colunas extras
-        'Código': '',
+        'Código Exibidor': '',
         'Tipos Indoor': '',
         'Tipos Vias Públicas': ''
       });
 
-      // Criar worksheet
       const worksheet = XLSX.utils.json_to_sheet(dadosExcel);
       
-      // Ajustar largura das colunas
       if (worksheet['!cols'] === undefined) {
         worksheet['!cols'] = [];
       }
       worksheet['!cols'] = [
         { wch: 10 }, // Ranking
-        { wch: 30 }, // Exibidor
+        { wch: 30 }, // Praça/Cidade
         { wch: 15 }, // Pts Indoor
         { wch: 20 }, // Pts Vias Púb.
         { wch: 12 }, // Total
         { wch: 12 }, // % Total
-        { wch: 15 }, // Praças
         { wch: 15 }, // Tipos Mídia
         { wch: 18 }, // Fluxo Médio
         { wch: 18 }, // Impacto IPV
         { wch: 20 }, // Classe Social
-        // Colunas extras
-        { wch: 15 }, // Código
+        { wch: 20 }, // Código Exibidor
         { wch: 30 }, // Tipos Indoor
         { wch: 30 }  // Tipos Vias Públicas
       ];
 
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Relatório por Praça");
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Relatório por Exibidor");
 
-      // Gerar nome do arquivo
-      const nomeCidade = cidadeSelecionada ? cidadeSelecionada.split(' - ')[0].trim() : 'Cidade';
+      const nomeExibidor = exibidorSelecionado ? exibidorSelecionado.replace(/[^a-zA-Z0-9]/g, '_') : 'Exibidor';
       const dataAtual = new Date().toISOString().split('T')[0];
-      const nomeArquivo = nomeCidade.replace(/[^a-zA-Z0-9]/g, '_') || 'Cidade';
-      const filename = `Relatorio_Por_Praca_${nomeArquivo}_${dataAtual}.xlsx`;
+      const filename = `Relatorio_Por_Exibidor_${nomeExibidor}_${dataAtual}.xlsx`;
 
-      // Exportar arquivo
       XLSX.writeFile(workbook, filename);
       
       console.log('✅ Arquivo Excel exportado com sucesso:', filename);
     } catch (error: any) {
       console.error('❌ Erro ao exportar Excel:', error);
-      console.error('Stack trace:', error?.stack);
       alert(`Erro ao exportar arquivo Excel: ${error?.message || 'Erro desconhecido'}. Verifique o console para mais detalhes.`);
     } finally {
       setLoadingExcel(false);
     }
+  };
+
+  const getSortColumnLabel = () => {
+    const labels: Record<string, string> = {
+      'total': 'Total',
+      'praca_nome': 'Praça/Cidade',
+      'pontos_indoor': 'Pontos Indoor',
+      'pontos_vias_publicas': 'Pontos Vias Públicas',
+      'percentual_total': '% do Total',
+      'fluxo_medio_passantes': 'Fluxo Médio',
+      'total_impacto_ipv': 'Impacto IPV',
+      'tipos_midia_unicos': 'Tipos de Mídia',
+      'ranking': 'Ranking',
+      'classe_social_predominante': 'Classe Social'
+    };
+    return labels[sortColumn] || sortColumn;
   };
 
   return (
@@ -359,7 +342,7 @@ export const RelatorioPorPraca: React.FC = () => {
             items: [
               { label: "Home", path: "/" },
               { label: "Banco de ativos", path: "/banco-de-ativos" },
-              { label: "Relatório por praça" }
+              { label: "Relatório por exibidor" }
             ]
           }}
         />
@@ -369,56 +352,64 @@ export const RelatorioPorPraca: React.FC = () => {
           <div className="max-w-7xl mx-auto">
             {/* Título */}
             <h1 className="text-3xl font-bold text-[#ff4600] mb-4 uppercase tracking-wide">
-              Relatório por praça
+              Relatório por exibidor
             </h1>
             
             {/* Descrição */}
             <p className="text-[#3a3a3a] mb-6 text-base">
-              Consulte dados detalhados de exibidores por cidade. Analise pontos de mídia, fluxo de passantes, impacto IPV e muito mais para tomar decisões estratégicas.
+              Consulte dados detalhados de praças e cidades por exibidor. Analise pontos de mídia, fluxo de passantes, impacto IPV e muito mais para tomar decisões estratégicas.
             </p>
+
+            {/* Exibidor selecionado (se houver dados) */}
+            {exibidorNome && (
+              <div className="mb-4 p-3 bg-[#f7f7f7] border border-[#c1c1c1] rounded-lg">
+                <span className="text-sm text-[#666]">Exibidor: </span>
+                <span className="text-base font-semibold text-[#3a3a3a]">{exibidorNome}</span>
+              </div>
+            )}
 
             {/* Formulário de busca */}
             <div className="mb-8">
               <label className="block text-[#3a3a3a] mb-2 font-semibold text-sm">
-                Selecione a cidade
+                Selecione o exibidor
               </label>
               <div className="flex gap-4">
-                <div className="flex-1 relative cidade-dropdown-container">
+                <div className="flex-1 relative exibidor-dropdown-container">
                   <input
                     type="text"
-                    value={cidadeSelecionada}
+                    value={exibidorSelecionado}
                     onChange={(e) => {
-                      setCidadeSelecionada(e.target.value);
-                      filtrarCidades(e.target.value);
+                      setExibidorSelecionado(e.target.value);
+                      filtrarExibidores(e.target.value);
                       setShowDropdown(true);
                     }}
                     onFocus={() => setShowDropdown(true)}
-                    placeholder="Ex.: São Paulo"
+                    placeholder="Ex.: Código ou nome do exibidor"
                     className="w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-[#ff4600] focus:border-transparent text-[#3a3a3a] leading-normal"
                   />
                   
-                  {/* Dropdown de cidades */}
+                  {/* Dropdown de exibidores */}
                   {showDropdown && (
                     <div className="absolute top-full left-0 right-0 bg-white border border-[#d9d9d9] rounded-lg shadow-lg max-h-60 overflow-y-auto z-10 mt-1">
-                      {loadingCidades ? (
+                      {loadingExibidores ? (
                         <div className="p-4 text-center text-[#b3b3b3]">
-                          Carregando cidades...
+                          Carregando exibidores...
                         </div>
-                      ) : cidadesFiltradas.length > 0 ? (
-                        cidadesFiltradas.slice(0, 10).map((cidade) => (
+                      ) : exibidoresFiltrados.length > 0 ? (
+                        exibidoresFiltrados.slice(0, 10).map((exibidor) => (
                           <div
-                            key={cidade.id_cidade}
-                            onClick={() => handleSelecionarCidade(cidade)}
+                            key={exibidor.id_exibidor}
+                            onClick={() => handleSelecionarExibidor(exibidor)}
                             className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
                           >
                             <span className="text-[#3a3a3a]">
-                              {cidade.nome_cidade} - {cidade.nome_estado}
+                              {exibidor.nome_exibidor} {exibidor.codigo_exibidor !== exibidor.nome_exibidor ? `(${exibidor.codigo_exibidor})` : ''}
                             </span>
                           </div>
                         ))
                       ) : (
                         <div className="p-4 text-center text-[#b3b3b3]">
-                          Nenhuma cidade encontrada
+                          Nenhum exibidor encontrado
                         </div>
                       )}
                     </div>
@@ -445,14 +436,13 @@ export const RelatorioPorPraca: React.FC = () => {
             {dados.length > 0 && (
               <div className="mb-6">
                 <div className="mb-4 text-sm text-[#666]">
-                  {dados.length} exibidor{dados.length !== 1 ? 'es' : ''} encontrado{dados.length !== 1 ? 's' : ''} • Ordenado por: <span className="font-semibold text-[#ff4600]">{sortColumn === 'total' ? 'Total' : sortColumn === 'exibidor_nome' ? 'Exibidor' : sortColumn === 'pontos_indoor' ? 'Pontos Indoor' : sortColumn === 'pontos_vias_publicas' ? 'Pontos Vias Públicas' : sortColumn === 'quantidade_pracas' ? 'Quantidade de Praças' : sortColumn === 'percentual_total' ? '% do Total' : sortColumn === 'fluxo_medio_passantes' ? 'Fluxo Médio' : sortColumn === 'total_impacto_ipv' ? 'Impacto IPV' : sortColumn === 'tipos_midia_unicos' ? 'Tipos de Mídia' : sortColumn === 'ranking' ? 'Ranking' : 'Classe Social'}</span> ({sortDirection === 'desc' ? 'Maior → Menor' : 'Menor → Maior'})
+                  {dados.length} praça{dados.length !== 1 ? 's' : ''} encontrada{dados.length !== 1 ? 's' : ''} • Ordenado por: <span className="font-semibold text-[#ff4600]">{getSortColumnLabel()}</span> ({sortDirection === 'desc' ? 'Maior → Menor' : 'Menor → Maior'})
                 </div>
                 
                 {/* Grid com altura fixa e scroll */}
                 <div className="shadow-sm rounded-lg border border-[#c1c1c1] bg-white overflow-hidden flex flex-col" style={{ height: '600px' }}>
-                  {/* Container único com scroll horizontal sincronizado */}
                   <div className="flex-1 overflow-y-auto overflow-x-auto" id="table-scroll-container">
-                    {/* Cabeçalho com scroll horizontal */}
+                    {/* Cabeçalho */}
                     <div className="bg-[#f7f7f7] border-b-2 border-[#c1c1c1] sticky top-0 z-10">
                       <table className="border-collapse" style={{ minWidth: '100%', width: 'max-content' }}>
                         <thead>
@@ -463,10 +453,10 @@ export const RelatorioPorPraca: React.FC = () => {
                                 {getSortIcon('ranking')}
                               </div>
                             </th>
-                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-left font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '250px' }} onClick={() => handleSort('exibidor_nome')}>
+                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-left font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '250px' }} onClick={() => handleSort('praca_nome')}>
                               <div className="flex items-center">
-                                Exibidor
-                                {getSortIcon('exibidor_nome')}
+                                Praça/Cidade
+                                {getSortIcon('praca_nome')}
                               </div>
                             </th>
                             <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '150px' }} onClick={() => handleSort('pontos_indoor')}>
@@ -491,12 +481,6 @@ export const RelatorioPorPraca: React.FC = () => {
                               <div className="flex items-center justify-end">
                                 % Total
                                 {getSortIcon('percentual_total')}
-                              </div>
-                            </th>
-                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '150px' }} onClick={() => handleSort('quantidade_pracas')}>
-                              <div className="flex items-center justify-end">
-                                Praças
-                                {getSortIcon('quantidade_pracas')}
                               </div>
                             </th>
                             <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '150px' }} onClick={() => handleSort('tipos_midia_unicos')}>
@@ -537,7 +521,7 @@ export const RelatorioPorPraca: React.FC = () => {
                               #{item.ranking || index + 1}
                             </td>
                             <td className="border-r border-[#c1c1c1] px-4 py-3 text-[#3a3a3a] font-medium" style={{ width: '250px' }}>
-                              {item.exibidor_nome || item.exibidor_code || '-'}
+                              {item.praca_nome || item.cidade || '-'}
                             </td>
                             <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '150px' }}>
                               {formatarNumero(item.pontos_indoor || 0)}
@@ -550,9 +534,6 @@ export const RelatorioPorPraca: React.FC = () => {
                             </td>
                             <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] font-medium" style={{ width: '150px' }}>
                               {formatarPercentual(item.percentual_total || 0)}
-                            </td>
-                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '150px' }}>
-                              {formatarNumero(item.quantidade_pracas || 0)}
                             </td>
                             <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '150px' }}>
                               {formatarNumero(item.tipos_midia_unicos || 0)}
@@ -593,9 +574,6 @@ export const RelatorioPorPraca: React.FC = () => {
                             </td>
                             <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '150px' }}>
                               100.00%
-                            </td>
-                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '150px' }}>
-                              {formatarNumero(dados.reduce((sum, item) => sum + (item.quantidade_pracas || 0), 0))}
                             </td>
                             <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '150px' }}>
                               -
@@ -676,4 +654,5 @@ export const RelatorioPorPraca: React.FC = () => {
     </>
   );
 };
+
 

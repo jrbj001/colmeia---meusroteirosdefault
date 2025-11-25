@@ -13,6 +13,7 @@ import { ConsultaEndereco } from "./screens/ConsultaEndereco";
 import { VisualizarResultados } from "./screens/VisualizarResultados";
 import { BancoDeAtivos } from "./screens/BancoDeAtivos";
 import { RelatorioPorPraca } from "./screens/RelatorioPorPraca";
+import { RelatorioPorExibidor } from "./screens/RelatorioPorExibidor";
 import '../tailwind.css';
 import 'leaflet/dist/leaflet.css';
 
@@ -92,12 +93,7 @@ createRoot(document.getElementById("app") as HTMLElement).render(
               path="/banco-de-ativos/relatorio-por-exibidor" 
               element={
                 <ProtectedRoute>
-                  <div className="min-h-screen flex items-center justify-center">
-                    <div className="text-center">
-                      <h1 className="text-2xl font-bold mb-4">Relatório por Exibidor</h1>
-                      <p className="text-gray-600">Página em desenvolvimento</p>
-                    </div>
-                  </div>
+                  <RelatorioPorExibidor />
                 </ProtectedRoute>
               } 
             />

@@ -216,6 +216,14 @@
     {
       "source": "/atualizar-grupo-desc-pks",
       "destination": "/api/atualizar-grupo-desc-pks.js"
+    },
+    {
+      "source": "/banco-ativos-relatorio-exibidor",
+      "destination": "/api/banco-ativos-relatorio-exibidor.js"
+    },
+    {
+      "source": "/exibidores-praca",
+      "destination": "/api/exibidores-praca.js"
     }
   ]
 } 
