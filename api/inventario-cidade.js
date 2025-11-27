@@ -22,7 +22,7 @@ module.exports = async (req, res) => {
           inv.grupoSub_st,
           inv.count_vl,
           g.grupoDesc_st as descricao
-        FROM serv_product_be180.baseGeofusionJoinGrupoSubCount_ft_vw inv
+        FROM serv_product_be180.baseAtivosJoinGrupoSubCount_ft_vw inv
         LEFT JOIN serv_product_be180.grupoSubDistinct_dm_vw g 
           ON inv.grupoSub_st = g.grupoSub_st
         WHERE inv.cidade_st = @cidade
