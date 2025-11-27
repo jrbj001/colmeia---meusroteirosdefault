@@ -40,42 +40,41 @@ module.exports = async (req, res) => {
     let params = [];
     
     if (tabelaExhibitorExiste) {
-      // Buscar exibidores da tabela media_exhibitors com código
+      // Buscar exibidores da tabela media_exhibitors usando media_exhibitor_id
       query = `
         SELECT DISTINCT
-          COALESCE(me.${nomeColunaExhibitor}, mp.code) AS nome_exibidor,
-          mp.code AS codigo_exibidor
-        FROM media_points mp
-        LEFT JOIN media_exhibitors me ON me.id = mp.media_exhibitor_id
+          me.id::text AS codigo_exibidor,
+          COALESCE(me.${nomeColunaExhibitor}, me.id::text) AS nome_exibidor
+        FROM media_exhibitors me
+        INNER JOIN media_points mp ON mp.media_exhibitor_id = me.id
         WHERE mp.is_deleted = false
           AND mp.is_active = true
-          AND mp.code IS NOT NULL
       `;
       
       if (search && search.trim()) {
-        query += ` AND (mp.code ILIKE $1 OR me.${nomeColunaExhibitor} ILIKE $1)`;
+        query += ` AND (me.id::text ILIKE $1 OR me.${nomeColunaExhibitor} ILIKE $1)`;
         params.push(`%${search.trim()}%`);
       }
       
-      query += ` ORDER BY nome_exibidor, codigo_exibidor LIMIT 500`;
+      query += ` ORDER BY nome_exibidor, codigo_exibidor LIMIT 1000`;
     } else {
-      // Se não existe tabela, buscar apenas códigos únicos
+      // Se não existe tabela, buscar exibidores únicos por media_exhibitor_id
       query = `
         SELECT DISTINCT
-          mp.code AS nome_exibidor,
-          mp.code AS codigo_exibidor
+          mp.media_exhibitor_id::text AS codigo_exibidor,
+          mp.media_exhibitor_id::text AS nome_exibidor
         FROM media_points mp
         WHERE mp.is_deleted = false
           AND mp.is_active = true
-          AND mp.code IS NOT NULL
+          AND mp.media_exhibitor_id IS NOT NULL
       `;
       
       if (search && search.trim()) {
-        query += ` AND mp.code ILIKE $1`;
+        query += ` AND mp.media_exhibitor_id::text ILIKE $1`;
         params.push(`%${search.trim()}%`);
       }
       
-      query += ` ORDER BY mp.code LIMIT 500`;
+      query += ` ORDER BY nome_exibidor LIMIT 1000`;
     }
     
     const result = await pool.query(query, params);

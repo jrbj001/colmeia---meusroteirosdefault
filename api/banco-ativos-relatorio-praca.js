@@ -28,34 +28,6 @@ module.exports = async (req, res) => {
     
     console.log('🔍 [banco-ativos-relatorio-praca] Cidade normalizada:', cidadeNormalizada);
     
-    // Buscar São Paulo especificamente para debug
-    const saoPauloCheck = await pool.query(`
-      SELECT DISTINCT c.name, c.id, COUNT(mp.id) as total_pontos
-      FROM cities c
-      LEFT JOIN media_points mp ON mp.city_id = c.id AND mp.is_deleted = false AND mp.is_active = true
-      WHERE c.name ILIKE '%são paulo%' OR c.name ILIKE '%sao paulo%' OR c.name ILIKE '%são%paulo%'
-      GROUP BY c.name, c.id
-      ORDER BY c.name
-    `);
-    
-    console.log('🏙️ [banco-ativos-relatorio-praca] Busca específica São Paulo:', saoPauloCheck.rows.length);
-    if (saoPauloCheck.rows.length > 0) {
-      console.log('📋 São Paulo encontrada:', saoPauloCheck.rows.map(r => `${r.name} (${r.total_pontos} pontos)`));
-    }
-    
-    // Buscar cidades que começam com "S" para ver o padrão
-    const cidadesS = await pool.query(`
-      SELECT DISTINCT c.name, COUNT(mp.id) as total_pontos
-      FROM cities c
-      LEFT JOIN media_points mp ON mp.city_id = c.id AND mp.is_deleted = false AND mp.is_active = true
-      WHERE c.name ILIKE 'S%'
-      GROUP BY c.name
-      HAVING COUNT(mp.id) > 0
-      ORDER BY c.name
-      LIMIT 20
-    `);
-    console.log('📋 Cidades que começam com S:', cidadesS.rows.map(r => `${r.name} (${r.total_pontos} pontos)`));
-    
     // Criar múltiplas variações do nome da cidade para busca
     const variacoesCidade = [
       cidade,
@@ -75,106 +47,6 @@ module.exports = async (req, res) => {
     const parametrosCidade = variacoesCidade.map(v => `%${v}%`);
     
     console.log('🔍 [banco-ativos-relatorio-praca] Variações de busca:', variacoesCidade);
-    
-    // Primeiro, vamos verificar a estrutura da tabela media_points
-    try {
-      const estruturaQuery = await pool.query(`
-        SELECT column_name, data_type, is_nullable
-        FROM information_schema.columns
-        WHERE table_name = 'media_points'
-        ORDER BY ordinal_position
-      `);
-      console.log('📋 [banco-ativos-relatorio-praca] Estrutura da tabela media_points:');
-      estruturaQuery.rows.forEach(col => {
-        console.log(`  - ${col.column_name} (${col.data_type}, nullable: ${col.is_nullable})`);
-      });
-      
-      // Verificar se há alguma coluna que possa conter nome do exibidor
-      const colunasPossiveis = estruturaQuery.rows.filter(col => 
-        col.column_name.toLowerCase().includes('name') ||
-        col.column_name.toLowerCase().includes('nome') ||
-        col.column_name.toLowerCase().includes('exibidor') ||
-        col.column_name.toLowerCase().includes('exhibitor') ||
-        col.column_name.toLowerCase().includes('title') ||
-        col.column_name.toLowerCase().includes('label')
-      );
-      if (colunasPossiveis.length > 0) {
-        console.log('🔍 [banco-ativos-relatorio-praca] Colunas que podem conter nome do exibidor:', colunasPossiveis.map(c => c.column_name));
-      }
-      
-      // Buscar um exemplo de registro para ver os valores
-      const exemploQuery = await pool.query(`
-        SELECT *
-        FROM media_points
-        WHERE code IS NOT NULL
-        LIMIT 1
-      `);
-      if (exemploQuery.rows.length > 0) {
-        const exemplo = exemploQuery.rows[0];
-        console.log('📋 [banco-ativos-relatorio-praca] Exemplo de registro da tabela media_points:');
-        Object.keys(exemplo).forEach(key => {
-          const value = exemplo[key];
-          const tipo = typeof value;
-          const preview = tipo === 'string' && value && value.length > 50 
-            ? value.substring(0, 50) + '...' 
-            : value;
-          console.log(`  - ${key}: ${preview} (${tipo})`);
-        });
-      }
-      
-      // Verificar se existe tabela de exibidores relacionada
-      const tabelasPossiveis = ['media_exhibitors', 'exhibitors', 'media_exhibitor', 'exhibitor'];
-      for (const tabelaNome of tabelasPossiveis) {
-        try {
-          const tabelaExiste = await pool.query(`
-            SELECT EXISTS (
-              SELECT FROM information_schema.tables 
-              WHERE table_name = $1
-            )
-          `, [tabelaNome]);
-          
-          if (tabelaExiste.rows[0].exists) {
-            console.log(`✅ [banco-ativos-relatorio-praca] Tabela encontrada: ${tabelaNome}`);
-            
-            // Verificar estrutura dessa tabela
-            const estruturaExhibitor = await pool.query(`
-              SELECT column_name, data_type
-              FROM information_schema.columns
-              WHERE table_name = $1
-              ORDER BY ordinal_position
-            `, [tabelaNome]);
-            
-            console.log(`📋 [banco-ativos-relatorio-praca] Estrutura da tabela ${tabelaNome}:`);
-            estruturaExhibitor.rows.forEach(col => {
-              console.log(`  - ${col.column_name} (${col.data_type})`);
-            });
-            
-            // Buscar exemplo de registro
-            const exemploExhibitor = await pool.query(`
-              SELECT *
-              FROM ${tabelaNome}
-              LIMIT 1
-            `);
-            
-            if (exemploExhibitor.rows.length > 0) {
-              console.log(`📋 [banco-ativos-relatorio-praca] Exemplo de registro da tabela ${tabelaNome}:`);
-              Object.keys(exemploExhibitor.rows[0]).forEach(key => {
-                const value = exemploExhibitor.rows[0][key];
-                const preview = typeof value === 'string' && value && value.length > 50 
-                  ? value.substring(0, 50) + '...' 
-                  : value;
-                console.log(`  - ${key}: ${preview}`);
-              });
-            }
-            break; // Se encontrou, para de procurar
-          }
-        } catch (err) {
-          // Tabela não existe ou erro ao verificar, continua
-        }
-      }
-    } catch (err) {
-      console.log('⚠️ [banco-ativos-relatorio-praca] Erro ao verificar estrutura:', err.message);
-    }
     
     // Verificar se existe tabela media_exhibitors
     let tabelaExhibitorExiste = false;
@@ -225,7 +97,6 @@ module.exports = async (req, res) => {
     const query = `
       WITH tipos_por_ponto AS (
         SELECT 
-          mp.code AS exibidor_code,
           mp.media_exhibitor_id,
           mp.id AS ponto_id,
           mp.district,
@@ -248,11 +119,11 @@ module.exports = async (req, res) => {
         WHERE mp.is_deleted = false
           AND mp.is_active = true
           AND (${condicoesCidade})
-          AND mp.code IS NOT NULL
+          AND mp.media_exhibitor_id IS NOT NULL
       ),
       tipos_agrupados AS (
         SELECT 
-          exibidor_code,
+          media_exhibitor_id,
           ${selectExibidorNomeAgrupado}
           COUNT(DISTINCT ponto_id) FILTER (WHERE categoria = 'indoor') AS pontos_indoor,
           COUNT(DISTINCT ponto_id) FILTER (WHERE categoria = 'vias_publicas') AS pontos_vias_publicas,
@@ -265,11 +136,11 @@ module.exports = async (req, res) => {
           STRING_AGG(DISTINCT tipo_midia, ', ') FILTER (WHERE categoria = 'indoor') AS indoor,
           STRING_AGG(DISTINCT tipo_midia, ', ') FILTER (WHERE categoria = 'vias_publicas') AS vias_publicas
         FROM tipos_por_ponto
-        GROUP BY exibidor_code
+        GROUP BY media_exhibitor_id
       )
       SELECT 
-        COALESCE(ta.exibidor_nome, ta.exibidor_code) AS exibidor_nome,
-        ta.exibidor_code,
+        COALESCE(ta.exibidor_nome, 'Exibidor sem nome') AS exibidor_nome,
+        ta.media_exhibitor_id::text AS exibidor_code,
         COALESCE(ta.indoor, '') AS indoor,
         COALESCE(ta.vias_publicas, '') AS vias_publicas,
         COALESCE(ta.pontos_indoor, 0)::integer AS pontos_indoor,

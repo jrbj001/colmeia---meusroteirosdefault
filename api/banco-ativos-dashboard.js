@@ -11,15 +11,16 @@ module.exports = async (req, res) => {
     const pool = await getPostgresPool();
     
     // Query para buscar estatísticas agregadas do banco de ativos
-    // Contagem de pontos de mídia, praças (districts) e exibidores (codes únicos)
+    // Contagem de pontos de mídia, praças (districts) e exibidores (media_exhibitor_id únicos)
     // Separando por Vias Públicas e Indoor baseado no tipo de mídia
+    // IMPORTANTE: code é único por ponto, media_exhibitor_id identifica o exibidor
     
     const query = `
       WITH totais AS (
         SELECT 
           COUNT(DISTINCT mp.id) AS total_pontos_midia,
           COUNT(DISTINCT mp.district) FILTER (WHERE mp.district IS NOT NULL AND mp.district != '') AS total_pracas,
-          COUNT(DISTINCT mp.code) FILTER (WHERE mp.code IS NOT NULL AND mp.code != '') AS total_exibidores
+          COUNT(DISTINCT mp.media_exhibitor_id) FILTER (WHERE mp.media_exhibitor_id IS NOT NULL) AS total_exibidores
         FROM media_points mp
         WHERE mp.is_deleted = false
           AND mp.is_active = true
@@ -28,7 +29,7 @@ module.exports = async (req, res) => {
         SELECT 
           COUNT(DISTINCT mp.id) AS pontos_midia,
           COUNT(DISTINCT mp.district) FILTER (WHERE mp.district IS NOT NULL AND mp.district != '') AS pracas,
-          COUNT(DISTINCT mp.code) FILTER (WHERE mp.code IS NOT NULL AND mp.code != '') AS exibidores
+          COUNT(DISTINCT mp.media_exhibitor_id) FILTER (WHERE mp.media_exhibitor_id IS NOT NULL) AS exibidores
         FROM media_points mp
         LEFT JOIN media_types mt ON mp.media_type_id = mt.id
         WHERE mp.is_deleted = false
@@ -47,7 +48,7 @@ module.exports = async (req, res) => {
         SELECT 
           COUNT(DISTINCT mp.id) AS pontos_midia,
           COUNT(DISTINCT mp.district) FILTER (WHERE mp.district IS NOT NULL AND mp.district != '') AS pracas,
-          COUNT(DISTINCT mp.code) FILTER (WHERE mp.code IS NOT NULL AND mp.code != '') AS exibidores
+          COUNT(DISTINCT mp.media_exhibitor_id) FILTER (WHERE mp.media_exhibitor_id IS NOT NULL) AS exibidores
         FROM media_points mp
         LEFT JOIN media_types mt ON mp.media_type_id = mt.id
         WHERE mp.is_deleted = false

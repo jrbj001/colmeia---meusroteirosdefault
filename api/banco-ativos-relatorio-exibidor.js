@@ -57,28 +57,38 @@ module.exports = async (req, res) => {
       console.log('⚠️ [banco-ativos-relatorio-exibidor] Erro ao verificar tabela media_exhibitors:', err.message);
     }
     
-    // Criar múltiplas variações do código/nome do exibidor para busca
-    const variacoesExibidor = [
-      exibidor,
-      exibidorNormalizado,
-      exibidor.replace(/\s+/g, '%'),
-      exibidor.replace(/\s+/g, ' ').trim(),
-    ];
-    
-    // Criar condições OR para todas as variações (buscar por código ou nome)
+    // IMPORTANTE: Buscar por media_exhibitor_id, não por code
+    // O frontend pode enviar o nome do exibidor ou o ID (UUID)
     let condicoesExibidor = [];
     let parametrosExibidor = [];
     let paramIndex = 1;
     
-    // Adicionar condições para código
-    variacoesExibidor.forEach((v) => {
-      condicoesExibidor.push(`mp.code ILIKE $${paramIndex}`);
-      parametrosExibidor.push(`%${v}%`);
-      paramIndex++;
-    });
+    // Verificar se o input é um UUID (ID do exibidor)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const isUUID = uuidRegex.test(exibidor.trim());
     
-    // Adicionar condições para nome (se tabela existe)
-    if (tabelaExhibitorExiste) {
+    if (isUUID) {
+      // Buscar diretamente por media_exhibitor_id
+      condicoesExibidor.push(`mp.media_exhibitor_id::text = $${paramIndex}`);
+      parametrosExibidor.push(exibidor.trim());
+      paramIndex++;
+    } else {
+      // Buscar pelo nome do exibidor na tabela media_exhibitors
+      if (!tabelaExhibitorExiste) {
+        return res.status(400).json({
+          success: false,
+          error: 'Tabela de exibidores não encontrada. Busque pelo ID do exibidor (UUID).'
+        });
+      }
+      
+      // Criar variações do nome para busca flexível
+      const variacoesExibidor = [
+        exibidor,
+        exibidorNormalizado,
+        exibidor.replace(/\s+/g, '%'),
+        exibidor.replace(/\s+/g, ' ').trim(),
+      ];
+      
       variacoesExibidor.forEach((v) => {
         condicoesExibidor.push(`me.${nomeColunaExhibitor} ILIKE $${paramIndex}`);
         parametrosExibidor.push(`%${v}%`);
@@ -88,7 +98,7 @@ module.exports = async (req, res) => {
     
     const condicoesExibidorStr = condicoesExibidor.join(' OR ');
     
-    console.log('🔍 [banco-ativos-relatorio-exibidor] Variações de busca:', variacoesExibidor);
+    console.log('🔍 [banco-ativos-relatorio-exibidor] Buscando exibidor:', exibidor, isUUID ? '(UUID)' : '(Nome)');
     
     // Construir partes da query dinamicamente
     const joinExhibitor = tabelaExhibitorExiste 
@@ -105,10 +115,10 @@ module.exports = async (req, res) => {
     
     // Query para buscar dados do relatório por exibidor
     // Agrupar por cidade/praça e separar tipos de mídia em Indoor e Vias públicas
+    // IMPORTANTE: Buscar por media_exhibitor_id, não por code
     const query = `
       WITH tipos_por_ponto AS (
         SELECT 
-          mp.code AS exibidor_code,
           mp.media_exhibitor_id,
           mp.id AS ponto_id,
           mp.district AS praca,
@@ -132,14 +142,14 @@ module.exports = async (req, res) => {
         WHERE mp.is_deleted = false
           AND mp.is_active = true
           AND (${condicoesExibidorStr})
-          AND mp.code IS NOT NULL
+          AND mp.media_exhibitor_id IS NOT NULL
       ),
       tipos_agrupados AS (
         SELECT 
           COALESCE(praca, cidade, 'Não informado') AS praca_cidade,
           cidade,
+          media_exhibitor_id,
           ${selectExibidorNomeAgrupado}
-          MAX(exibidor_code) AS exibidor_code,
           COUNT(DISTINCT ponto_id) FILTER (WHERE categoria = 'indoor') AS pontos_indoor,
           COUNT(DISTINCT ponto_id) FILTER (WHERE categoria = 'vias_publicas') AS pontos_vias_publicas,
           COUNT(DISTINCT ponto_id) AS total,
@@ -150,13 +160,13 @@ module.exports = async (req, res) => {
           STRING_AGG(DISTINCT tipo_midia, ', ') FILTER (WHERE categoria = 'indoor') AS indoor,
           STRING_AGG(DISTINCT tipo_midia, ', ') FILTER (WHERE categoria = 'vias_publicas') AS vias_publicas
         FROM tipos_por_ponto
-        GROUP BY praca_cidade, cidade
+        GROUP BY praca_cidade, cidade, media_exhibitor_id
       )
       SELECT 
         ta.praca_cidade AS praca_nome,
         ta.cidade,
-        COALESCE(ta.exibidor_nome, ta.exibidor_code) AS exibidor_nome,
-        ta.exibidor_code,
+        COALESCE(ta.exibidor_nome, ta.media_exhibitor_id::text) AS exibidor_nome,
+        ta.media_exhibitor_id::text AS exibidor_code,
         COALESCE(ta.indoor, '') AS indoor,
         COALESCE(ta.vias_publicas, '') AS vias_publicas,
         COALESCE(ta.pontos_indoor, 0)::integer AS pontos_indoor,
