@@ -68,6 +68,25 @@ module.exports = async (req, res) => {
     if (result.recordset.length > 0) {
       console.log(`🔷 [API hexagonos] Amostra do primeiro hexágono:`, result.recordset[0]);
       
+      // VERIFICAÇÃO DAS CORES DOS HEXÁGONOS
+      const primeiroHex = result.recordset[0];
+      console.log(`\n🎨 [CORES DO HEXÁGONO] Verificando campos de cor:`);
+      console.log(`   - hexColor_st: ${primeiroHex.hexColor_st || 'NULL/UNDEFINED'}`);
+      console.log(`   - rgbColorR_vl: ${primeiroHex.rgbColorR_vl !== null && primeiroHex.rgbColorR_vl !== undefined ? primeiroHex.rgbColorR_vl : 'NULL/UNDEFINED'}`);
+      console.log(`   - rgbColorG_vl: ${primeiroHex.rgbColorG_vl !== null && primeiroHex.rgbColorG_vl !== undefined ? primeiroHex.rgbColorG_vl : 'NULL/UNDEFINED'}`);
+      console.log(`   - rgbColorB_vl: ${primeiroHex.rgbColorB_vl !== null && primeiroHex.rgbColorB_vl !== undefined ? primeiroHex.rgbColorB_vl : 'NULL/UNDEFINED'}`);
+      
+      // Análise de quantos hexágonos têm cores
+      const hexComHexColor = result.recordset.filter(h => h.hexColor_st).length;
+      const hexComRGB = result.recordset.filter(h => 
+        h.rgbColorR_vl !== null && h.rgbColorR_vl !== undefined &&
+        h.rgbColorG_vl !== null && h.rgbColorG_vl !== undefined &&
+        h.rgbColorB_vl !== null && h.rgbColorB_vl !== undefined
+      ).length;
+      console.log(`\n🎨 [ESTATÍSTICAS COR] Hexágonos com cores:`);
+      console.log(`   - Com hexColor_st: ${hexComHexColor}/${result.recordset.length} (${((hexComHexColor/result.recordset.length)*100).toFixed(1)}%)`);
+      console.log(`   - Com RGB completo: ${hexComRGB}/${result.recordset.length} (${((hexComRGB/result.recordset.length)*100).toFixed(1)}%)`);
+      
       // Estatísticas de fluxo - ANÁLISE COMPLETA
       const fluxosCalculados = result.recordset.map(h => h.calculatedFluxoEstimado_vl || 0).filter(f => f > 0);
       const fluxosEstimados = result.recordset.map(h => h.fluxoEstimado_vl || 0).filter(f => f > 0);

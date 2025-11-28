@@ -1357,8 +1357,8 @@ export const Mapa: React.FC = () => {
                       return null;
                     }
                     
-                    // SEMPRE usar a cor do grupo do hexágono, nunca a cor do ponto
-                    const cor = corGrupo;
+                    // Usar a cor própria do ponto vinda da view/banco de dados
+                    const cor = ponto.hexColor_st || `rgb(${ponto.rgbColorR_vl},${ponto.rgbColorG_vl},${ponto.rgbColorB_vl})`;
                     
                     // Adicionar à lista de pontos renderizados para usar na legenda
                     pontosRenderizados.push(ponto);
@@ -1410,7 +1410,7 @@ export const Mapa: React.FC = () => {
                         center={[ponto.latitude_vl, ponto.longitude_vl]}
                         pathOptions={{ 
                           color: '#ffffff', // Borda branca fina
-                          fillColor: cor, // SEMPRE cor do grupo do hexágono!
+                          fillColor: cor, // Cor própria do ponto vinda da view/banco
                           fillOpacity: 0.8,
                           weight: 1.5, // Borda fina e clean
                           opacity: 1,
@@ -1858,49 +1858,9 @@ export const Mapa: React.FC = () => {
                   );
                 })()}
                 
-                {/* Legenda de grupos (Hexágonos) */}
-                {(() => {
-                  // Filtrar pontos renderizados para obter apenas os grupos que realmente aparecem no mapa
-                  const pontosParaLegenda = pontosMidia.filter(ponto => {
-                    // Aplicar as mesmas validações usadas na renderização
-                    if (!ponto.grupo_st || !ponto.grupoSub_st) return false;
-                    if (!ponto.grupoSub_st.startsWith(ponto.grupo_st)) return false;
-                    
-                    // Verificar se o grupo existe nos hexágonos
-                    const hexagonoComGrupo = hexagonos.find(h => h.grupo_st === ponto.grupo_st);
-                    if (!hexagonoComGrupo) return false;
-                    
-                    // Validar se o ponto está no hexágono correto
-                    return validarPontoNoHexagonoCorreto(ponto, hexagonos);
-                  });
-                  
-                  // Obter grupos únicos dos pontos renderizados
-                  const gruposRenderizados = new Set(pontosParaLegenda.map(p => p.grupo_st).filter(Boolean));
-                  
-                  // Filtrar hexágonos para mostrar apenas grupos que têm pontos renderizados
-                  const hexagonosParaLegenda = hexagonos.filter(hex => 
-                    hex.grupo_st && gruposRenderizados.has(hex.grupo_st)
-                  );
-                  
-                  if (hexagonosParaLegenda.length === 0) return null;
-                  
-                  return (
-                    <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
-                      <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>🎨 Grupos (Hexágonos)</div>
-                      {Array.from(new Map(hexagonosParaLegenda.map(h => [h.grupoDesc_st, h]))).map(([grupo, hex]) => (
-                        <div key={grupo} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                          <span style={{ display: 'inline-block', width: 18, height: 18, borderRadius: '50%', background: hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`, border: '2px solid #888' }}></span>
-                          <span style={{ fontSize: 11, color: '#444' }}>{grupo || 'Sem grupo'}</span>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-
-                {/* Legenda de SubGrupos (Pontos) - Agrupados por Grupo */}
+                {/* Legenda de Grupos (Pontos) */}
                 {(() => {
                   // Usar apenas os pontos que foram realmente renderizados no mapa
-                  // Filtrar pontosMidia usando a mesma lógica de validação usada na renderização
                   const pontosParaLegenda = pontosMidia.filter(ponto => {
                     // Aplicar as mesmas validações usadas na renderização
                     if (!ponto.grupo_st || !ponto.grupoSub_st) return false;
@@ -1916,81 +1876,45 @@ export const Mapa: React.FC = () => {
                   
                   if (pontosParaLegenda.length === 0) return null;
                   
-                  // Agrupar subgrupos por grupo para mostrar a hierarquia
-                  // IMPORTANTE: Garantir que apenas subgrupos que derivam dos grupos sejam mostrados
-                  const subgruposPorGrupo = new Map<string, Array<{ subgrupo: string; ponto: PontoMidia }>>();
+                  // Agrupar por subgrupo (que agora chamamos de "grupo")
+                  const gruposUnicos = new Map<string, { subgrupo: string; ponto: PontoMidia }>();
                   
                   pontosParaLegenda.forEach((ponto: PontoMidia) => {
-                    // Validar que o ponto tem grupo e subgrupo válidos
-                    if (!ponto.grupo_st || !ponto.grupoSub_st) return;
-                    
-                    // Validar que o subgrupo deriva do grupo
-                    if (!ponto.grupoSub_st.startsWith(ponto.grupo_st)) {
-                      console.warn(`⚠️ [Legenda] Ignorando subgrupo "${ponto.grupoSub_st}" que não deriva do grupo "${ponto.grupo_st}"`);
-                      return;
-                    }
-                    
-                    if (!subgruposPorGrupo.has(ponto.grupo_st)) {
-                      subgruposPorGrupo.set(ponto.grupo_st, []);
-                    }
-                    
-                    const subgrupos = subgruposPorGrupo.get(ponto.grupo_st)!;
-                    if (!subgrupos.find(s => s.subgrupo === ponto.grupoSub_st)) {
-                      subgrupos.push({ subgrupo: ponto.grupoSub_st, ponto });
+                    if (!gruposUnicos.has(ponto.grupoSub_st)) {
+                      gruposUnicos.set(ponto.grupoSub_st, { subgrupo: ponto.grupoSub_st, ponto });
                     }
                   });
                   
-                  // Ordenar subgrupos dentro de cada grupo
-                  subgruposPorGrupo.forEach((subgrupos, grupo) => {
-                    subgrupos.sort((a, b) => a.subgrupo.localeCompare(b.subgrupo));
-                  });
+                  // Ordenar grupos
+                  const gruposOrdenados = Array.from(gruposUnicos.values()).sort((a, b) => 
+                    a.subgrupo.localeCompare(b.subgrupo)
+                  );
                   
                   return (
                     <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 160 }}>
-                      <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 8 }}>📍 SubGrupos (Pontos)</div>
-                      <div style={{ fontSize: 9, color: '#666', marginBottom: 6, fontStyle: 'italic' }}>
-                        Derivados dos grupos
-                      </div>
-                      {Array.from(subgruposPorGrupo.entries())
-                        .sort(([grupoA], [grupoB]) => grupoA.localeCompare(grupoB))
-                        .map(([grupo, subgrupos]) => {
-                        const hexGrupo = hexagonos.find(h => h.grupo_st === grupo);
-                        const corGrupo = hexGrupo 
-                          ? (hexGrupo.hexColor_st || `rgb(${hexGrupo.rgbColorR_vl},${hexGrupo.rgbColorG_vl},${hexGrupo.rgbColorB_vl})`)
-                          : '#999999';
+                      <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 8 }}>📍 Grupos (Pontos)</div>
+                      {gruposOrdenados.map(({ subgrupo, ponto }) => {
+                        // Usar a cor própria do ponto vinda da view/banco
+                        const corPonto = ponto.hexColor_st || `rgb(${ponto.rgbColorR_vl},${ponto.rgbColorG_vl},${ponto.rgbColorB_vl})`;
+                        
+                        const isDigital = ponto.estaticoDigital_st === 'D';
                         
                         return (
-                          <div key={grupo} style={{ marginBottom: 8 }}>
-                            <div style={{ fontSize: 10, fontWeight: 600, color: '#666', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: corGrupo, border: '1px solid #888' }}></span>
-                              {grupo} → {subgrupos.length} subgrupo(s)
-                            </div>
-                            {subgrupos.map(({ subgrupo, ponto }) => {
-                              const isDigital = ponto.estaticoDigital_st === 'D';
-                              return (
-                                <div key={subgrupo} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, marginLeft: 16 }}>
-                                  <svg width={16} height={16} style={{ display: 'block' }}>
-                                    <circle 
-                                      cx={8} 
-                                      cy={8} 
-                                      r={6} 
-                                      fill={corGrupo}
-                                      stroke="#ffffff" 
-                                      strokeWidth={1.5}
-                                      strokeDasharray={isDigital ? undefined : '3,3'}
-                                    />
-                                  </svg>
-                                  <span style={{ fontSize: 10, color: '#444' }}>
-                                    {subgrupo}
-                                    {subgrupo.startsWith(grupo) && (
-                                      <span style={{ fontSize: 8, color: '#999', marginLeft: 4 }}>
-                                        ({subgrupo.substring(grupo.length)})
-                                      </span>
-                                    )}
-                                  </span>
-                                </div>
-                              );
-                            })}
+                          <div key={subgrupo} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                            <svg width={18} height={18} style={{ display: 'block' }}>
+                              <circle 
+                                cx={9} 
+                                cy={9} 
+                                r={7} 
+                                fill={corPonto}
+                                stroke="#ffffff" 
+                                strokeWidth={1.5}
+                                strokeDasharray={isDigital ? undefined : '3,3'}
+                              />
+                            </svg>
+                            <span style={{ fontSize: 11, color: '#444' }}>
+                              {subgrupo}
+                            </span>
                           </div>
                         );
                       })}

@@ -113,6 +113,24 @@ module.exports = async (req, res) => {
       console.log(`   Total de campos: ${Object.keys(primeiroPonto).length}`);
       console.log(`   Todos os campos:`, Object.keys(primeiroPonto).sort().join(', '));
       
+      // VERIFICAÇÃO DAS CORES DO PONTO
+      console.log(`\n🎨 [CORES DO PONTO] Verificando campos de cor:`);
+      console.log(`   - hexColor_st: ${primeiroPonto.hexColor_st || 'NULL/UNDEFINED'}`);
+      console.log(`   - rgbColorR_vl: ${primeiroPonto.rgbColorR_vl !== null && primeiroPonto.rgbColorR_vl !== undefined ? primeiroPonto.rgbColorR_vl : 'NULL/UNDEFINED'}`);
+      console.log(`   - rgbColorG_vl: ${primeiroPonto.rgbColorG_vl !== null && primeiroPonto.rgbColorG_vl !== undefined ? primeiroPonto.rgbColorG_vl : 'NULL/UNDEFINED'}`);
+      console.log(`   - rgbColorB_vl: ${primeiroPonto.rgbColorB_vl !== null && primeiroPonto.rgbColorB_vl !== undefined ? primeiroPonto.rgbColorB_vl : 'NULL/UNDEFINED'}`);
+      
+      // Análise de quantos pontos têm cores
+      const pontosComHexColor = pontosProcessados.filter(p => p.hexColor_st).length;
+      const pontosComRGB = pontosProcessados.filter(p => 
+        p.rgbColorR_vl !== null && p.rgbColorR_vl !== undefined &&
+        p.rgbColorG_vl !== null && p.rgbColorG_vl !== undefined &&
+        p.rgbColorB_vl !== null && p.rgbColorB_vl !== undefined
+      ).length;
+      console.log(`\n🎨 [ESTATÍSTICAS COR] Pontos com cores:`);
+      console.log(`   - Com hexColor_st: ${pontosComHexColor}/${pontosProcessados.length} (${((pontosComHexColor/pontosProcessados.length)*100).toFixed(1)}%)`);
+      console.log(`   - Com RGB completo: ${pontosComRGB}/${pontosProcessados.length} (${((pontosComRGB/pontosProcessados.length)*100).toFixed(1)}%)`);
+      
       // Listar TODOS os campos relacionados a fluxo
       const camposFluxo = Object.keys(primeiroPonto).filter(k => 
         k.toLowerCase().includes('fluxo') || 
