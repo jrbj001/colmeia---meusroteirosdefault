@@ -760,9 +760,9 @@ export const Mapa: React.FC = () => {
   const maxFluxoPontos = pontosMidia.length > 0 ? Math.max(...pontosMidia.map(getFluxoRealPonto)) : 1;
 
   function getRadiusPonto(fluxo: number) {
-    // Raio mínimo 4, máximo 12 (menor que hexágonos para não sobrepor)
-    if (maxFluxoPontos === minFluxoPontos) return 6;
-    return 4 + 8 * ((fluxo - minFluxoPontos) / (maxFluxoPontos - minFluxoPontos));
+    // Raio mínimo 14, máximo 34 - Pontos super visíveis (+20%)
+    if (maxFluxoPontos === minFluxoPontos) return 22;
+    return 14 + 20 * ((fluxo - minFluxoPontos) / (maxFluxoPontos - minFluxoPontos));
   }
 
   // Componente de Status para feedback do usuário
@@ -1377,12 +1377,12 @@ export const Mapa: React.FC = () => {
                           // Isso garante que o fluxo agregado reflita apenas os pontos realmente renderizados
                           if (!fluxoAgregadoPorHexagono.has(hex.hexagon_pk)) {
                             fluxoAgregadoPorHexagono.set(hex.hexagon_pk, { total: 0, count: 0, pontos: [] });
-                          }
-                          const fluxoPontoIndividual = getFluxoRealPonto(ponto);
+                    }
+                    const fluxoPontoIndividual = getFluxoRealPonto(ponto);
                           const agregado = fluxoAgregadoPorHexagono.get(hex.hexagon_pk)!;
-                          agregado.total += fluxoPontoIndividual;
-                          agregado.count += 1;
-                          agregado.pontos.push(ponto);
+                    agregado.total += fluxoPontoIndividual;
+                    agregado.count += 1;
+                    agregado.pontos.push(ponto);
                           
                           console.log(`✅ [Mapa] Ponto ${ponto.planoMidia_pk} (fluxo: ${fluxoPontoIndividual.toLocaleString('pt-BR')}, grupo: ${ponto.grupo_st}, subgrupo: ${ponto.grupoSub_st}) RENDERIZADO no hexágono ${hex.hexagon_pk}. Total agregado agora: ${agregado.total.toLocaleString('pt-BR')} (${agregado.count} pontos renderizados)`);
                           break;
@@ -1395,8 +1395,8 @@ export const Mapa: React.FC = () => {
                     (ponto as any).hexagonoAssociado = hexagonoDoPonto;
                     if (hexagonoDoPonto && fluxoAgregadoPorHexagono.has(hexagonoDoPonto.hexagon_pk)) {
                       const agregado = fluxoAgregadoPorHexagono.get(hexagonoDoPonto.hexagon_pk)!;
-                      (ponto as any).hexagonoFluxoAgregado = agregado.total;
-                      (ponto as any).hexagonoTotalPontos = agregado.count;
+                    (ponto as any).hexagonoFluxoAgregado = agregado.total;
+                    (ponto as any).hexagonoTotalPontos = agregado.count;
                     }
                     
                     // Debug: verificar se a cor está correta
@@ -1411,8 +1411,8 @@ export const Mapa: React.FC = () => {
                         pathOptions={{ 
                           color: '#ffffff', // Borda branca fina
                           fillColor: cor, // Cor própria do ponto vinda da view/banco
-                          fillOpacity: 0.8,
-                          weight: 1.5, // Borda fina e clean
+                          fillOpacity: 0.85,
+                          weight: 1.5,
                           opacity: 1,
                           dashArray: ponto.estaticoDigital_st === 'E' ? '3, 3' : undefined // Tracejado para Estático
                         }}
@@ -1452,17 +1452,17 @@ export const Mapa: React.FC = () => {
                             {/* Grupo e SubGrupo */}
                             <div style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #e5e7eb' }}>
                               <div style={{ marginBottom: 6 }}>
-                                <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>Grupo</div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <span style={{ 
-                                    display: 'inline-block', 
+                              <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>Grupo</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ 
+                                  display: 'inline-block', 
                                     width: 16, 
                                     height: 16, 
-                                    borderRadius: '50%', 
-                                    background: cor,
-                                    border: '2px solid #fff',
-                                    boxShadow: '0 0 0 1px rgba(0,0,0,0.1)'
-                                  }}></span>
+                                  borderRadius: '50%', 
+                                  background: cor,
+                                  border: '2px solid #fff',
+                                  boxShadow: '0 0 0 1px rgba(0,0,0,0.1)'
+                                }}></span>
                                   <span style={{ fontWeight: 600, color: '#111827', fontSize: 13 }}>{ponto.grupo_st || 'N/A'}</span>
                                 </div>
                               </div>
@@ -1867,7 +1867,7 @@ export const Mapa: React.FC = () => {
                     if (!ponto.grupoSub_st.startsWith(ponto.grupo_st)) return false;
                     
                     // Verificar se o grupo existe nos hexágonos
-                    const hexagonoComGrupo = hexagonos.find(h => h.grupo_st === ponto.grupo_st);
+                      const hexagonoComGrupo = hexagonos.find(h => h.grupo_st === ponto.grupo_st);
                     if (!hexagonoComGrupo) return false;
                     
                     // Validar se o ponto está no hexágono correto
