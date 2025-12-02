@@ -760,9 +760,9 @@ export const Mapa: React.FC = () => {
   const maxFluxoPontos = pontosMidia.length > 0 ? Math.max(...pontosMidia.map(getFluxoRealPonto)) : 1;
 
   function getRadiusPonto(fluxo: number) {
-    // Raio mínimo 14, máximo 34 - Pontos super visíveis (+20%)
-    if (maxFluxoPontos === minFluxoPontos) return 22;
-    return 14 + 20 * ((fluxo - minFluxoPontos) / (maxFluxoPontos - minFluxoPontos));
+    // Raio mínimo 6, máximo 16 - Pontos menores para melhor visualização geral
+    if (maxFluxoPontos === minFluxoPontos) return 10;
+    return 6 + 10 * ((fluxo - minFluxoPontos) / (maxFluxoPontos - minFluxoPontos));
   }
 
   // Componente de Status para feedback do usuário
