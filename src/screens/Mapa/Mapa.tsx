@@ -221,6 +221,9 @@ export const Mapa: React.FC = () => {
   const [mostrarSugestoes, setMostrarSugestoes] = React.useState(false);
   const [mostrarModalDetalhes, setMostrarModalDetalhes] = React.useState(false);
   
+  // Estado para controlar visualização dos pontos (tamanho uniforme vs variável)
+  const [tamanhoUniforme, setTamanhoUniforme] = React.useState(false);
+  
   // Hook de otimização do plano
   const { analise, isAnalyzing, analisar, temDados } = usePlanoOptimizer(hexagonos);
   const [erro, setErro] = React.useState<string | null>(null);
@@ -760,6 +763,12 @@ export const Mapa: React.FC = () => {
   const maxFluxoPontos = pontosMidia.length > 0 ? Math.max(...pontosMidia.map(getFluxoRealPonto)) : 1;
 
   function getRadiusPonto(fluxo: number) {
+    // Se tamanho uniforme está ativado, retornar tamanho fixo
+    if (tamanhoUniforme) {
+      return 10; // Tamanho médio fixo para todos os pontos
+    }
+    
+    // Caso contrário, usar tamanho baseado no fluxo
     // Raio mínimo 6, máximo 16 - Pontos menores para melhor visualização geral
     if (maxFluxoPontos === minFluxoPontos) return 10;
     return 6 + 10 * ((fluxo - minFluxoPontos) / (maxFluxoPontos - minFluxoPontos));
@@ -1830,6 +1839,61 @@ export const Mapa: React.FC = () => {
             {/* Legendas agrupadas no canto inferior direito */}
             {hexagonos.length > 0 && (
               <div style={{ position: 'absolute', bottom: 96, right: 64, display: 'flex', gap: 24, flexWrap: 'wrap', zIndex: 1000 }}>
+                {/* Controle de Visualização dos Pontos */}
+                {pontosMidia.length > 0 && (
+                  <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 180 }}>
+                    <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 8 }}>👁️ Modo de Visualização</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <button
+                        onClick={() => setTamanhoUniforme(false)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: 6,
+                          border: '2px solid',
+                          borderColor: !tamanhoUniforme ? '#ff4600' : '#e5e7eb',
+                          background: !tamanhoUniforme ? 'linear-gradient(135deg, #ff4600 0%, #ff6b3d 100%)' : 'white',
+                          color: !tamanhoUniforme ? 'white' : '#666',
+                          fontSize: 11,
+                          fontWeight: !tamanhoUniforme ? 600 : 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6
+                        }}
+                      >
+                        <span>📊</span>
+                        <span>Tamanho Variável</span>
+                        {!tamanhoUniforme && <span>✓</span>}
+                      </button>
+                      <button
+                        onClick={() => setTamanhoUniforme(true)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: 6,
+                          border: '2px solid',
+                          borderColor: tamanhoUniforme ? '#ff4600' : '#e5e7eb',
+                          background: tamanhoUniforme ? 'linear-gradient(135deg, #ff4600 0%, #ff6b3d 100%)' : 'white',
+                          color: tamanhoUniforme ? 'white' : '#666',
+                          fontSize: 11,
+                          fontWeight: tamanhoUniforme ? 600 : 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6
+                        }}
+                      >
+                        <span>⚪</span>
+                        <span>Tamanho Uniforme</span>
+                        {tamanhoUniforme && <span>✓</span>}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
                 {/* Legenda do tamanho - usando fluxo real dos pontos */}
                 {pontosMidia.length > 0 && (() => {
                   const fluxosReais = pontosMidia.map(getFluxoRealPonto);
@@ -1840,20 +1904,34 @@ export const Mapa: React.FC = () => {
                     <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
                       <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>📏 Tamanho dos Pontos</div>
                       <div style={{ fontSize: 9, color: '#666', marginBottom: 6, fontStyle: 'italic' }}>
-                        Baseado no fluxo real
+                        {tamanhoUniforme ? 'Todos os pontos iguais' : 'Baseado no fluxo real'}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <svg width={24} height={24} style={{ display: 'block' }}>
-                          <circle cx={12} cy={12} r={6} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
-                        </svg>
-                        <span style={{ fontSize: 11, color: '#444' }}>Menor fluxo<br/><strong>{formatNumber(minFluxoReal)}</strong></span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <svg width={40} height={40} style={{ display: 'block' }}>
-                          <circle cx={20} cy={20} r={20} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
-                        </svg>
-                        <span style={{ fontSize: 11, color: '#444' }}>Maior fluxo<br/><strong>{formatNumber(maxFluxoReal)}</strong></span>
-                      </div>
+                      {tamanhoUniforme ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <svg width={28} height={28} style={{ display: 'block' }}>
+                            <circle cx={14} cy={14} r={10} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
+                          </svg>
+                          <span style={{ fontSize: 11, color: '#444' }}>
+                            Tamanho uniforme<br/>
+                            <span style={{ fontSize: 9, color: '#666' }}>para todos os pontos</span>
+                          </span>
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                            <svg width={24} height={24} style={{ display: 'block' }}>
+                              <circle cx={12} cy={12} r={6} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
+                            </svg>
+                            <span style={{ fontSize: 11, color: '#444' }}>Menor fluxo<br/><strong>{formatNumber(minFluxoReal)}</strong></span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <svg width={40} height={40} style={{ display: 'block' }}>
+                              <circle cx={20} cy={20} r={20} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
+                            </svg>
+                            <span style={{ fontSize: 11, color: '#444' }}>Maior fluxo<br/><strong>{formatNumber(maxFluxoReal)}</strong></span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   );
                 })()}
