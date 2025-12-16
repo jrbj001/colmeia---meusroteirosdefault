@@ -6,20 +6,29 @@ async function databricksRoteiroSimulado(req, res) {
   }
 
   try {
-    const { planoMidiaDesc_pk, date_dh, date_dt } = req.body;
+    const { planoMidiaGrupo_pk, date_dh, date_dt } = req.body;
 
-    console.log('🎯 [databricksRoteiroSimulado] Iniciando processamento Databricks para roteiro simulado...');
-    console.log('📊 Dados recebidos:', {
-      planoMidiaDesc_pk: planoMidiaDesc_pk, // PK individual da praça (será processado pelo Databricks)
-      date_dh,
-      date_dt
-    });
+    console.log('\n');
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('🔍 [CHAMADA 6] POST /databricks-roteiro-simulado');
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('📊 BODY COMPLETO:', JSON.stringify(req.body, null, 2));
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('📊 planoMidiaGrupo_pk:', planoMidiaGrupo_pk);
+    console.log('📊 Tipo:', typeof planoMidiaGrupo_pk);
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('📊 date_dh:', date_dh);
+    console.log('📊 Tipo:', typeof date_dh);
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('📊 date_dt:', date_dt);
+    console.log('📊 Tipo:', typeof date_dt);
+    console.log('═══════════════════════════════════════════════════════════════');
 
     // Validações básicas
-    if (!planoMidiaDesc_pk) {
+    if (!planoMidiaGrupo_pk) {
       return res.status(400).json({
         success: false,
-        message: 'planoMidiaDesc_pk é obrigatório'
+        message: 'planoMidiaGrupo_pk é obrigatório'
       });
     }
 
@@ -55,15 +64,33 @@ async function databricksRoteiroSimulado(req, res) {
     const requestBody = {
       job_id: parseInt(databricksJobId),
       notebook_params: {
-        planoMidiaGrupo_pk: planoMidiaDesc_pk.toString(),
+        planoMidiaGrupo_pk: planoMidiaGrupo_pk.toString(),
         date_dh: date_dh,
         date_dt: date_dt
       }
     };
 
-    console.log('🚀 [databricksRoteiroSimulado] Executando job Databricks...');
-    console.log(`📋 Job ID: ${databricksJobId}`);
-    console.log(`📊 Parâmetros:`, requestBody.notebook_params);
+    console.log('\n');
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('🚀 EXECUTANDO: Databricks Job');
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('📊 URL:', databricksUrl);
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('📊 Job ID:', databricksJobId);
+    console.log('📊 Tipo:', typeof databricksJobId);
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('📊 REQUEST BODY COMPLETO (que será enviado ao Databricks):');
+    console.log(JSON.stringify(requestBody, null, 2));
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('📊 notebook_params.planoMidiaGrupo_pk:', requestBody.notebook_params.planoMidiaGrupo_pk);
+    console.log('📊 Tipo:', typeof requestBody.notebook_params.planoMidiaGrupo_pk);
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('📊 notebook_params.date_dh:', requestBody.notebook_params.date_dh);
+    console.log('📊 Tipo:', typeof requestBody.notebook_params.date_dh);
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('📊 notebook_params.date_dt:', requestBody.notebook_params.date_dt);
+    console.log('📊 Tipo:', typeof requestBody.notebook_params.date_dt);
+    console.log('═══════════════════════════════════════════════════════════════');
 
     // Executar job no Databricks
     const databricksResponse = await axios.post(databricksUrl, requestBody, {
@@ -86,7 +113,7 @@ async function databricksRoteiroSimulado(req, res) {
         data: {
           run_id: runId,
           job_id: databricksJobId,
-          planoMidiaDesc_pk: planoMidiaDesc_pk, // PK processado
+          planoMidiaGrupo_pk: planoMidiaGrupo_pk, // PK do grupo processado
           parameters: requestBody.notebook_params,
           status: 'RUNNING'
         }

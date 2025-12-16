@@ -1,0 +1,2 @@
+export { PaginaEmDesenvolvimento } from './PaginaEmDesenvolvimento';
+

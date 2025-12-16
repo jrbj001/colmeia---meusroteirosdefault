@@ -11,6 +11,10 @@ import { Mapa } from "./screens/Mapa";
 import { CriarRoteiro } from "./screens/CriarRoteiro";
 import { ConsultaEndereco } from "./screens/ConsultaEndereco";
 import { VisualizarResultados } from "./screens/VisualizarResultados";
+import { BancoDeAtivos } from "./screens/BancoDeAtivos";
+import { RelatorioPorPraca } from "./screens/RelatorioPorPraca";
+import { RelatorioPorExibidor } from "./screens/RelatorioPorExibidor";
+import { PaginaEmDesenvolvimento } from "./components/PaginaEmDesenvolvimento";
 import '../tailwind.css';
 import 'leaflet/dist/leaflet.css';
 
@@ -67,6 +71,90 @@ createRoot(document.getElementById("app") as HTMLElement).render(
               element={
                 <ProtectedRoute>
                   <ConsultaEndereco />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/banco-de-ativos" 
+              element={
+                <ProtectedRoute>
+                  <BancoDeAtivos />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/banco-de-ativos/relatorio-por-praca" 
+              element={
+                <ProtectedRoute>
+                  <RelatorioPorPraca />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/banco-de-ativos/relatorio-por-exibidor" 
+              element={
+                <ProtectedRoute>
+                  <RelatorioPorExibidor />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/banco-de-ativos/cadastrar/grupo-midia" 
+              element={
+                <ProtectedRoute>
+                  <PaginaEmDesenvolvimento 
+                    titulo="Cadastrar Grupo de Mídia"
+                    breadcrumbItems={[
+                      { label: "Home", path: "/" },
+                      { label: "Banco de ativos", path: "/banco-de-ativos" },
+                      { label: "Cadastrar Grupo de Mídia" }
+                    ]}
+                  />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/banco-de-ativos/cadastrar/tipo-midia" 
+              element={
+                <ProtectedRoute>
+                  <PaginaEmDesenvolvimento 
+                    titulo="Cadastrar Tipo de Mídia"
+                    breadcrumbItems={[
+                      { label: "Home", path: "/" },
+                      { label: "Banco de ativos", path: "/banco-de-ativos" },
+                      { label: "Cadastrar Tipo de Mídia" }
+                    ]}
+                  />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/banco-de-ativos/cadastrar/exibidor" 
+              element={
+                <ProtectedRoute>
+                  <PaginaEmDesenvolvimento 
+                    titulo="Cadastrar Exibidor"
+                    breadcrumbItems={[
+                      { label: "Home", path: "/" },
+                      { label: "Banco de ativos", path: "/banco-de-ativos" },
+                      { label: "Cadastrar Exibidor" }
+                    ]}
+                  />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/banco-de-ativos/importar/arquivo" 
+              element={
+                <ProtectedRoute>
+                  <PaginaEmDesenvolvimento 
+                    titulo="Importar Arquivo"
+                    breadcrumbItems={[
+                      { label: "Home", path: "/" },
+                      { label: "Banco de ativos", path: "/banco-de-ativos" },
+                      { label: "Importar Arquivo" }
+                    ]}
+                  />
                 </ProtectedRoute>
               } 
             />
