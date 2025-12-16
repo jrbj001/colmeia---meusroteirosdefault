@@ -146,13 +146,23 @@ export const BancoDeAtivos: React.FC = () => {
   const [loadingBusca, setLoadingBusca] = useState(false);
   const [erroBusca, setErroBusca] = useState<string | null>(null);
   
-  // Estados para as opções dos dropdowns
+  // Estados para as opções dos dropdowns (todas as opções disponíveis)
+  const [todasOpcoesPracas, setTodasOpcoesPracas] = useState<string[]>([]);
+  const [todasOpcoesExibidores, setTodasOpcoesExibidores] = useState<string[]>([]);
+  const [todasOpcoesBairros, setTodasOpcoesBairros] = useState<string[]>([]);
+  
+  // Estados para as opções filtradas (baseadas nos outros filtros selecionados)
   const [opcoesPracas, setOpcoesPracas] = useState<string[]>([]);
   const [opcoesExibidores, setOpcoesExibidores] = useState<string[]>([]);
   const [opcoesBairros, setOpcoesBairros] = useState<string[]>([]);
   const [opcoesGruposMidia, setOpcoesGruposMidia] = useState<Array<{id: number, name: string}>>([]);
   const [opcoesTiposMidiaIndoor, setOpcoesTiposMidiaIndoor] = useState<Array<{id: number, name: string}>>([]);
   const [opcoesTiposMidiaViasPublicas, setOpcoesTiposMidiaViasPublicas] = useState<Array<{id: number, name: string}>>([]);
+  
+  // Estados para o autocomplete de Praça
+  const [inputPraca, setInputPraca] = useState('');
+  const [mostrarSugestoesPraca, setMostrarSugestoesPraca] = useState(false);
+  const [pracasFiltradas, setPracasFiltradas] = useState<string[]>([]);
 
   // Função para obter dados do cache
   const getCachedData = (): DashboardData | null => {
@@ -253,7 +263,7 @@ export const BancoDeAtivos: React.FC = () => {
     return new Intl.NumberFormat('pt-BR').format(numero);
   };
 
-  // Função para carregar opções dos filtros
+  // Função para carregar opções dos filtros e dados completos para filtragem encadeada
   const carregarOpcoesFiltros = async () => {
     try {
       console.log('🔄 Carregando opções dos filtros...');
@@ -286,15 +296,21 @@ export const BancoDeAtivos: React.FC = () => {
 
       // Processar praças - usar nome_cidade da estrutura existente
       const pracas = (responsePracas.data || []).map((c: any) => c.nome_cidade || c.name || c);
-      setOpcoesPracas([...new Set(pracas)].filter(Boolean).sort());
+      const pracasUnicas = [...new Set(pracas)].filter(Boolean).sort();
+      setTodasOpcoesPracas(pracasUnicas);
+      setOpcoesPracas(pracasUnicas);
 
       // Processar exibidores
       const exibidores = (responseExibidores.data || []).map((e: any) => e.name || e);
-      setOpcoesExibidores([...new Set(exibidores)].filter(Boolean).sort());
+      const exibidoresUnicos = [...new Set(exibidores)].filter(Boolean).sort();
+      setTodasOpcoesExibidores(exibidoresUnicos);
+      setOpcoesExibidores(exibidoresUnicos);
 
       // Processar bairros
       const bairros = (responseBairros.data || []).map((b: any) => b.name || b);
-      setOpcoesBairros([...new Set(bairros)].filter(Boolean).sort());
+      const bairrosUnicos = [...new Set(bairros)].filter(Boolean).sort();
+      setTodasOpcoesBairros(bairrosUnicos);
+      setOpcoesBairros(bairrosUnicos);
 
       // Processar grupos de mídia
       setOpcoesGruposMidia(responseGruposMidia.data || []);
@@ -309,6 +325,65 @@ export const BancoDeAtivos: React.FC = () => {
     } catch (err: any) {
       console.error('❌ Erro geral ao carregar opções dos filtros:', err);
       alert('Erro ao carregar opções dos filtros. Verifique o console.');
+    }
+  };
+
+  // Função para atualizar as opções disponíveis baseado nos filtros selecionados
+  // Agora busca do backend em tempo real
+  const atualizarOpcoesFiltradas = async () => {
+    try {
+      // Se nenhum filtro está selecionado, mostrar todas as opções
+      if (!filtros.praca && !filtros.exibidor && !filtros.bairro && !filtros.rating) {
+        setOpcoesPracas(todasOpcoesPracas);
+        setOpcoesExibidores(todasOpcoesExibidores);
+        setOpcoesBairros(todasOpcoesBairros);
+        return;
+      }
+
+      // Construir filtros para buscar opções disponíveis
+      const params = new URLSearchParams();
+      if (filtros.praca) params.append('praca', filtros.praca);
+      if (filtros.exibidor) params.append('exibidor', filtros.exibidor);
+      if (filtros.bairro) params.append('bairro', filtros.bairro);
+      if (filtros.rating) params.append('rating', filtros.rating);
+      
+      // Buscar com limite alto para pegar todas as combinações possíveis
+      params.append('limite', '50000');
+
+      console.log('🔄 Buscando opções filtradas com:', params.toString());
+
+      const response = await api.get(`/busca-pontos-midia?${params.toString()}`);
+      const dados = response.data.data || [];
+
+      // Extrair opções únicas dos dados retornados
+      const pracasDisponiveis = [...new Set(dados.map((d: any) => d.cidade).filter(Boolean))].sort();
+      const exibidoresDisponiveis = [...new Set(dados.map((d: any) => d.exibidor).filter(Boolean))].sort();
+      const bairrosDisponiveis = [...new Set(dados.map((d: any) => d.bairro).filter(Boolean))].sort();
+
+      // Atualizar opções baseadas nos filtros
+      // Se praça não está selecionada, mostrar praças disponíveis pelos outros filtros
+      if (!filtros.praca) {
+        setOpcoesPracas(pracasDisponiveis.length > 0 ? pracasDisponiveis : todasOpcoesPracas);
+      }
+      
+      // Se exibidor não está selecionado, mostrar exibidores disponíveis pelos outros filtros
+      if (!filtros.exibidor) {
+        setOpcoesExibidores(exibidoresDisponiveis.length > 0 ? exibidoresDisponiveis : todasOpcoesExibidores);
+      }
+      
+      // Se bairro não está selecionado, mostrar bairros disponíveis pelos outros filtros
+      if (!filtros.bairro) {
+        setOpcoesBairros(bairrosDisponiveis.length > 0 ? bairrosDisponiveis : todasOpcoesBairros);
+      }
+
+      console.log('✅ Opções filtradas atualizadas:', {
+        pracas: pracasDisponiveis.length,
+        exibidores: exibidoresDisponiveis.length,
+        bairros: bairrosDisponiveis.length
+      });
+    } catch (err) {
+      console.error('❌ Erro ao atualizar opções filtradas:', err);
+      // Em caso de erro, manter as opções atuais
     }
   };
 
@@ -337,9 +412,16 @@ export const BancoDeAtivos: React.FC = () => {
       const response = await api.get(`/busca-pontos-midia?${params.toString()}`);
       
       console.log('✅ [Frontend] Resposta recebida:', response.data);
-      setResultadosBusca(response.data.data || []);
+      console.log('✅ [Frontend] Dados:', response.data.data);
+      console.log('✅ [Frontend] Total de resultados:', response.data.data?.length || 0);
       
-      console.log('✅ [Frontend] Resultados definidos. Total:', response.data.data?.length || 0);
+      if (response.data.data && Array.isArray(response.data.data)) {
+        setResultadosBusca(response.data.data);
+        console.log('✅ [Frontend] State atualizado com', response.data.data.length, 'resultados');
+      } else {
+        console.error('❌ [Frontend] Dados não são um array:', typeof response.data.data);
+        setResultadosBusca([]);
+      }
     } catch (err: any) {
       console.error('❌ [Frontend] Erro ao buscar pontos:', err);
       setErroBusca(err.response?.data?.message || 'Erro ao buscar pontos de mídia');
@@ -392,10 +474,17 @@ export const BancoDeAtivos: React.FC = () => {
 
   // Carregar opções dos filtros quando a aba de busca é aberta
   useEffect(() => {
-    if (abaAtiva === 'busca' && opcoesPracas.length === 0) {
+    if (abaAtiva === 'busca' && todasOpcoesPracas.length === 0) {
       carregarOpcoesFiltros();
     }
   }, [abaAtiva]);
+
+  // Atualizar opções filtradas quando os filtros mudarem
+  useEffect(() => {
+    if (todasOpcoesPracas.length > 0) {
+      atualizarOpcoesFiltradas();
+    }
+  }, [filtros.praca, filtros.exibidor, filtros.bairro, filtros.rating]);
 
   if (loading) {
     return (
@@ -586,54 +675,162 @@ export const BancoDeAtivos: React.FC = () => {
                   <p className="text-sm text-gray-500">Selecione os filtros desejados para buscar pontos de mídia</p>
                 </div>
 
+                {/* Mensagem de filtros encadeados */}
+                {(filtros.praca || filtros.exibidor || filtros.bairro || filtros.rating) && (
+                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
+                    <span className="text-blue-700 font-semibold">🔗 Filtros encadeados ativos:</span>
+                    <span className="text-blue-600 ml-2">Os dropdowns mostram apenas opções relacionadas aos filtros selecionados.</span>
+                  </div>
+                )}
+
                 {/* Grid de Filtros - 4 colunas */}
                 <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {/* Filtro: Praça */}
-                    <div>
+                    {/* Filtro: Praça - Autocomplete */}
+                    <div className="relative">
                       <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">
                         Praça 
-                        {opcoesPracas.length > 0 && <span className="text-xs text-gray-400 ml-2 font-normal normal-case">({opcoesPracas.length})</span>}
+                        {opcoesPracas.length > 0 && (
+                          <span className={`text-xs ml-2 font-normal normal-case ${
+                            (filtros.exibidor || filtros.bairro || filtros.rating) && opcoesPracas.length < todasOpcoesPracas.length
+                              ? 'text-[#ff4600]'
+                              : 'text-gray-400'
+                          }`}>
+                            ({opcoesPracas.length}{(filtros.exibidor || filtros.bairro || filtros.rating) && opcoesPracas.length < todasOpcoesPracas.length ? ` de ${todasOpcoesPracas.length}` : ''})
+                          </span>
+                        )}
                       </label>
-                      <select 
+                      <input
+                        type="text"
                         className="w-full px-3 py-2.5 border border-gray-300 rounded focus:outline-none focus:border-[#ff4600] bg-white text-sm text-gray-700 hover:border-gray-400 transition-colors"
-                        value={filtros.praca}
-                        onChange={(e) => setFiltros({...filtros, praca: e.target.value})}
-                      >
-                        <option value="">{opcoesPracas.length > 0 ? 'Selecione...' : 'Carregando...'}</option>
-                        {opcoesPracas.map(praca => (
-                          <option key={praca} value={praca}>{praca}</option>
-                        ))}
-                      </select>
+                        placeholder="Digite para buscar..."
+                        value={inputPraca}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setInputPraca(value);
+                          
+                          if (value.length >= 2) {
+                            const filtered = opcoesPracas.filter(praca => 
+                              praca.toLowerCase().includes(value.toLowerCase())
+                            );
+                            setPracasFiltradas(filtered);
+                            setMostrarSugestoesPraca(true);
+                          } else {
+                            setMostrarSugestoesPraca(false);
+                            setPracasFiltradas([]);
+                          }
+                          
+                          // Se limpar o campo, limpar o filtro
+                          if (value === '') {
+                            setFiltros({...filtros, praca: ''});
+                          }
+                        }}
+                        onFocus={() => {
+                          if (inputPraca.length >= 2) {
+                            setMostrarSugestoesPraca(true);
+                          }
+                        }}
+                        onBlur={() => {
+                          // Delay para permitir o clique nas sugestões
+                          setTimeout(() => setMostrarSugestoesPraca(false), 200);
+                        }}
+                      />
+                      
+                      {/* Lista de sugestões */}
+                      {mostrarSugestoesPraca && pracasFiltradas.length > 0 && (
+                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
+                          {pracasFiltradas.slice(0, 50).map((praca, index) => (
+                            <div
+                              key={index}
+                              className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm text-gray-700"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setInputPraca(praca);
+                                setFiltros({...filtros, praca: praca});
+                                setMostrarSugestoesPraca(false);
+                              }}
+                            >
+                              {praca}
+                            </div>
+                          ))}
+                          {pracasFiltradas.length > 50 && (
+                            <div className="px-3 py-2 text-xs text-gray-500 italic bg-gray-50">
+                              +{pracasFiltradas.length - 50} resultados... Continue digitando para refinar
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Mensagem quando não há resultados */}
+                      {mostrarSugestoesPraca && pracasFiltradas.length === 0 && inputPraca.length >= 2 && (
+                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg">
+                          <div className="px-3 py-2 text-sm text-gray-500 italic">
+                            Nenhuma praça encontrada
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Filtro: Exibidor */}
                     <div>
                       <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">
                         Exibidor
-                        {opcoesExibidores.length > 0 && <span className="text-xs text-gray-400 ml-2 font-normal normal-case">({opcoesExibidores.length})</span>}
+                        {opcoesExibidores.length > 0 && (
+                          <span className={`text-xs ml-2 font-normal normal-case ${
+                            (filtros.praca || filtros.bairro || filtros.rating) && opcoesExibidores.length < todasOpcoesExibidores.length
+                              ? 'text-[#ff4600]'
+                              : 'text-gray-400'
+                          }`}>
+                            ({opcoesExibidores.length}{(filtros.praca || filtros.bairro || filtros.rating) && opcoesExibidores.length < todasOpcoesExibidores.length ? ` de ${todasOpcoesExibidores.length}` : ''})
+                          </span>
+                        )}
                       </label>
                       <select 
                         className="w-full px-3 py-2.5 border border-gray-300 rounded focus:outline-none focus:border-[#ff4600] bg-white text-sm text-gray-700 hover:border-gray-400 transition-colors"
-                      value={filtros.exibidor}
-                      onChange={(e) => setFiltros({...filtros, exibidor: e.target.value})}
-                    >
-                      <option value="">{opcoesExibidores.length > 0 ? 'Selecione...' : 'Carregando...'}</option>
-                      {opcoesExibidores.map(exibidor => (
-                        <option key={exibidor} value={exibidor}>{exibidor}</option>
-                      ))}
-                    </select>
-                  </div>
+                        value={filtros.exibidor}
+                        onChange={(e) => setFiltros({...filtros, exibidor: e.target.value})}
+                        disabled={todasOpcoesExibidores.length === 0}
+                      >
+                        <option value="">
+                          {todasOpcoesExibidores.length === 0 
+                            ? 'Carregando...' 
+                            : opcoesExibidores.length === 0 
+                              ? 'Nenhum exibidor disponível'
+                              : 'Selecione...'}
+                        </option>
+                        {opcoesExibidores.map(exibidor => (
+                          <option key={exibidor} value={exibidor}>{exibidor}</option>
+                        ))}
+                      </select>
+                    </div>
 
                     {/* Filtro: Bairro */}
                     <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">Bairro</label>
+                      <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">
+                        Bairro
+                        {opcoesBairros.length > 0 && (
+                          <span className={`text-xs ml-2 font-normal normal-case ${
+                            (filtros.praca || filtros.exibidor || filtros.rating) && opcoesBairros.length < todasOpcoesBairros.length
+                              ? 'text-[#ff4600]'
+                              : 'text-gray-400'
+                          }`}>
+                            ({opcoesBairros.length}{(filtros.praca || filtros.exibidor || filtros.rating) && opcoesBairros.length < todasOpcoesBairros.length ? ` de ${todasOpcoesBairros.length}` : ''})
+                          </span>
+                        )}
+                      </label>
                       <select 
                         className="w-full px-3 py-2.5 border border-gray-300 rounded focus:outline-none focus:border-[#ff4600] bg-white text-sm text-gray-700 hover:border-gray-400 transition-colors"
                         value={filtros.bairro}
                         onChange={(e) => setFiltros({...filtros, bairro: e.target.value})}
+                        disabled={todasOpcoesBairros.length === 0}
                       >
-                        <option value="">Selecione...</option>
+                        <option value="">
+                          {todasOpcoesBairros.length === 0 
+                            ? 'Carregando...' 
+                            : opcoesBairros.length === 0 
+                              ? 'Nenhum bairro disponível'
+                              : 'Selecione...'}
+                        </option>
                         {opcoesBairros.map(bairro => (
                           <option key={bairro} value={bairro}>{bairro}</option>
                         ))}
@@ -776,6 +973,9 @@ export const BancoDeAtivos: React.FC = () => {
                         tipo_midia_vias_publicas: '',
                         formato: ''
                       });
+                      setInputPraca('');
+                      setMostrarSugestoesPraca(false);
+                      setPracasFiltradas([]);
                       setResultadosBusca([]);
                     }}
                     className="border border-gray-300 hover:border-gray-400 text-gray-700 hover:text-gray-900 font-semibold py-3 px-6 rounded transition-all text-sm"

@@ -80,10 +80,10 @@ module.exports = async (req, res) => {
       paramIndex += 2;
     }
 
-    // Filtro: Rating (classe social)
+    // Filtro: Rating (classe social) - busca por prefixo (A, B, C)
     if (rating) {
-      conditions.push(`mp.social_class_geo = $${paramIndex}`);
-      params.push(rating);
+      conditions.push(`mp.social_class_geo LIKE $${paramIndex}`);
+      params.push(`${rating}%`);  // Busca A, A1, A2, etc.
       paramIndex++;
     }
 
@@ -129,6 +129,10 @@ module.exports = async (req, res) => {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
+    // Permitir limite customizado via query param (default 1000, máximo 100000)
+    const limiteReq = req.query.limite ? parseInt(req.query.limite) : 1000;
+    const limite = Math.min(limiteReq, 100000); // Máximo 100k para segurança
+
     // Log para debug - mostrar filtros aplicados
     console.log(`📊 [Busca Pontos Mídia] Filtros aplicados:`, {
       praca,
@@ -139,7 +143,8 @@ module.exports = async (req, res) => {
       grupo_midia,
       tipo_ambiente_indoor,
       tipo_midia_vias_publicas,
-      formato
+      formato,
+      limite
     });
     console.log(`📊 [Busca Pontos Mídia] Total de condições: ${conditions.length}`);
 
@@ -174,7 +179,7 @@ module.exports = async (req, res) => {
       LEFT JOIN media_groups mg ON mt.media_group_id = mg.id
       ${whereClause}
       ORDER BY mp.id
-      LIMIT 1000
+      LIMIT ${limite}
     `;
 
     console.log('📊 [Busca Pontos Mídia] Query SQL:', query);
