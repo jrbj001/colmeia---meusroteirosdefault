@@ -260,6 +260,10 @@
     {
       "source": "/teste-cidades",
       "destination": "/api/teste-cidades.js"
+    },
+    {
+      "source": "/banco-ativos-mapa",
+      "destination": "/api/banco-ativos-mapa.js"
     }
   ]
 } 

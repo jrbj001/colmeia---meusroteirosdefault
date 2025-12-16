@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { Topbar } from "../../components/Topbar/Topbar";
+import { MapaDashboardBancoAtivos } from "../../components/MapaDashboardBancoAtivos";
 import api from "../../config/axios";
 
 interface DashboardData {
@@ -663,6 +664,13 @@ export const BancoDeAtivos: React.FC = () => {
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Mapa Interativo - Renderizado separadamente fora do max-w-7xl */}
+            {abaAtiva === 'dashboard' && dados && (
+              <div className="-mx-8 mt-8 mb-8">
+                <MapaDashboardBancoAtivos altura="700px" />
               </div>
             )}
 
