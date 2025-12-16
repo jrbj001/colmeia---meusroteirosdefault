@@ -2469,6 +2469,10 @@ export const CriarRoteiro: React.FC = () => {
           alert('É necessário preencher a Aba 3 antes de prosseguir para a Aba 4.');
         }
         break;
+      case 5:
+        // Aba 5 sempre pode ser acessada (em desenvolvimento)
+        setAbaAtiva(5);
+        break;
       case 6:
         if (aba4Preenchida) {
           setAbaAtiva(6);
