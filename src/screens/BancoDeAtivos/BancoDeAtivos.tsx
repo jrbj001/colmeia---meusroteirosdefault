@@ -528,10 +528,10 @@ export const BancoDeAtivos: React.FC = () => {
           <div className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`} />
           <div className="flex-1 flex items-center justify-center pt-20">
             <div className="text-center">
-              <p className="text-red-600 mb-4">{erro}</p>
+              <p className="text-red-600 mb-4 font-medium">{erro}</p>
               <button
                 onClick={carregarDados}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                className="px-6 py-3 bg-[#ff4600] text-white font-bold rounded hover:bg-[#e03700] transition-all shadow-md hover:shadow-lg uppercase tracking-wide text-sm"
               >
                 Tentar novamente
               </button>
@@ -564,9 +564,9 @@ export const BancoDeAtivos: React.FC = () => {
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-2xl font-bold text-[#ff4600] uppercase tracking-wide">Banco de Ativos</h1>
               {abaAtiva === 'dashboard' && usandoCache && (
-                <div className="flex items-center gap-2 text-xs text-[#666]">
-                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                  <span>Dados em cache • Atualizando em background...</span>
+                <div className="flex items-center gap-2 text-xs text-gray-600">
+                  <span className="w-2 h-2 bg-[#ff4600] rounded-full animate-pulse"></span>
+                  <span className="font-medium">Dados em cache • Atualizando em background...</span>
                 </div>
               )}
               {abaAtiva === 'dashboard' && !loading && dados && (
@@ -609,57 +609,57 @@ export const BancoDeAtivos: React.FC = () => {
               <div className="space-y-8">
                 {/* TOTAL */}
                 <div>
-                  <h2 className="text-lg font-bold text-[#3a3a3a] mb-4">TOTAL</h2>
+                  <h2 className="text-lg font-bold text-gray-900 mb-4 uppercase tracking-wide">Total Geral</h2>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-[#0066CC] text-white rounded-lg p-8 shadow-md">
-                      <div className="text-xs font-medium mb-3 uppercase tracking-wide opacity-90">PONTOS DE MÍDIA</div>
-                      <div className="text-5xl font-bold">{formatarNumero(dados.total.pontos_midia)}</div>
+                    <div className="bg-gradient-to-br from-gray-800 to-gray-900 text-white rounded-lg p-8 shadow-lg hover:shadow-xl transition-shadow">
+                      <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-300">PONTOS DE MÍDIA</div>
+                      <div className="text-5xl font-bold text-[#ff4600]">{formatarNumero(dados.total.pontos_midia)}</div>
                     </div>
-                    <div className="bg-[#0066CC] text-white rounded-lg p-8 shadow-md">
-                      <div className="text-xs font-medium mb-3 uppercase tracking-wide opacity-90">PRAÇAS</div>
-                      <div className="text-5xl font-bold">{formatarNumero(dados.total.pracas)}</div>
+                    <div className="bg-gradient-to-br from-gray-800 to-gray-900 text-white rounded-lg p-8 shadow-lg hover:shadow-xl transition-shadow">
+                      <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-300">PRAÇAS</div>
+                      <div className="text-5xl font-bold text-[#ff4600]">{formatarNumero(dados.total.pracas)}</div>
                     </div>
-                    <div className="bg-[#0066CC] text-white rounded-lg p-8 shadow-md">
-                      <div className="text-xs font-medium mb-3 uppercase tracking-wide opacity-90">EXIBIDORES</div>
-                      <div className="text-5xl font-bold">{formatarNumero(dados.total.exibidores)}</div>
+                    <div className="bg-gradient-to-br from-gray-800 to-gray-900 text-white rounded-lg p-8 shadow-lg hover:shadow-xl transition-shadow">
+                      <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-300">EXIBIDORES</div>
+                      <div className="text-5xl font-bold text-[#ff4600]">{formatarNumero(dados.total.exibidores)}</div>
                     </div>
                   </div>
                 </div>
 
                 {/* VIAS PÚBLICAS */}
                 <div>
-                  <h2 className="text-lg font-bold text-[#3a3a3a] mb-4">Vias Públicas</h2>
+                  <h2 className="text-lg font-bold text-gray-900 mb-4 uppercase tracking-wide">Vias Públicas</h2>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white border border-[#0066CC] rounded-lg p-8 shadow-sm">
-                      <div className="text-xs font-medium text-[#0066CC] mb-3 uppercase tracking-wide">PONTOS DE MÍDIA</div>
-                      <div className="text-5xl font-bold text-[#0066CC]">{formatarNumero(dados.vias_publicas.pontos_midia)}</div>
+                    <div className="bg-white border-2 border-gray-200 rounded-lg p-8 shadow-sm hover:border-[#ff4600] hover:shadow-md transition-all">
+                      <div className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wider">PONTOS DE MÍDIA</div>
+                      <div className="text-5xl font-bold text-gray-900">{formatarNumero(dados.vias_publicas.pontos_midia)}</div>
                     </div>
-                    <div className="bg-white border border-[#0066CC] rounded-lg p-8 shadow-sm">
-                      <div className="text-xs font-medium text-[#0066CC] mb-3 uppercase tracking-wide">PRAÇAS</div>
-                      <div className="text-5xl font-bold text-[#0066CC]">{formatarNumero(dados.vias_publicas.pracas)}</div>
+                    <div className="bg-white border-2 border-gray-200 rounded-lg p-8 shadow-sm hover:border-[#ff4600] hover:shadow-md transition-all">
+                      <div className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wider">PRAÇAS</div>
+                      <div className="text-5xl font-bold text-gray-900">{formatarNumero(dados.vias_publicas.pracas)}</div>
                     </div>
-                    <div className="bg-white border border-[#0066CC] rounded-lg p-8 shadow-sm">
-                      <div className="text-xs font-medium text-[#0066CC] mb-3 uppercase tracking-wide">EXIBIDORES</div>
-                      <div className="text-5xl font-bold text-[#0066CC]">{formatarNumero(dados.vias_publicas.exibidores)}</div>
+                    <div className="bg-white border-2 border-gray-200 rounded-lg p-8 shadow-sm hover:border-[#ff4600] hover:shadow-md transition-all">
+                      <div className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wider">EXIBIDORES</div>
+                      <div className="text-5xl font-bold text-gray-900">{formatarNumero(dados.vias_publicas.exibidores)}</div>
                     </div>
                   </div>
                 </div>
 
                 {/* INDOOR */}
                 <div>
-                  <h2 className="text-lg font-bold text-[#3a3a3a] mb-4">Indoor</h2>
+                  <h2 className="text-lg font-bold text-gray-900 mb-4 uppercase tracking-wide">Indoor</h2>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white border border-[#0066CC] rounded-lg p-8 shadow-sm">
-                      <div className="text-xs font-medium text-[#0066CC] mb-3 uppercase tracking-wide">PONTOS DE MÍDIA</div>
-                      <div className="text-5xl font-bold text-[#0066CC]">{formatarNumero(dados.indoor.pontos_midia)}</div>
+                    <div className="bg-white border-2 border-gray-200 rounded-lg p-8 shadow-sm hover:border-[#ff4600] hover:shadow-md transition-all">
+                      <div className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wider">PONTOS DE MÍDIA</div>
+                      <div className="text-5xl font-bold text-gray-900">{formatarNumero(dados.indoor.pontos_midia)}</div>
                     </div>
-                    <div className="bg-white border border-[#0066CC] rounded-lg p-8 shadow-sm">
-                      <div className="text-xs font-medium text-[#0066CC] mb-3 uppercase tracking-wide">PRAÇAS</div>
-                      <div className="text-5xl font-bold text-[#0066CC]">{formatarNumero(dados.indoor.pracas)}</div>
+                    <div className="bg-white border-2 border-gray-200 rounded-lg p-8 shadow-sm hover:border-[#ff4600] hover:shadow-md transition-all">
+                      <div className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wider">PRAÇAS</div>
+                      <div className="text-5xl font-bold text-gray-900">{formatarNumero(dados.indoor.pracas)}</div>
                     </div>
-                    <div className="bg-white border border-[#0066CC] rounded-lg p-8 shadow-sm">
-                      <div className="text-xs font-medium text-[#0066CC] mb-3 uppercase tracking-wide">EXIBIDORES</div>
-                      <div className="text-5xl font-bold text-[#0066CC]">{formatarNumero(dados.indoor.exibidores)}</div>
+                    <div className="bg-white border-2 border-gray-200 rounded-lg p-8 shadow-sm hover:border-[#ff4600] hover:shadow-md transition-all">
+                      <div className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wider">EXIBIDORES</div>
+                      <div className="text-5xl font-bold text-gray-900">{formatarNumero(dados.indoor.exibidores)}</div>
                     </div>
                   </div>
                 </div>
@@ -677,9 +677,9 @@ export const BancoDeAtivos: React.FC = () => {
 
                 {/* Mensagem de filtros encadeados */}
                 {(filtros.praca || filtros.exibidor || filtros.bairro || filtros.rating) && (
-                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
-                    <span className="text-blue-700 font-semibold">🔗 Filtros encadeados ativos:</span>
-                    <span className="text-blue-600 ml-2">Os dropdowns mostram apenas opções relacionadas aos filtros selecionados.</span>
+                  <div className="mb-4 p-4 bg-gray-50 border-l-4 border-[#ff4600] rounded text-sm">
+                    <span className="text-gray-900 font-bold uppercase tracking-wide">Filtros encadeados ativos</span>
+                    <span className="text-gray-600 ml-2">• Os dropdowns mostram apenas opções relacionadas aos filtros selecionados.</span>
                   </div>
                 )}
 
