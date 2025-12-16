@@ -3385,18 +3385,16 @@ export const CriarRoteiro: React.FC = () => {
 
                       {/* Botão de Download do Template */}
                       <div className="mb-4">
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            alert('Download do template Excel iniciado');
-                          }}
-                          className="flex items-center gap-2 px-4 py-2 text-[#ff4600] hover:text-orange-600 font-medium border border-orange-300 rounded-lg hover:bg-white transition-colors"
+                        <a
+                          href="/Template importacao_NU_Roteiro 02.xlsx"
+                          download="Template_importacao_NU_Roteiro_02.xlsx"
+                          className="flex items-center gap-2 px-4 py-2 text-[#ff4600] hover:text-orange-600 font-medium border border-orange-300 rounded-lg hover:bg-white transition-colors inline-flex"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                           </svg>
                           Download template Excel
-                        </button>
+                        </a>
                     </div>
 
                       {/* Área de Upload */}
