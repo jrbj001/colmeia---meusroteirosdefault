@@ -1918,18 +1918,18 @@ export const Mapa: React.FC = () => {
                         </div>
                       ) : (
                         <>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                            <svg width={24} height={24} style={{ display: 'block' }}>
-                              <circle cx={12} cy={12} r={6} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
-                            </svg>
-                            <span style={{ fontSize: 11, color: '#444' }}>Menor fluxo<br/><strong>{formatNumber(minFluxoReal)}</strong></span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <svg width={40} height={40} style={{ display: 'block' }}>
-                              <circle cx={20} cy={20} r={20} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
-                            </svg>
-                            <span style={{ fontSize: 11, color: '#444' }}>Maior fluxo<br/><strong>{formatNumber(maxFluxoReal)}</strong></span>
-                          </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <svg width={24} height={24} style={{ display: 'block' }}>
+                          <circle cx={12} cy={12} r={6} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
+                        </svg>
+                        <span style={{ fontSize: 11, color: '#444' }}>Menor fluxo<br/><strong>{formatNumber(minFluxoReal)}</strong></span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <svg width={40} height={40} style={{ display: 'block' }}>
+                          <circle cx={20} cy={20} r={20} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
+                        </svg>
+                        <span style={{ fontSize: 11, color: '#444' }}>Maior fluxo<br/><strong>{formatNumber(maxFluxoReal)}</strong></span>
+                      </div>
                         </>
                       )}
                     </div>

@@ -224,6 +224,42 @@
     {
       "source": "/exibidores-praca",
       "destination": "/api/exibidores-praca.js"
+    },
+    {
+      "source": "/busca-pontos-midia",
+      "destination": "/api/busca-pontos-midia.js"
+    },
+    {
+      "source": "/exibidores",
+      "destination": "/api/exibidores.js"
+    },
+    {
+      "source": "/bairros",
+      "destination": "/api/bairros.js"
+    },
+    {
+      "source": "/banco-ativos-dashboard",
+      "destination": "/api/banco-ativos-dashboard.js"
+    },
+    {
+      "source": "/banco-ativos-relatorio-praca",
+      "destination": "/api/banco-ativos-relatorio-praca.js"
+    },
+    {
+      "source": "/tipos-midia-indoor",
+      "destination": "/api/tipos-midia-indoor.js"
+    },
+    {
+      "source": "/tipos-midia-vias-publicas",
+      "destination": "/api/tipos-midia-vias-publicas.js"
+    },
+    {
+      "source": "/grupos-midia",
+      "destination": "/api/grupos-midia.js"
+    },
+    {
+      "source": "/teste-cidades",
+      "destination": "/api/teste-cidades.js"
     }
   ]
 } 
