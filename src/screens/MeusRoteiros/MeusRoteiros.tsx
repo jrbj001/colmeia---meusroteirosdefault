@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import Fuse from "fuse.js";
 import { Avatar } from "../../components/Avatar";
 import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { Topbar } from "../../components/Topbar/Topbar";
@@ -6,6 +7,8 @@ import { ExitToApp } from "../../icons/ExitToApp";
 import { StyleOutlined7 } from "../../icons/StyleOutlined7";
 import { Difference4 } from "../../icons/Difference4";
 import { Delete4 } from "../../icons/Delete4";
+import { Search } from "../../icons/Search";
+import { X } from "../../icons/X";
 import { Pagination } from "./sections/Pagination";
 import api from "../../config/axios";
 import { TableSkeleton } from "./components/TableSkeleton";
@@ -14,6 +17,7 @@ import { CheckCircle } from "../../icons/CheckCircle";
 import { PinDrop } from "../../icons/PinDrop/PinDrop";
 import { Link, useNavigate } from "react-router-dom";
 import { useRoteirosRefresh } from "../../hooks/useRoteirosRefresh";
+import { useDebounce } from "../../hooks/useDebounce";
 
 // Definir a interface dos dados da view
 interface Roteiro {
@@ -56,6 +60,10 @@ export const MeusRoteiros: React.FC = () => {
   });
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  
+  // Aplicar debounce ao termo de busca (300ms)
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   // Verificar se há roteiros em processamento
   const hasProcessing = dados.some(roteiro => roteiro.inProgress_bl === 1);
@@ -66,6 +74,37 @@ export const MeusRoteiros: React.FC = () => {
     onRefresh: () => carregarDados(paginacao.currentPage),
     interval: 5000 // 5 segundos
   });
+
+  // Configuração do Fuse.js para busca fuzzy
+  const fuse = useMemo(() => {
+    return new Fuse(dados, {
+      keys: ['planoMidiaGrupo_st'],
+      threshold: 0.3,
+      includeScore: true,
+      minMatchCharLength: 2,
+      ignoreLocation: true
+    });
+  }, [dados]);
+
+  // Filtra dados baseado no termo de busca (com debounce)
+  const dadosFiltrados = useMemo(() => {
+    if (!debouncedSearchTerm || debouncedSearchTerm.length < 2) {
+      return dados;
+    }
+    
+    const results = fuse.search(debouncedSearchTerm);
+    return results.map(result => result.item);
+  }, [debouncedSearchTerm, fuse, dados]);
+
+  // Handler com debounce para o campo de busca
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  }, []);
+
+  // Limpa a busca
+  const clearSearch = useCallback(() => {
+    setSearchTerm("");
+  }, []);
 
   const formatarData = (dataString: string) => {
     const data = new Date(dataString);
@@ -103,6 +142,7 @@ export const MeusRoteiros: React.FC = () => {
   }, []);
 
   const handlePageChange = (novaPagina: number) => {
+    setSearchTerm(""); // Resetar busca ao mudar de página
     carregarDados(novaPagina);
   };
 
@@ -151,17 +191,47 @@ Email: suporte@be180.com.br`;
             className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`}
           />
           <div className="w-full overflow-x-auto pt-20 flex-1 overflow-auto">
-            <div className="flex items-center justify-between pr-6">
-              <h1 className="text-lg font-bold text-[#222] tracking-wide mb-4 uppercase font-sans mt-4 pl-6">
+            <div className="flex items-center justify-between pr-6 mb-2">
+              <h1 className="text-lg font-bold text-[#222] tracking-wide uppercase font-sans mt-4 pl-6">
                 Meus roteiros
               </h1>
-              {hasProcessing && (
-                <div className="flex items-center gap-2 mb-4 mt-4 text-xs text-[#FF9800]">
-                  <div className="w-2 h-2 bg-[#FF9800] rounded-full animate-pulse"></div>
-                  <span className="font-medium">Atualizando automaticamente</span>
+              <div className="flex items-center gap-4 mt-4">
+                {hasProcessing && (
+                  <div className="flex items-center gap-2 text-xs text-[#FF9800]">
+                    <div className="w-2 h-2 bg-[#FF9800] rounded-full animate-pulse"></div>
+                    <span className="font-medium">Atualizando automaticamente</span>
+                  </div>
+                )}
+                <div className="relative w-96">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={handleSearchChange}
+                    placeholder="Buscar por nome do roteiro..."
+                    className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF9800] focus:border-transparent outline-none transition-all duration-200 text-sm"
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={clearSearch}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 hover:bg-gray-100 rounded-full p-1 transition-colors duration-200"
+                      title="Limpar busca"
+                    >
+                      <X className="w-4 h-4 text-gray-500" />
+                    </button>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
+
+            {searchTerm && searchTerm.length >= 2 && (
+              <div className="px-6 py-2 text-sm text-gray-600 mb-2">
+                {dadosFiltrados.length} resultado{dadosFiltrados.length !== 1 ? 's' : ''} encontrado{dadosFiltrados.length !== 1 ? 's' : ''}
+                {dadosFiltrados.length === 0 && (
+                  <span className="ml-2 text-gray-500">- Tente outro termo de busca</span>
+                )}
+              </div>
+            )}
 
             <div className="w-full">
               <table className="w-full border-separate border-spacing-0 font-sans">
@@ -205,12 +275,14 @@ Email: suporte@be180.com.br`;
                     <tr>
                       <td colSpan={5} className="text-center py-4 text-red-500">{erro}</td>
                     </tr>
-                  ) : dados.length === 0 ? (
+                  ) : dadosFiltrados.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="text-center py-4">Nenhum roteiro encontrado</td>
+                      <td colSpan={5} className="text-center py-4">
+                        {searchTerm ? "Nenhum roteiro encontrado com esse termo" : "Nenhum roteiro encontrado"}
+                      </td>
                     </tr>
                   ) : (
-                    dados.map((item, idx) => (
+                    dadosFiltrados.map((item, idx) => (
                       <tr
                         key={idx}
                         className={`${idx % 2 === 0 ? "bg-[#f7f7f7]" : "bg-white"} hover:bg-[#ececec] transition-colors duration-200`}
