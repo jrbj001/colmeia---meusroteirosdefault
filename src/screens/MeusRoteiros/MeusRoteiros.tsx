@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-import Fuse from "fuse.js";
+import React, { useState, useEffect, useCallback } from "react";
 import { Avatar } from "../../components/Avatar";
 import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { Topbar } from "../../components/Topbar/Topbar";
@@ -61,6 +60,7 @@ export const MeusRoteiros: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const [isSearching, setIsSearching] = useState(false);
   
   // Aplicar debounce ao termo de busca (300ms)
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -71,32 +71,17 @@ export const MeusRoteiros: React.FC = () => {
   // Hook de refresh automático
   useRoteirosRefresh({
     hasProcessing,
-    onRefresh: () => carregarDados(paginacao.currentPage),
+    onRefresh: () => {
+      if (isSearching && debouncedSearchTerm) {
+        buscarRoteiros(debouncedSearchTerm, paginacao.currentPage);
+      } else {
+        carregarDados(paginacao.currentPage);
+      }
+    },
     interval: 5000 // 5 segundos
   });
 
-  // Configuração do Fuse.js para busca fuzzy
-  const fuse = useMemo(() => {
-    return new Fuse(dados, {
-      keys: ['planoMidiaGrupo_st'],
-      threshold: 0.3,
-      includeScore: true,
-      minMatchCharLength: 2,
-      ignoreLocation: true
-    });
-  }, [dados]);
-
-  // Filtra dados baseado no termo de busca (com debounce)
-  const dadosFiltrados = useMemo(() => {
-    if (!debouncedSearchTerm || debouncedSearchTerm.length < 2) {
-      return dados;
-    }
-    
-    const results = fuse.search(debouncedSearchTerm);
-    return results.map(result => result.item);
-  }, [debouncedSearchTerm, fuse, dados]);
-
-  // Handler com debounce para o campo de busca
+  // Handler para o campo de busca
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
   }, []);
@@ -137,13 +122,50 @@ export const MeusRoteiros: React.FC = () => {
     }
   };
 
+  const buscarRoteiros = async (termo: string, pagina: number) => {
+    try {
+      setLoading(true);
+      setErro(null);
+      setIsSearching(true);
+      const response = await api.get(`/roteiros-search?q=${encodeURIComponent(termo)}&page=${pagina}`);
+      console.log('Resposta da busca:', response.data);
+      if (response.data && response.data.data) {
+        setDados(response.data.data);
+        setPaginacao(response.data.pagination);
+      } else {
+        setErro('Formato de resposta inválido da API');
+      }
+    } catch (err: any) {
+      console.error('Erro ao buscar dados:', err);
+      setErro(err.response?.data?.message || 'Erro ao buscar os dados. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     carregarDados(1);
   }, []);
 
+  // Effect para busca com debounce
+  useEffect(() => {
+    if (debouncedSearchTerm && debouncedSearchTerm.length >= 2) {
+      buscarRoteiros(debouncedSearchTerm, 1);
+    } else if (debouncedSearchTerm.length === 0 && isSearching) {
+      // Voltou ao estado normal, recarregar dados
+      setIsSearching(false);
+      carregarDados(paginacao.currentPage);
+    }
+  }, [debouncedSearchTerm]);
+
   const handlePageChange = (novaPagina: number) => {
-    setSearchTerm(""); // Resetar busca ao mudar de página
-    carregarDados(novaPagina);
+    if (isSearching && debouncedSearchTerm) {
+      // Se está buscando, paginar nos resultados da busca
+      buscarRoteiros(debouncedSearchTerm, novaPagina);
+    } else {
+      // Paginação normal
+      carregarDados(novaPagina);
+    }
   };
 
   const handleActionRestricted = (action: string) => {
@@ -224,10 +246,10 @@ Email: suporte@be180.com.br`;
               </div>
             </div>
 
-            {searchTerm && searchTerm.length >= 2 && (
+            {isSearching && searchTerm && searchTerm.length >= 2 && (
               <div className="px-6 py-2 text-sm text-gray-600 mb-2">
-                {dadosFiltrados.length} resultado{dadosFiltrados.length !== 1 ? 's' : ''} encontrado{dadosFiltrados.length !== 1 ? 's' : ''}
-                {dadosFiltrados.length === 0 && (
+                {paginacao.totalItems} resultado{paginacao.totalItems !== 1 ? 's' : ''} encontrado{paginacao.totalItems !== 1 ? 's' : ''} em todo o banco
+                {paginacao.totalItems === 0 && (
                   <span className="ml-2 text-gray-500">- Tente outro termo de busca</span>
                 )}
               </div>
@@ -275,14 +297,14 @@ Email: suporte@be180.com.br`;
                     <tr>
                       <td colSpan={5} className="text-center py-4 text-red-500">{erro}</td>
                     </tr>
-                  ) : dadosFiltrados.length === 0 ? (
+                  ) : dados.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="text-center py-4">
-                        {searchTerm ? "Nenhum roteiro encontrado com esse termo" : "Nenhum roteiro encontrado"}
+                        {isSearching ? "Nenhum roteiro encontrado com esse termo" : "Nenhum roteiro encontrado"}
                       </td>
                     </tr>
                   ) : (
-                    dadosFiltrados.map((item, idx) => (
+                    dados.map((item, idx) => (
                       <tr
                         key={idx}
                         className={`${idx % 2 === 0 ? "bg-[#f7f7f7]" : "bg-white"} hover:bg-[#ececec] transition-colors duration-200`}
