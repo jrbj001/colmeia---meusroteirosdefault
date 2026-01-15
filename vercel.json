@@ -276,6 +276,10 @@
     {
       "source": "/roteiros-delete",
       "destination": "/api/roteiros-delete.js"
+    },
+    {
+      "source": "/roteiro-status",
+      "destination": "/api/roteiro-status.js"
     }
   ]
 } 
