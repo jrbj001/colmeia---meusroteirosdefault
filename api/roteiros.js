@@ -10,10 +10,11 @@ module.exports = async (req, res) => {
     const pageSize = 50;
     const offset = (page - 1) * pageSize;
     const pool = await getPool();
-    const countResult = await pool.request().query('SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaGrupo_dm_vw');
+    const countResult = await pool.request().query('SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaGrupo_dm_vw WHERE delete_bl = 0');
     const total = countResult.recordset[0].total;
     const result = await pool.request().query(`
       SELECT * FROM serv_product_be180.planoMidiaGrupo_dm_vw
+      WHERE delete_bl = 0
       ORDER BY date_dh DESC
       OFFSET ${offset} ROWS
       FETCH NEXT ${pageSize} ROWS ONLY

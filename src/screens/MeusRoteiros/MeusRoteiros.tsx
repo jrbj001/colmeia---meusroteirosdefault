@@ -17,6 +17,7 @@ import { PinDrop } from "../../icons/PinDrop/PinDrop";
 import { Link, useNavigate } from "react-router-dom";
 import { useRoteirosRefresh } from "../../hooks/useRoteirosRefresh";
 import { useDebounce } from "../../hooks/useDebounce";
+import { ConfirmDeleteModal } from "../../components/ConfirmDeleteModal/ConfirmDeleteModal";
 
 // Definir a interface dos dados da view
 interface Roteiro {
@@ -61,6 +62,14 @@ export const MeusRoteiros: React.FC = () => {
   const [erro, setErro] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [isSearching, setIsSearching] = useState(false);
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    roteiro: Roteiro | null;
+  }>({
+    isOpen: false,
+    roteiro: null
+  });
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // Aplicar debounce ao termo de busca (300ms)
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -190,6 +199,63 @@ Email: suporte@be180.com.br`;
         abaInicial: 6
       } 
     });
+  };
+
+  const handleOpenDeleteModal = (roteiro: Roteiro) => {
+    setDeleteModal({
+      isOpen: true,
+      roteiro
+    });
+  };
+
+  const handleCloseDeleteModal = () => {
+    if (!isDeleting) {
+      setDeleteModal({
+        isOpen: false,
+        roteiro: null
+      });
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteModal.roteiro) return;
+
+    try {
+      setIsDeleting(true);
+      setErro(null);
+
+      const response = await api.post('/roteiros-delete', {
+        pk: deleteModal.roteiro.planoMidiaGrupo_pk
+      });
+
+      if (response.data.success) {
+        // Fechar modal
+        setDeleteModal({
+          isOpen: false,
+          roteiro: null
+        });
+
+        // Recarregar dados da página atual
+        if (isSearching && debouncedSearchTerm) {
+          await buscarRoteiros(debouncedSearchTerm, paginacao.currentPage);
+        } else {
+          await carregarDados(paginacao.currentPage);
+        }
+
+        // Mostrar mensagem de sucesso (opcional - você pode criar um toast component)
+        console.log('✅ Roteiro excluído com sucesso');
+      }
+    } catch (err: any) {
+      console.error('❌ Erro ao deletar roteiro:', err);
+      setErro(err.response?.data?.error || 'Erro ao excluir roteiro. Tente novamente.');
+      // Fechar modal em caso de erro também
+      setDeleteModal({
+        isOpen: false,
+        roteiro: null
+      });
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -339,10 +405,11 @@ Email: suporte@be180.com.br`;
                             <Difference4 className="w-6 h-6 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
                           </button>
                           <button
-                            onClick={() => handleActionRestricted("Excluir roteiro")}
+                            onClick={() => handleOpenDeleteModal(item)}
                             className="transition-transform duration-200 hover:scale-110"
+                            title="Excluir roteiro"
                           >
-                            <Delete4 className="w-6 h-6 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
+                            <Delete4 className="w-6 h-6 hover:text-red-600 cursor-pointer text-[#3A3A3A]" />
                           </button>
                         </td>
                       </tr>
@@ -369,6 +436,15 @@ Email: suporte@be180.com.br`;
           </footer>
         </div>
       </div>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <ConfirmDeleteModal
+        isOpen={deleteModal.isOpen}
+        onClose={handleCloseDeleteModal}
+        onConfirm={handleConfirmDelete}
+        roteiroNome={deleteModal.roteiro?.planoMidiaGrupo_st || ""}
+        isDeleting={isDeleting}
+      />
     </>
   );
 };
