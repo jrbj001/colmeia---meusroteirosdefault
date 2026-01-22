@@ -7,6 +7,7 @@ import axios from "../../config/axios";
 import * as XLSX from "xlsx";
 import { useRoteiroStatusPolling } from "../../hooks/useRoteiroStatusPolling";
 import { ProcessingResultsLoader } from "../../components/ProcessingResultsLoader/ProcessingResultsLoader";
+import { AppleSaveLoader } from "../../components/AppleSaveLoader/AppleSaveLoader";
 
 interface Agencia {
   id_agencia: number;
@@ -225,6 +226,16 @@ export const CriarRoteiro: React.FC = () => {
   const [salvandoAba4, setSalvandoAba4] = useState(false);
   const [roteiroSimuladoSalvo, setRoteiroSimuladoSalvo] = useState(false);
   
+  // Estados para loading Apple do roteiro simulado
+  const [showAppleLoader, setShowAppleLoader] = useState(false);
+  const [saveProgress, setSaveProgress] = useState(0);
+  const [saveSteps, setSaveSteps] = useState<Array<{
+    id: string;
+    label: string;
+    status: 'pending' | 'processing' | 'completed' | 'error';
+    detail?: string;
+  }>>([]);
+  
   // 📊 LOADING EM TEMPO REAL - Aba 4
   const [loadingAba4, setLoadingAba4] = useState({
     etapa: '',
@@ -429,16 +440,16 @@ export const CriarRoteiro: React.FC = () => {
     try {
       console.log('🏗️ Gerando tabelas simuladas por praça...', { cidadesSalvas, semanas });
       
-      if (pracasSelecionadasSimulado.length === 0) {
-        alert('Selecione pelo menos uma praça primeiro');
+      if (cidadesSalvas.length === 0) {
+        alert('Configure as praças na Aba 3 primeiro');
         return;
       }
       
       // Objeto para armazenar tabelas por praça: id_cidade -> array de linhas
       const tabelasPorPraca: Record<number, any[]> = {};
       
-      // Gerar uma tabela separada para cada praça
-      for (const praca of pracasSelecionadasSimulado) {
+      // Gerar uma tabela separada para cada praça configurada na Aba 3
+      for (const praca of cidadesSalvas) {
         try {
           const estruturaTabela: any[] = [];
           
@@ -510,6 +521,18 @@ export const CriarRoteiro: React.FC = () => {
   const salvarRoteiroSimulado = async () => {
     try {
       setSalvandoAba4(true);
+      setShowAppleLoader(true);
+      setSaveProgress(0);
+      
+      // Inicializar etapas
+      const initialSteps = [
+        { id: 'validacao', label: 'Validando dados', status: 'processing' as const, detail: 'Verificando configurações' },
+        { id: 'criar-pks', label: 'Criando registros', status: 'pending' as const, detail: `${cidadesSalvas.length} praça(s)` },
+        { id: 'salvar-dados', label: 'Salvando dados das praças', status: 'pending' as const, detail: 'Processando vias públicas' },
+        { id: 'databricks', label: 'Processamento Databricks', status: 'pending' as const, detail: 'Gerando resultados' },
+        { id: 'finalizar', label: 'Finalizando', status: 'pending' as const, detail: 'Concluindo salvamento' }
+      ];
+      setSaveSteps(initialSteps);
       
       console.log('🚀 Iniciando salvamento do roteiro simulado...');
       
@@ -517,35 +540,33 @@ export const CriarRoteiro: React.FC = () => {
       if (!planoMidiaGrupo_pk) {
         alert('É necessário salvar a Aba 1 primeiro');
         setSalvandoAba4(false);
+        setShowAppleLoader(false);
         return;
       }
 
       if (!targetSalvoLocal?.salvo) {
         alert('É necessário salvar a Aba 2 primeiro');
         setSalvandoAba4(false);
+        setShowAppleLoader(false);
         return;
       }
 
       if (cidadesSalvas.length === 0) {
         alert('É necessário configurar as praças na Aba 3 primeiro');
         setSalvandoAba4(false);
-        return;
-      }
-
-      if (pracasSelecionadasSimulado.length === 0) {
-        alert('Selecione pelo menos uma praça para configurar');
-        setSalvandoAba4(false);
+        setShowAppleLoader(false);
         return;
       }
 
       if (Object.keys(tabelaSimulado).length === 0) {
-        alert('Configure a tabela de vias públicas primeiro');
+        alert('Gere a tabela de vias públicas primeiro clicando em "Gerar Tabela"');
         setSalvandoAba4(false);
+        setShowAppleLoader(false);
         return;
       }
 
-      // Verificar se todas as praças selecionadas têm tabela (usando número como chave)
-      const pracasSemTabela = pracasSelecionadasSimulado.filter(p => {
+      // Verificar se todas as praças configuradas têm tabela (usando número como chave)
+      const pracasSemTabela = cidadesSalvas.filter(p => {
         const idPraca = Number(p.id_cidade);
         const tabela = tabelaSimulado[idPraca] || tabelaSimulado[p.id_cidade as any];
         return !tabela || tabela.length === 0;
@@ -553,16 +574,23 @@ export const CriarRoteiro: React.FC = () => {
       if (pracasSemTabela.length > 0) {
         alert(`As seguintes praças não possuem tabela configurada: ${pracasSemTabela.map(p => p.nome_cidade).join(', ')}`);
         setSalvandoAba4(false);
+        setShowAppleLoader(false);
         return;
       }
+      
+      // Validação concluída
+      setSaveSteps(prev => prev.map(step => 
+        step.id === 'validacao' ? { ...step, status: 'completed' as const } : step
+      ));
+      setSaveProgress(10);
 
       console.log('📊 Total de semanas configuradas:', quantidadeSemanas);
-      console.log('📊 Total de praças selecionadas:', pracasSelecionadasSimulado.length);
-      console.log('📊 Praças selecionadas:', pracasSelecionadasSimulado.map(p => `${p.nome_cidade} (ID: ${p.id_cidade}, tipo: ${typeof p.id_cidade})`).join(', '));
+      console.log('📊 Total de praças configuradas:', cidadesSalvas.length);
+      console.log('📊 Praças configuradas:', cidadesSalvas.map(p => `${p.nome_cidade} (ID: ${p.id_cidade}, tipo: ${typeof p.id_cidade})`).join(', '));
       console.log('📊 Tabelas disponíveis:', Object.keys(tabelaSimulado).map(id => `ID ${id} (tipo: ${typeof id})`).join(', '));
       
       // Validar correspondência entre IDs das praças e tabelas
-      pracasSelecionadasSimulado.forEach(praca => {
+      cidadesSalvas.forEach(praca => {
         const idNumero = Number(praca.id_cidade);
         const idString = String(praca.id_cidade);
         const tabelaPorNumero = tabelaSimulado[idNumero];
@@ -581,16 +609,22 @@ export const CriarRoteiro: React.FC = () => {
       const resultadosPraças: any[] = [];
       const errosPraças: any[] = [];
 
-      console.log(`🔄 ETAPA 1: Criando planoMidiaDesc_pk para ${pracasSelecionadasSimulado.length} praça(s) em UMA ÚNICA CHAMADA...`);
-      console.log(`🔄 Lista de praças a processar:`, pracasSelecionadasSimulado.map((p, idx) => `${idx + 1}. ${p.nome_cidade} (ID: ${p.id_cidade})`).join('\n'));
+      console.log(`🔄 ETAPA 1: Criando planoMidiaDesc_pk para ${cidadesSalvas.length} praça(s) em UMA ÚNICA CHAMADA...`);
+      console.log(`🔄 Lista de praças a processar:`, cidadesSalvas.map((p, idx) => `${idx + 1}. ${p.nome_cidade} (ID: ${p.id_cidade})`).join('\n'));
+
+      // Atualizar etapa: Criar PKs
+      setSaveSteps(prev => prev.map(step => 
+        step.id === 'criar-pks' ? { ...step, status: 'processing' as const } : step
+      ));
+      setSaveProgress(15);
 
       // ETAPA 1: Preparar recordsJson com TODAS as cidades
       const allRecordsJson: any[] = [];
       const pracasComIbge: any[] = [];
       
-      for (let i = 0; i < pracasSelecionadasSimulado.length; i++) {
-        const praca = pracasSelecionadasSimulado[i];
-        console.log(`\n📍 ===== INICIANDO PROCESSAMENTO DA PRAÇA ${i + 1}/${pracasSelecionadasSimulado.length} =====`);
+      for (let i = 0; i < cidadesSalvas.length; i++) {
+        const praca = cidadesSalvas[i];
+        console.log(`\n📍 ===== INICIANDO PROCESSAMENTO DA PRAÇA ${i + 1}/${cidadesSalvas.length} =====`);
         console.log(`📍 Nome: ${praca.nome_cidade} - ${praca.nome_estado}`);
         console.log(`📍 ID Cidade: ${praca.id_cidade}`);
         console.log(`📍 Praça completa:`, JSON.stringify(praca));
@@ -686,6 +720,17 @@ export const CriarRoteiro: React.FC = () => {
       
       console.log(`📊 Todos os PKs criados:`, planosMidiaDescPk.join(', '));
       console.log(`📊 Response completo da API:`, JSON.stringify(descResponse.data));
+      
+      // PKs criados com sucesso
+      setSaveSteps(prev => prev.map(step => 
+        step.id === 'criar-pks' ? { ...step, status: 'completed' as const } : step
+      ));
+      setSaveProgress(30);
+      
+      // Iniciar salvamento de dados
+      setSaveSteps(prev => prev.map(step => 
+        step.id === 'salvar-dados' ? { ...step, status: 'processing' as const } : step
+      ));
       
       // ETAPA 3: Salvar roteiro simulado para cada cidade (isso precisa ser loop)
       for (let i = 0; i < pracasComIbge.length; i++) {
@@ -790,13 +835,20 @@ export const CriarRoteiro: React.FC = () => {
               resultado: response.data.data
             });
             console.log(`✅ Roteiro simulado salvo para ${praca.nome_cidade}`);
-            console.log(`📍 ===== FINALIZANDO PROCESSAMENTO DA PRAÇA ${i + 1}/${pracasSelecionadasSimulado.length} =====\n`);
+            console.log(`📍 ===== FINALIZANDO PROCESSAMENTO DA PRAÇA ${i + 1}/${cidadesSalvas.length} =====\n`);
+            
+            // Atualizar progresso de salvamento (30% a 60% distribuído entre as praças)
+            const progressoPorPraca = 30 / cidadesSalvas.length;
+            setSaveProgress(prev => Math.min(prev + progressoPorPraca, 60));
+            setSaveSteps(prev => prev.map(step => 
+              step.id === 'salvar-dados' ? { ...step, detail: `${i + 1}/${cidadesSalvas.length} praça(s) processada(s)` } : step
+            ));
           } else {
             throw new Error(response.data.message || 'Erro desconhecido ao salvar roteiro simulado');
           }
 
         } catch (error: any) {
-          console.error(`\n❌ ===== ERRO AO PROCESSAR PRAÇA ${i + 1}/${pracasSelecionadasSimulado.length} =====`);
+          console.error(`\n❌ ===== ERRO AO PROCESSAR PRAÇA ${i + 1}/${cidadesSalvas.length} =====`);
           console.error(`❌ Praça: ${praca.nome_cidade} (ID: ${praca.id_cidade})`);
           console.error(`❌ Erro:`, error);
           console.error(`❌ Erro completo:`, error.response?.data || error.message || 'Erro desconhecido');
@@ -813,7 +865,7 @@ export const CriarRoteiro: React.FC = () => {
       }
       
       console.log(`\n📊 ===== RESUMO DO PROCESSAMENTO =====`);
-      console.log(`📊 Total de praças selecionadas: ${pracasSelecionadasSimulado.length}`);
+      console.log(`📊 Total de praças configuradas: ${cidadesSalvas.length}`);
       console.log(`📊 Praças processadas com sucesso: ${planosMidiaDescPk.length}`);
       console.log(`📊 Praças com erro: ${errosPraças.length}`);
       console.log(`📊 Planos criados:`, planosMidiaDescPk.join(', '));
@@ -823,12 +875,25 @@ export const CriarRoteiro: React.FC = () => {
       }
 
       console.log(`✅ ETAPAS 1, 2 e 3 CONCLUÍDAS - ${planosMidiaDescPk.length} praça(s) processada(s) com sucesso`);
+      
+      // Dados salvos com sucesso
+      setSaveSteps(prev => prev.map(step => 
+        step.id === 'salvar-dados' ? { ...step, status: 'completed' as const, detail: `${planosMidiaDescPk.length} praça(s) processada(s)` } : step
+      ));
+      setSaveProgress(60);
+      
       console.log('⏳ Aguardando 2 segundos para garantir que todos os dados foram persistidos...');
       
       // Aguardar um pouco para garantir que o SQL Server commitou todos os dados
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       console.log('🔄 ETAPA 4: Executando processamento Databricks para o grupo...');
+
+      // Iniciar Databricks
+      setSaveSteps(prev => prev.map(step => 
+        step.id === 'databricks' ? { ...step, status: 'processing' as const } : step
+      ));
+      setSaveProgress(70);
 
       // Executar Databricks UMA VEZ para o GRUPO (não para cada cidade individual)
       try {
@@ -879,8 +944,33 @@ export const CriarRoteiro: React.FC = () => {
         mensagemSucesso += `✅ PROCESSAMENTO DATABRICKS EXECUTADO!\n`;
         mensagemSucesso += `🎯 ROTEIRO SIMULADO PRONTO PARA VISUALIZAÇÃO!`;
 
-        alert(mensagemSucesso);
+        // Databricks concluído
+        setSaveSteps(prev => prev.map(step => 
+          step.id === 'databricks' ? { ...step, status: 'completed' as const } : step
+        ));
+        setSaveProgress(85);
         
+        // Finalizando
+        setSaveSteps(prev => prev.map(step => 
+          step.id === 'finalizar' ? { ...step, status: 'processing' as const } : step
+        ));
+        setSaveProgress(95);
+        
+        // Aguardar um momento para mostrar o progresso final
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Concluído!
+        setSaveSteps(prev => prev.map(step => 
+          step.id === 'finalizar' ? { ...step, status: 'completed' as const } : step
+        ));
+        setSaveProgress(100);
+        
+        // Aguardar mais um momento antes de fechar o loading
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        setShowAppleLoader(false);
+        alert(mensagemSucesso);
+
         // Marcar roteiro simulado como salvo
         setRoteiroSimuladoSalvo(true);
         
@@ -892,6 +982,15 @@ export const CriarRoteiro: React.FC = () => {
 
       } catch (databricksError) {
         console.error('❌ Erro no processamento Databricks:', databricksError);
+        
+        // Marcar Databricks como erro
+        setSaveSteps(prev => prev.map(step => 
+          step.id === 'databricks' ? { ...step, status: 'error' as const, detail: 'Erro no processamento' } : step
+        ));
+        
+        // Fechar loading após um momento
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        setShowAppleLoader(false);
         
         let mensagemErro = `⚠️ ROTEIRO SIMULADO SALVO, MAS ERRO NO PROCESSAMENTO!\n\n`;
         mensagemErro += `✅ Dados salvos na base calculadora para ${planosMidiaDescPk.length} praça(s)\n`;
@@ -918,6 +1017,18 @@ export const CriarRoteiro: React.FC = () => {
 
     } catch (error) {
       console.error('❌ Erro ao salvar roteiro simulado:', error);
+      
+      // Marcar etapa atual como erro
+      setSaveSteps(prev => prev.map(step => {
+        if (step.status === 'processing') {
+          return { ...step, status: 'error' as const, detail: 'Erro no processamento' };
+        }
+        return step;
+      }));
+      
+      // Fechar loading após um momento
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setShowAppleLoader(false);
       
       let mensagemErro = 'Erro ao salvar roteiro simulado:\n\n';
       if (error instanceof Error && 'response' in error) {
@@ -3489,91 +3600,9 @@ export const CriarRoteiro: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Seleção de Múltiplas Praças */}
-                        {cidadesSalvas.length > 0 && (
-                          <div className="mb-8 bg-white p-6 rounded-xl border-2 border-gray-200 shadow-sm">
-                            <label className="block text-base font-bold text-[#3a3a3a] mb-4">
-                              Selecione as praças para configurar (múltiplas seleções permitidas)
-                            </label>
-                            <div className="space-y-3 max-h-96 overflow-y-auto border-2 border-gray-200 rounded-lg p-4 bg-gray-50">
-                              {cidadesSalvas.map((cidade) => {
-                                const estaPracaSelecionada = pracasSelecionadasSimulado.some(
-                                  p => p.id_cidade === cidade.id_cidade
-                                );
-                                return (
-                                  <label
-                                    key={cidade.id_cidade}
-                                    className="flex items-center gap-3 p-3 bg-white rounded-lg border-2 border-gray-300 hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition-all"
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={estaPracaSelecionada}
-                                      onChange={(e) => {
-                                        if (e.target.checked) {
-                                          // Adicionar praça
-                                          setPracasSelecionadasSimulado([...pracasSelecionadasSimulado, cidade]);
-                                        } else {
-                                          // Remover praça
-                                          setPracasSelecionadasSimulado(
-                                            pracasSelecionadasSimulado.filter(p => p.id_cidade !== cidade.id_cidade)
-                                          );
-                                          // Remover tabela desta praça quando remover - usar número como chave
-                                          setTabelaSimulado((prev) => {
-                                            const novasTabelas = { ...prev };
-                                            const idPraca = Number(cidade.id_cidade);
-                                            delete novasTabelas[idPraca];
-                                            // Também tentar remover se estiver como string
-                                            delete novasTabelas[cidade.id_cidade as any];
-                                            return novasTabelas;
-                                          });
-                                        }
-                                      }}
-                                      className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                                    />
-                                    <div className="flex-1">
-                                      <span className="text-sm font-medium text-gray-800">
-                                        {cidade.nome_cidade} - {cidade.nome_estado}
-                                      </span>
-                                    </div>
-                                    {estaPracaSelecionada && (
-                                      <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                      </div>
-                                    )}
-                                  </label>
-                                );
-                              })}
-                            </div>
-                            {pracasSelecionadasSimulado.length > 0 && (
-                              <div className="mt-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-lg">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                  </svg>
-                                  <p className="text-sm font-medium text-green-800">
-                                    {pracasSelecionadasSimulado.length} {pracasSelecionadasSimulado.length === 1 ? 'praça selecionada' : 'praças selecionadas'}
-                                  </p>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                  {pracasSelecionadasSimulado.map((praca) => (
-                                    <span
-                                      key={praca.id_cidade}
-                                      className="px-3 py-1 bg-green-600 text-white text-xs font-medium rounded-full"
-                                    >
-                                      {praca.nome_cidade} - {praca.nome_estado}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
 
                         {/* Card de Configuração */}
-                        {pracasSelecionadasSimulado.length > 0 && (
+                        {cidadesSalvas.length > 0 && (
                           <div className="mb-8 bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl border-2 border-orange-200 shadow-sm">
                             <div className="space-y-4">
                               {/* Seleção de Semanas */}
@@ -3603,6 +3632,9 @@ export const CriarRoteiro: React.FC = () => {
                               
                               {/* Botão para gerar tabela */}
                               <div>
+                                <p className="text-sm text-gray-600 mb-3">
+                                  Clique no botão abaixo para gerar automaticamente as tabelas de vias públicas para <span className="font-bold text-orange-600">{cidadesSalvas.length} {cidadesSalvas.length === 1 ? 'praça configurada' : 'praças configuradas'}</span>
+                                </p>
                                 <button
                                   type="button"
                                   onClick={() => gerarTabelaSimulado(quantidadeSemanas)}
@@ -3611,7 +3643,7 @@ export const CriarRoteiro: React.FC = () => {
                                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                   </svg>
-                                  Configurar vias públicas
+                                  Gerar Tabelas para Todas as Praças
                                 </button>
                               </div>
                             </div>
@@ -3621,7 +3653,7 @@ export const CriarRoteiro: React.FC = () => {
                         {/* Tabelas Simuladas - Uma por Praça */}
                         {Object.keys(tabelaSimulado).length > 0 && (
                           <div className="mb-8 space-y-8">
-                            {pracasSelecionadasSimulado.map((praca) => {
+                            {cidadesSalvas.map((praca) => {
                               // Buscar tabela usando número como chave
                               const idPracaNumero = Number(praca.id_cidade);
                               const tabelaDaPraca = tabelaSimulado[idPracaNumero] || tabelaSimulado[praca.id_cidade as any];
@@ -4746,6 +4778,14 @@ export const CriarRoteiro: React.FC = () => {
           </footer>
         </div>
       </div>
+      
+      {/* Apple-style Save Loader */}
+      <AppleSaveLoader
+        isOpen={showAppleLoader}
+        steps={saveSteps}
+        currentProgress={saveProgress}
+        title="Salvando Roteiro Simulado"
+      />
     </>
   );
 };
