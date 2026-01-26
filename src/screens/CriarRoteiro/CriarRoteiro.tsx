@@ -8,6 +8,7 @@ import * as XLSX from "xlsx";
 import { useRoteiroStatusPolling } from "../../hooks/useRoteiroStatusPolling";
 import { ProcessingResultsLoader } from "../../components/ProcessingResultsLoader/ProcessingResultsLoader";
 import { AppleSaveLoader } from "../../components/AppleSaveLoader/AppleSaveLoader";
+import { Modal } from "../../components/Modal/Modal";
 
 interface Agencia {
   id_agencia: number;
@@ -105,6 +106,23 @@ export const CriarRoteiro: React.FC = () => {
   
   // Estado unificado de loading para dados prontos (não processamento)
   const [carregandoDadosGerais, setCarregandoDadosGerais] = useState(false);
+  
+  // Estados para Modal de avisos
+  const [modalAberto, setModalAberto] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    title?: string;
+    message: string;
+    type: 'info' | 'warning' | 'error' | 'success';
+  }>({
+    message: '',
+    type: 'info'
+  });
+  
+  // Função helper para mostrar modal
+  const mostrarModal = (message: string, type: 'info' | 'warning' | 'error' | 'success' = 'warning', title?: string) => {
+    setModalConfig({ message, type, title });
+    setModalAberto(true);
+  };
   
   // Estados para controle de processamento em background
   const [aguardandoProcessamento, setAguardandoProcessamento] = useState(false);
@@ -554,28 +572,28 @@ export const CriarRoteiro: React.FC = () => {
       
       // Validações básicas
       if (!planoMidiaGrupo_pk) {
-        alert('É necessário salvar a Aba 1 primeiro');
+        mostrarModal('Preencha os dados básicos do seu roteiro antes de continuar.', 'warning', 'Complete a primeira etapa');
         setSalvandoAba4(false);
         setShowAppleLoader(false);
         return;
       }
 
       if (!targetSalvoLocal?.salvo) {
-        alert('É necessário salvar a Aba 2 primeiro');
+        mostrarModal('Defina o público-alvo do seu plano antes de prosseguir.', 'warning', 'Configure o target');
         setSalvandoAba4(false);
         setShowAppleLoader(false);
         return;
       }
 
       if (cidadesSalvas.length === 0) {
-        alert('É necessário configurar as praças na Aba 3 primeiro');
+        mostrarModal('Selecione pelo menos uma cidade para o seu roteiro.', 'warning', 'Escolha as praças');
         setSalvandoAba4(false);
         setShowAppleLoader(false);
         return;
       }
 
       if (Object.keys(tabelaSimulado).length === 0) {
-        alert('Gere a tabela de vias públicas primeiro clicando em "Gerar Tabela"');
+        mostrarModal('Gere a tabela de vias públicas antes de salvar.', 'warning', 'Tabela não gerada');
         setSalvandoAba4(false);
         setShowAppleLoader(false);
         return;
@@ -1937,13 +1955,13 @@ export const CriarRoteiro: React.FC = () => {
 
     if (roteirosCarregados.length === 0) {
       setLoadingAba4(prev => ({ ...prev, ativo: false }));
-      alert('É necessário carregar um arquivo Excel com roteiros');
+      mostrarModal('Faça o upload do arquivo Excel com os roteiros.', 'warning', 'Arquivo não carregado');
       return;
     }
 
     if (!user) {
       setLoadingAba4(prev => ({ ...prev, ativo: false }));
-      alert('Usuário não está logado');
+      mostrarModal('Sua sessão expirou. Faça login novamente.', 'error', 'Sessão expirada');
       return;
     }
 
@@ -2445,7 +2463,7 @@ export const CriarRoteiro: React.FC = () => {
   // Função para salvar Aba 1 - Criar Plano Mídia Grupo
   const salvarAba1 = async () => {
     if (!nomeRoteiro.trim()) {
-      alert('Nome do roteiro é obrigatório');
+      mostrarModal('Dê um nome para o seu roteiro antes de salvar.', 'warning', 'Nome obrigatório');
       return;
     }
 
@@ -2481,7 +2499,7 @@ export const CriarRoteiro: React.FC = () => {
     }
 
     if (!genero || !classe || !faixaEtaria) {
-      alert('Todos os campos de target são obrigatórios');
+      mostrarModal('Defina todas as características do seu público-alvo.', 'warning', 'Dados incompletos');
       return;
     }
 
@@ -2528,7 +2546,7 @@ export const CriarRoteiro: React.FC = () => {
     }
 
     if (cidadesSelecionadas.length === 0) {
-      alert('É necessário selecionar pelo menos uma cidade');
+      mostrarModal('Escolha pelo menos uma cidade para o seu roteiro.', 'warning', 'Nenhuma cidade selecionada');
       return;
     }
 
@@ -2575,7 +2593,7 @@ export const CriarRoteiro: React.FC = () => {
   // Função para validar se o tipo de roteiro foi selecionado
   const validarTipoRoteiro = () => {
     if (!tipoRoteiro || (tipoRoteiro !== 'completo' && tipoRoteiro !== 'simulado')) {
-      alert('É necessário selecionar o tipo de roteiro (Completo ou Simulado) antes de prosseguir.');
+      mostrarModal('Escolha se o seu roteiro será completo ou simulado.', 'info', 'Selecione o tipo');
       return false;
     }
     return true;
@@ -2597,21 +2615,21 @@ export const CriarRoteiro: React.FC = () => {
         if (aba1Preenchida) {
           setAbaAtiva(2);
         } else {
-          alert('É necessário preencher a Aba 1 antes de prosseguir para a Aba 2.');
+          mostrarModal('Complete os dados básicos antes de continuar.', 'info', 'Etapa 1 pendente');
         }
         break;
       case 3:
         if (aba2Preenchida) {
           setAbaAtiva(3);
         } else {
-          alert('É necessário preencher a Aba 2 antes de prosseguir para a Aba 3.');
+          mostrarModal('Configure o público-alvo antes de escolher as cidades.', 'info', 'Etapa 2 pendente');
         }
         break;
       case 4:
         if (aba3Preenchida) {
           setAbaAtiva(4);
         } else {
-          alert('É necessário preencher a Aba 3 antes de prosseguir para a Aba 4.');
+          mostrarModal('Selecione as cidades do seu roteiro antes de fazer o upload.', 'info', 'Etapa 3 pendente');
         }
         break;
       case 5:
@@ -2622,7 +2640,7 @@ export const CriarRoteiro: React.FC = () => {
         if (aba4Preenchida) {
           setAbaAtiva(6);
         } else {
-          alert('É necessário preencher a Aba 4 antes de prosseguir para a Aba 6.');
+          mostrarModal('Faça o upload dos roteiros antes de ver os resultados.', 'info', 'Etapa 4 pendente');
         }
         break;
       default:
@@ -4843,6 +4861,15 @@ export const CriarRoteiro: React.FC = () => {
         steps={saveSteps}
         currentProgress={saveProgress}
         title="Salvando Roteiro Simulado"
+      />
+      
+      {/* Modal de avisos */}
+      <Modal
+        isOpen={modalAberto}
+        onClose={() => setModalAberto(false)}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        type={modalConfig.type}
       />
     </>
   );
