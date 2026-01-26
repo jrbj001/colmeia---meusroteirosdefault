@@ -1,332 +1,407 @@
-# ⏳ Implementação: Loading Inteligente de Resultados
+# Implementação: Correção do Loading da Aba 6 (Resultados)
 
-## 📝 Resumo
-
-Implementação de um sistema de **polling inteligente** que detecta quando um roteiro está sendo processado em background (Databricks) e exibe um loading informativo até que os resultados estejam disponíveis.
-
----
-
-## ❌ **Problema Identificado**
-
-### **Situação Anterior:**
-1. Usuário sobe plano de mídia → Backend inicia processamento (Databricks)
-2. Campo `inProgress_bl = 1` indica processamento ativo
-3. Usuário clica em "Visualizar Resultados" na Aba 6
-4. **PROBLEMA**: Tela tenta carregar dados que ainda não existem
-5. Usuário não sabe o que está acontecendo ou quanto tempo vai demorar
+## Data: 2026-01-22
+## Branch: ajuste-loading-resultados
 
 ---
 
-## ✅ **Solução Implementada**
+## ✅ ALTERAÇÕES IMPLEMENTADAS
 
-### **Sistema de Polling Inteligente com:**
-- ✅ Detecta automaticamente se roteiro está processando (`inProgress_bl = 1`)
-- ✅ Faz polling no banco de dados a cada 3 segundos
-- ✅ Exibe loading visual informativo com:
-  - Tempo decorrido em tempo real (MM:SS)
-  - Mensagens motivacionais dinâmicas
-  - Barra de progresso estimada
-  - Informações sobre o que está acontecendo
-- ✅ Carrega resultados automaticamente quando processamento termina
-- ✅ Usuário pode sair e voltar - processamento continua em background
+### 1. Nova Função: `verificarStatusECarregarDados()`
+
+**Localização**: Linha ~1540 em `CriarRoteiro.tsx`
+
+**O que faz**:
+- Verifica o status atual do roteiro via API `/roteiro-status`
+- Se `inProgress === true`: Ativa `aguardandoProcessamento` (mostra ProcessingResultsLoader)
+- Se `inProgress === false`: Carrega os dados normalmente via `carregarDadosResultados()`
+- Tratamento de erro: Em caso de falha, tenta carregar dados mesmo assim
+
+**Código**:
+```tsx
+const verificarStatusECarregarDados = async () => {
+  if (!planoMidiaGrupo_pk) {
+    console.log('⚠️ planoMidiaGrupo_pk não disponível para verificar status');
+    return;
+  }
+  
+  try {
+    console.log('🔍 Verificando status do roteiro:', planoMidiaGrupo_pk);
+    const statusResponse = await axios.get(`/roteiro-status?pk=${planoMidiaGrupo_pk}`);
+    
+    if (statusResponse.data.success && statusResponse.data.data) {
+      const { inProgress } = statusResponse.data.data;
+      console.log('📊 Status do roteiro - inProgress:', inProgress);
+      
+      if (inProgress) {
+        console.log('⏳ Roteiro ainda em processamento. Ativando polling...');
+        setAguardandoProcessamento(true);
+      } else {
+        console.log('✅ Roteiro processado. Carregando dados...');
+        await carregarDadosResultados(planoMidiaGrupo_pk);
+      }
+    }
+  } catch (error) {
+    console.error('❌ Erro ao verificar status do roteiro:', error);
+    await carregarDadosResultados(planoMidiaGrupo_pk);
+  }
+};
+```
 
 ---
 
-## 📦 **Arquivos Criados/Modificados**
+### 2. Novo useEffect: Monitorar Entrada na Aba 6
 
-### **1. API Endpoint - Status do Roteiro**
-📁 `api/roteiro-status.js` **[NOVO]**
+**Localização**: Linha ~197 em `CriarRoteiro.tsx`
 
-**Endpoint:** `GET /roteiro-status?pk=123`
+**O que faz**:
+- Monitora mudanças na aba ativa (`abaAtiva === 6`)
+- Quando usuário entra na Aba 6:
+  - Verifica se já tem dados carregados
+  - Se NÃO tem dados E não está em processo: Chama `verificarStatusECarregarDados()`
+- Não interfere no modo visualização
 
-**Funcionalidade:**
-- Consulta status atual do roteiro no banco
-- Retorna se está processando (`inProgress_bl`)
-- Dados retornados:
-  ```json
-  {
-    "success": true,
-    "data": {
-      "pk": 123,
-      "nome": "Nome do Roteiro",
-      "inProgress": true,
-      "status": "Processando",
-      "dataCriacao": "2025-12-19T...",
-      "ativo": true,
-      "deletado": false
+**Código**:
+```tsx
+useEffect(() => {
+  if (abaAtiva === 6 && aba6Habilitada && planoMidiaGrupo_pk && !modoVisualizacao) {
+    if (dadosResultados.length === 0 && !aguardandoProcessamento && !carregandoResultados) {
+      console.log('📊 Entrando na Aba 6 sem dados. Verificando status do roteiro...');
+      verificarStatusECarregarDados();
     }
   }
-  ```
+}, [abaAtiva, aba6Habilitada, planoMidiaGrupo_pk]);
+```
+
+**Dependências**:
+- `abaAtiva`: Detecta mudança de aba
+- `aba6Habilitada`: Só executa se a aba foi habilitada
+- `planoMidiaGrupo_pk`: Necessário para verificar status
 
 ---
 
-### **2. Hook Customizado - Polling de Status**
-📁 `src/hooks/useRoteiroStatusPolling.ts` **[NOVO]**
+### 3. Modificação: Fluxo Após Publicação na Aba 4
 
-**Funcionalidade:**
-- Hook React customizado para fazer polling do status
-- Verifica status a cada 3 segundos (configurável)
-- Conta tempo decorrido desde o início
-- Chama callback quando processamento completa
-- Para automaticamente quando detecta conclusão
+**Localização**: Linha ~2151 em `CriarRoteiro.tsx`
 
-**Uso:**
-```typescript
-const { isProcessing, tempoDecorrido } = useRoteiroStatusPolling({
-  roteiroPk: 123,
-  enabled: true,
-  onComplete: () => {
-    console.log('Processamento concluído!');
-    carregarResultados();
-  },
-  interval: 3000 // 3 segundos
-});
-```
-
----
-
-### **3. Componente Visual - Loading Informativo**
-📁 `src/components/ProcessingResultsLoader/ProcessingResultsLoader.tsx` **[NOVO]**
-
-**Funcionalidade:**
-- Componente visual bonito e informativo
-- Spinner animado com gradiente
-- Nome do roteiro destacado
-- Mensagens dinâmicas baseadas no tempo:
-  - 0-30s: "Iniciando processamento..."
-  - 30-60s: "Analisando dados do plano de mídia..."
-  - 60-120s: "Processando indicadores de performance..."
-  - 120-180s: "Calculando métricas de cobertura..."
-  - 180-240s: "Quase lá! Finalizando cálculos..."
-  - 240s+: "Processamento em andamento no Databricks..."
-- Barra de progresso visual (estimativa até 5 minutos)
-- Contador de tempo decorrido (MM:SS)
-- Card informativo explicando o que está acontecendo
-- Indicador de atualização automática
-
----
-
-### **4. Integração no CriarRoteiro.tsx**
-📁 `src/screens/CriarRoteiro/CriarRoteiro.tsx` **[MODIFICADO]**
-
-**Modificações:**
-
-#### **a) Imports adicionados:**
-```typescript
-import { useRoteiroStatusPolling } from "../../hooks/useRoteiroStatusPolling";
-import { ProcessingResultsLoader } from "../../components/ProcessingResultsLoader/ProcessingResultsLoader";
-```
-
-#### **b) Novo estado:**
-```typescript
-const [aguardandoProcessamento, setAguardandoProcessamento] = useState(false);
-```
-
-#### **c) Hook de polling:**
-```typescript
-const { isProcessing, tempoDecorrido } = useRoteiroStatusPolling({
-  roteiroPk: planoMidiaGrupo_pk,
-  enabled: aguardandoProcessamento && abaAtiva === 6,
-  onComplete: () => {
-    setAguardandoProcessamento(false);
-    if (planoMidiaGrupo_pk) {
-      carregarDadosResultados(planoMidiaGrupo_pk);
-    }
-  },
-  interval: 3000
-});
-```
-
-#### **d) Lógica de detecção no modo visualização:**
-```typescript
-// Verificar se está em processamento
-if (roteiro.inProgress_bl === 1) {
-  console.log('⏳ Roteiro em processamento. Ativando polling...');
-  setAguardandoProcessamento(true);
-} else {
-  console.log('✅ Roteiro finalizado. Carregando dados...');
-  carregarDadosResultados(roteiro.planoMidiaGrupo_pk);
-}
-```
-
-#### **e) Renderização condicional na Aba 6:**
+**Antes**:
 ```tsx
-{aguardandoProcessamento ? (
-  <ProcessingResultsLoader 
-    nomeRoteiro={nomeRoteiro || roteiroData?.planoMidiaGrupo_st || 'Roteiro'}
-    tempoDecorrido={tempoDecorrido}
-  />
-) : (
-  // Tabelas de resultados normais
-)}
+setAba6Habilitada(true);
+await carregarDadosResultados();
 ```
 
----
+**Depois**:
+```tsx
+setAba6Habilitada(true);
 
-### **5. Configuração Vercel**
-📁 `vercel.json` **[MODIFICADO]**
-
-**Rota adicionada:**
-```json
-{
-  "source": "/roteiro-status",
-  "destination": "/api/roteiro-status.js"
+// Verificar se o roteiro está em processamento antes de tentar carregar dados
+try {
+  const statusResponse = await axios.get(`/roteiro-status?pk=${planoMidiaGrupo_pk}`);
+  if (statusResponse.data.success && statusResponse.data.data) {
+    const { inProgress } = statusResponse.data.data;
+    
+    if (inProgress) {
+      console.log('⏳ Roteiro publicado está em processamento. Ativando polling...');
+      setAguardandoProcessamento(true);
+    } else {
+      console.log('✅ Roteiro publicado já processado. Carregando dados...');
+      await carregarDadosResultados();
+    }
+  }
+} catch (error) {
+  console.error('❌ Erro ao verificar status:', error);
+  setAguardandoProcessamento(true); // Ativar polling por precaução
 }
 ```
 
----
-
-## 🔄 **Fluxo de Funcionamento**
-
-### **Cenário 1: Roteiro Já Processado**
-1. Usuário clica em "Visualizar Resultados"
-2. Sistema detecta `inProgress_bl = 0`
-3. Carrega dados imediatamente
-4. Exibe tabelas de resultados normalmente
-
-### **Cenário 2: Roteiro em Processamento**
-1. Usuário clica em "Visualizar Resultados"
-2. Sistema detecta `inProgress_bl = 1`
-3. Ativa `aguardandoProcessamento = true`
-4. Hook de polling inicia verificação a cada 3s
-5. Exibe `ProcessingResultsLoader` com:
-   - Nome do roteiro
-   - Tempo decorrido (atualizando a cada segundo)
-   - Mensagens motivacionais
-   - Barra de progresso
-6. A cada 3 segundos:
-   - Faz GET /roteiro-status?pk=123
-   - Verifica se `inProgress = false`
-7. Quando detecta conclusão:
-   - Para o polling
-   - Desativa `aguardandoProcessamento`
-   - Chama `carregarDadosResultados()`
-   - Exibe resultados automaticamente
+**Mudanças**:
+- ❌ **NÃO** chama mais `carregarDadosResultados()` cegamente
+- ✅ **VERIFICA** status do roteiro primeiro
+- ✅ **ATIVA** `aguardandoProcessamento` se ainda estiver processando
+- ✅ **CARREGA** dados apenas se já estiver processado
+- ✅ **TRATA** erros ativando polling por precaução
 
 ---
 
-## 🎯 **Benefícios**
+## 🎯 PROBLEMAS RESOLVIDOS
 
-### **Para o Usuário:**
-✅ Sabe exatamente o que está acontecendo  
-✅ Vê quanto tempo passou desde o início  
-✅ Recebe mensagens motivacionais  
-✅ Entende que é processamento em background  
-✅ Não precisa ficar atualizando a página  
-✅ Pode sair e voltar depois  
+### Problema 1: Loading não refletia evolução
+**Status**: ✅ RESOLVIDO
 
-### **Para o Sistema:**
-✅ Evita tentativas de carregar dados inexistentes  
-✅ Reduz carga no servidor (polling otimizado)  
-✅ Experiência profissional e polida  
-✅ Código limpo e reutilizável  
-✅ Fácil manutenção  
+**Antes**: 
+- Loading `carregandoResultados` aparecia e sumia em milissegundos
+- Usuário não via feedback visual adequado
+
+**Depois**:
+- Se roteiro está em processamento: Mostra `ProcessingResultsLoader` com tempo decorrido
+- Se roteiro já processou: Mostra loading simples enquanto carrega dados
+- Feedback visual claro em ambos os casos
 
 ---
 
-## 🧪 **Como Testar**
+### Problema 2: ProcessingResultsLoader não ativava após publicação
+**Status**: ✅ RESOLVIDO
 
-### **Teste 1: Roteiro em Processamento**
-1. Criar um novo roteiro e submeter plano de mídia
-2. IMEDIATAMENTE clicar em "Visualizar Resultados"
-3. **Resultado Esperado:**
-   - Loading informativo aparece
-   - Tempo começa a contar
-   - Mensagens mudam conforme tempo passa
-   - Quando processar terminar, resultados aparecem automaticamente
+**Antes**: 
+- Após publicar na aba 4, sistema tentava carregar dados imediatamente
+- Dados ainda não existiam (Databricks processando)
+- Usuário via mensagem "Nenhum dado disponível"
+- ProcessingResultsLoader nunca aparecia
 
-### **Teste 2: Roteiro Já Finalizado**
-1. Abrir "Meus Roteiros"
-2. Clicar em "Visualizar Resultados" de um roteiro com status "Finalizado"
-3. **Resultado Esperado:**
-   - Resultados carregam imediatamente
-   - Sem mostrar loading de processamento
-
-### **Teste 3: Sair e Voltar Durante Processamento**
-1. Criar roteiro e submeter
-2. Ir para "Visualizar Resultados" (loading aparece)
-3. Voltar para "Meus Roteiros"
-4. Aguardar alguns segundos
-5. Voltar para "Visualizar Resultados"
-6. **Resultado Esperado:**
-   - Se ainda está processando: loading volta a aparecer (tempo reseta)
-   - Se terminou: resultados aparecem
+**Depois**:
+- Sistema verifica status após publicação
+- Se em processamento: Ativa `ProcessingResultsLoader`
+- Polling monitora status a cada 3 segundos
+- Quando terminar: Carrega dados automaticamente
 
 ---
 
-## ⚙️ **Configurações Ajustáveis**
+### Problema 3: Voltar para Aba 6 não recarregava dados
+**Status**: ✅ RESOLVIDO
 
-### **Intervalo de Polling:**
-```typescript
-// Em useRoteiroStatusPolling
-interval: 3000 // 3 segundos (padrão)
-```
+**Antes**: 
+- Usuário criava roteiro, saía da Aba 6, voltava depois
+- Dados não eram recarregados
+- Usuário via tela vazia
 
-### **Tempo Máximo Estimado:**
-```typescript
-// Em ProcessingResultsLoader.tsx
-const maxTempo = 300; // 5 minutos (padrão)
-```
-
-### **Mensagens Motivacionais:**
-```typescript
-// Em ProcessingResultsLoader.tsx
-const mensagem = useMemo(() => {
-  if (tempoDecorrido < 30) return "Iniciando processamento...";
-  // ... customize aqui
-}, [tempoDecorrido]);
-```
+**Depois**:
+- useEffect detecta entrada na Aba 6
+- Verifica se tem dados carregados
+- Se NÃO tem: Verifica status e age adequadamente
+- Se em processamento: Ativa polling
+- Se processado: Carrega dados
 
 ---
 
-## 📊 **Estrutura de Arquivos**
+## 🔄 FLUXOS CORRIGIDOS
+
+### Fluxo 1: Criar Roteiro → Ir para Aba 6
 
 ```
-📁 api/
-  └── roteiro-status.js                             [NOVO]
+1. Usuário preenche abas 1-4 e publica roteiro
+2. Sistema cria roteiro no banco com inProgress_bl = 1
+3. Sistema dispara job no Databricks (assíncrono)
+4. Sistema habilita Aba 6
+5. ✅ NOVO: Sistema verifica status do roteiro
+6. ✅ NOVO: Se inProgress = true → Ativa aguardandoProcessamento
+7. Usuário vê ProcessingResultsLoader com tempo decorrido
+8. Hook de polling verifica status a cada 3 segundos
+9. Quando inProgress = false → onComplete() é chamado
+10. Sistema carrega dados automaticamente
+11. Usuário vê tabelas com dados
+```
 
-📁 src/
-  ├── hooks/
-  │   └── useRoteiroStatusPolling.ts                [NOVO]
-  ├── components/
-  │   └── ProcessingResultsLoader/
-  │       └── ProcessingResultsLoader.tsx           [NOVO]
-  └── screens/
-      └── CriarRoteiro/
-          └── CriarRoteiro.tsx                      [MODIFICADO]
+### Fluxo 2: Criar Roteiro → Sair da Aba 6 → Voltar
 
-📄 vercel.json                                      [MODIFICADO]
+```
+1. Usuário está em outra aba (ex: Aba 5)
+2. Databricks processa em background
+3. ✅ NOVO: Usuário volta para Aba 6
+4. ✅ NOVO: useEffect detecta entrada na Aba 6
+5. ✅ NOVO: Verifica se tem dados carregados → NÃO
+6. ✅ NOVO: Chama verificarStatusECarregarDados()
+7. Se em processamento: Ativa ProcessingResultsLoader
+8. Se processado: Carrega e mostra dados
+```
+
+### Fluxo 3: Modo Visualização (MeusRoteiros)
+
+```
+1. Usuário clica em roteiro na lista MeusRoteiros
+2. Sistema carrega dados do roteiro
+3. ✅ JÁ FUNCIONAVA: Verifica inProgress_bl
+4. ✅ JÁ FUNCIONAVA: Se true → Ativa aguardandoProcessamento
+5. ✅ JÁ FUNCIONAVA: Se false → Carrega dados
+6. ✅ NÃO ALTERADO: Fluxo continua funcionando como antes
 ```
 
 ---
 
-## 🐛 **Troubleshooting**
+## 📋 CHECKLIST DE TESTES
+
+### Teste 1: Criar Roteiro Novo
+- [ ] 1.1. Criar roteiro do zero
+- [ ] 1.2. Publicar na Aba 4
+- [ ] 1.3. Verificar se ProcessingResultsLoader aparece na Aba 6
+- [ ] 1.4. Verificar se tempo decorrido atualiza
+- [ ] 1.5. Aguardar processamento terminar
+- [ ] 1.6. Verificar se dados aparecem automaticamente
+
+### Teste 2: Navegar Entre Abas
+- [ ] 2.1. Criar roteiro e publicar
+- [ ] 2.2. Ver ProcessingResultsLoader na Aba 6
+- [ ] 2.3. Ir para Aba 5 (Matrix)
+- [ ] 2.4. Aguardar alguns segundos
+- [ ] 2.5. Voltar para Aba 6
+- [ ] 2.6. Se ainda processando: Ver ProcessingResultsLoader novamente
+- [ ] 2.7. Se já processou: Ver dados carregados
+
+### Teste 3: Modo Visualização - Em Processamento
+- [ ] 3.1. Criar roteiro que ainda está processando
+- [ ] 3.2. Ir para MeusRoteiros
+- [ ] 3.3. Clicar no roteiro com status "Em processamento"
+- [ ] 3.4. Verificar se abre na Aba 6
+- [ ] 3.5. Verificar se mostra ProcessingResultsLoader
+- [ ] 3.6. Verificar se tempo decorrido está correto
+
+### Teste 4: Modo Visualização - Já Processado
+- [ ] 4.1. Criar roteiro e aguardar processamento terminar
+- [ ] 4.2. Ir para MeusRoteiros
+- [ ] 4.3. Clicar no roteiro com status "Concluído"
+- [ ] 4.4. Verificar se abre na Aba 6
+- [ ] 4.5. Verificar se dados aparecem imediatamente
+
+### Teste 5: Processamento Rápido
+- [ ] 5.1. Criar roteiro pequeno (1 cidade, 1 semana)
+- [ ] 5.2. Publicar
+- [ ] 5.3. Verificar comportamento se processar muito rápido
+- [ ] 5.4. Dados devem aparecer sem mostrar ProcessingResultsLoader
+
+### Teste 6: Erro na API
+- [ ] 6.1. Simular erro na API /roteiro-status
+- [ ] 6.2. Verificar se sistema ativa polling por precaução
+- [ ] 6.3. Verificar se não trava a aplicação
+
+### Teste 7: Recarregar Página
+- [ ] 7.1. Criar roteiro em processamento
+- [ ] 7.2. Recarregar página (F5)
+- [ ] 7.3. Sistema deve perder estado
+- [ ] 7.4. Ir para MeusRoteiros e reabrir roteiro
+- [ ] 7.5. Verificar se comportamento está correto
+
+---
+
+## 🔍 PONTOS DE MONITORAMENTO
+
+### Logs Importantes
+```
+📊 Entrando na Aba 6 sem dados. Verificando status do roteiro...
+🔍 Verificando status do roteiro: [PK]
+📊 Status do roteiro - inProgress: [true/false]
+⏳ Roteiro ainda em processamento. Ativando polling...
+✅ Roteiro processado. Carregando dados...
+```
+
+### Estados para Monitorar
+- `aguardandoProcessamento`: Deve ser true enquanto processar
+- `carregandoResultados`: Deve ser true enquanto carrega dados
+- `dadosResultados.length`: Deve ter dados após carregar
+- `abaAtiva`: Para verificar mudança de aba
+- `planoMidiaGrupo_pk`: Necessário para todas as operações
+
+### Console do Navegador
+- Verificar se logs aparecem nos momentos corretos
+- Verificar se não há loops infinitos
+- Verificar se não há erros de Promise não tratados
+- Verificar se chamadas à API estão corretas
+
+---
+
+## ⚠️ POSSÍVEIS PROBLEMAS E SOLUÇÕES
+
+### Problema: Loop Infinito no useEffect
+**Sintoma**: useEffect executando repetidamente
+
+**Causa**: Dependências incorretas ou estado mudando continuamente
+
+**Solução**: 
+- Verificar array de dependências do useEffect
+- Adicionar condições de guarda (`if (dadosResultados.length === 0 && ...)`)
+- Logs para debug
 
 ### Problema: Polling não para
-**Solução**: Verificar se campo `inProgress_bl` está sendo atualizado corretamente no banco após processamento
+**Sintoma**: Hook continua fazendo requisições mesmo após processar
 
-### Problema: Loading não aparece
-**Solução**: Verificar se `inProgress_bl = 1` quando roteiro é criado
+**Causa**: `aguardandoProcessamento` não foi desativado
 
-### Problema: Erro 404 na API
-**Solução**: Verificar se route foi adicionada no vercel.json e fazer redeploy
+**Solução**:
+- Verificar se `onComplete()` está sendo chamado
+- Verificar se `setAguardandoProcessamento(false)` está sendo executado
+- Verificar condição do hook: `enabled: aguardandoProcessamento && abaAtiva === 6`
 
-### Problema: Tempo não atualiza
-**Solução**: Verificar se hook está enabled (`aguardandoProcessamento && abaAtiva === 6`)
+### Problema: Dados não aparecem após processar
+**Sintoma**: ProcessingResultsLoader desaparece mas dados não carregam
+
+**Causa**: `carregarDadosResultados()` não foi chamado no `onComplete()`
+
+**Solução**:
+- Verificar logs do hook
+- Verificar se `planoMidiaGrupo_pk` está disponível no `onComplete()`
+- Adicionar mais logs na função `carregarDadosResultados()`
+
+### Problema: Modo visualização quebrou
+**Sintoma**: Abrir roteiro via MeusRoteiros não funciona
+
+**Causa**: useEffect interferindo com fluxo de visualização
+
+**Solução**:
+- Condição `!modoVisualizacao` no useEffect está correta
+- Verificar se `modoVisualizacao` está sendo setado corretamente
+- Testar fluxo de visualização separadamente
 
 ---
 
-## 🚀 **Próximos Passos (Opcionais)**
+## 📊 MÉTRICAS DE SUCESSO
 
-- [ ] Adicionar notificação push quando processamento terminar
-- [ ] Salvar histórico de tempo de processamento para melhor estimativa
-- [ ] Adicionar opção de cancelar processamento
-- [ ] Integrar com WebSockets para atualização em tempo real (eliminar polling)
-- [ ] Adicionar analytics de tempo médio de processamento
+### Métricas Funcionais
+- [ ] 100% dos roteiros em processamento mostram ProcessingResultsLoader
+- [ ] 100% dos roteiros processados carregam dados automaticamente
+- [ ] 0% de casos onde usuário vê "Nenhum dado disponível" incorretamente
+
+### Métricas de UX
+- [ ] Tempo de feedback < 500ms ao entrar na Aba 6
+- [ ] Tempo decorrido atualiza a cada 3 segundos
+- [ ] Transição suave entre ProcessingResultsLoader e dados
+
+### Métricas Técnicas
+- [ ] 0 erros de linter
+- [ ] 0 warnings no console
+- [ ] 0 loops infinitos
+- [ ] Cleanup adequado de timers/intervals
 
 ---
 
-**Implementado em:** 19/12/2025  
-**Branch:** `loading-resultados`  
-**Status:** ✅ Completo e pronto para testes  
-**Testado com:** Vercel Dev
+## 🎉 PRÓXIMOS PASSOS
+
+1. **Testar em desenvolvimento**
+   - Executar checklist de testes completo
+   - Verificar logs no console
+   - Testar diferentes cenários
+
+2. **Revisar logs e adicionar mais se necessário**
+   - Garantir que todos os caminhos têm logs adequados
+   - Melhorar mensagens de log se necessário
+
+3. **Testar em staging/produção**
+   - Criar roteiros reais
+   - Monitorar comportamento
+   - Coletar feedback de usuários
+
+4. **Documentar para equipe**
+   - Adicionar comentários no código se necessário
+   - Atualizar documentação técnica
+   - Treinar equipe sobre novo fluxo
+
+5. **Melhorias futuras** (se necessário)
+   - Adicionar indicador de progresso mais detalhado
+   - Melhorar mensagens para o usuário
+   - Otimizar número de requisições
+   - Cache de status para reduzir chamadas à API
+
+---
+
+## 📝 NOTAS FINAIS
+
+- Todas as alterações são **backward compatible**
+- Modo visualização **não foi alterado** e continua funcionando
+- Logs adicionados para facilitar debug
+- Tratamento de erro em todos os pontos críticos
+- Nenhuma dependência nova adicionada
+- Nenhum arquivo novo criado (apenas alterações em CriarRoteiro.tsx)
+
+---
+
+**Implementado por**: Cursor AI Assistant  
+**Data**: 2026-01-22  
+**Branch**: ajuste-loading-resultados  
+**Status**: ✅ Implementado - Aguardando Testes

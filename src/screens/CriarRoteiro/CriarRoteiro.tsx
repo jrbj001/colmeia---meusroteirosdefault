@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { Topbar } from "../../components/Topbar/Topbar";
 import { useAuth } from "../../contexts/AuthContext";
@@ -89,31 +89,32 @@ export const CriarRoteiro: React.FC = () => {
   // Estados para aba 6 - Resultados
   const [dadosResultados, setDadosResultados] = useState<any[]>([]);
   const [totaisResultados, setTotaisResultados] = useState<any>(null);
-  const [carregandoResultados, setCarregandoResultados] = useState(false);
   const [aba6Habilitada, setAba6Habilitada] = useState(false);
   
   // Estados para visão semanal
   const [tipoVisualizacao, setTipoVisualizacao] = useState<'geral' | 'praca'>('geral');
   const [dadosSemanais, setDadosSemanais] = useState<any[]>([]);
   const [dadosSemanaisSummary, setDadosSemanaisSummary] = useState<any[]>([]);
-  const [carregandoSemanais, setCarregandoSemanais] = useState(false);
   
   // Estados para dados de target
   const [dadosTarget, setDadosTarget] = useState<any[]>([]);
   const [totaisTarget, setTotaisTarget] = useState<any>(null);
-  const [carregandoTarget, setCarregandoTarget] = useState(false);
   const [dadosSemanaisTarget, setDadosSemanaisTarget] = useState<any[]>([]);
   const [dadosSemanaisTargetSummary, setDadosSemanaisTargetSummary] = useState<any[]>([]);
   const [carregandoSemanaisTarget, setCarregandoSemanaisTarget] = useState(false);
+  
+  // Estado unificado de loading para dados prontos (não processamento)
+  const [carregandoDadosGerais, setCarregandoDadosGerais] = useState(false);
   
   // Estados para controle de processamento em background
   const [aguardandoProcessamento, setAguardandoProcessamento] = useState(false);
   const [planoMidiaGrupo_pk, setPlanoMidiaGrupo_pk] = useState<number | null>(null);
 
   // Hook de polling para verificar status do processamento
+  // ✅ Usa dataCriacao do banco como timestamp - sempre consistente!
   const { isProcessing, tempoDecorrido } = useRoteiroStatusPolling({
     roteiroPk: planoMidiaGrupo_pk,
-    enabled: aguardandoProcessamento && abaAtiva === 6,
+    enabled: aguardandoProcessamento, // Polling funciona em background
     onComplete: () => {
       console.log('✅ Processamento concluído! Carregando resultados...');
       setAguardandoProcessamento(false);
@@ -123,6 +124,13 @@ export const CriarRoteiro: React.FC = () => {
     },
     interval: 3000 // Verificar a cada 3 segundos
   });
+
+  // Debug: Monitorar mudanças no tempoDecorrido
+  useEffect(() => {
+    console.log('🕐 CriarRoteiro - tempoDecorrido atualizado para:', tempoDecorrido, 'segundos');
+    console.log('📍 aguardandoProcessamento:', aguardandoProcessamento);
+    console.log('📍 planoMidiaGrupo_pk:', planoMidiaGrupo_pk);
+  }, [tempoDecorrido, aguardandoProcessamento, planoMidiaGrupo_pk]);
 
   // Detectar modo visualização e carregar dados
   useEffect(() => {
@@ -183,16 +191,24 @@ export const CriarRoteiro: React.FC = () => {
     }
   }, [location.state]);
 
-  // Forçar re-render quando tipoVisualizacao muda para garantir que dados sejam exibidos
+  // useEffect removido - não é mais necessário forçar re-render
+  // O estado unificado carregandoDadosGerais é gerenciado pela função carregarDadosResultados
+
+  // Verificar status e carregar dados ao entrar na Aba 6
   useEffect(() => {
-    // Fazer uma forçar atualização dos estados para garantir renderização
-    if (tipoVisualizacao === 'praca' && dadosSemanais.length > 0 && carregandoSemanais) {
-      setCarregandoSemanais(false);
+    if (abaAtiva === 6 && aba6Habilitada && planoMidiaGrupo_pk && !modoVisualizacao) {
+      // Verificar se já tem dados carregados ou se está em algum processo
+      // ✅ IMPORTANTE: NÃO verificar status se JÁ ESTÁ aguardando processamento
+      // Isso evita resetar o polling quando volta para a aba
+      if (dadosResultados.length === 0 && !aguardandoProcessamento && !carregandoDadosGerais) {
+        console.log('📊 Entrando na Aba 6 sem dados e sem processamento ativo. Verificando status do roteiro...');
+        verificarStatusECarregarDados();
+      } else if (aguardandoProcessamento) {
+        console.log('⏳ Retornando para Aba 6 com processamento JÁ EM ANDAMENTO. Continuando polling...');
+        // Não fazer nada - o polling já está ativo em background
+      }
     }
-    if (tipoVisualizacao === 'geral' && dadosResultados.length > 0 && carregandoResultados) {
-      setCarregandoResultados(false);
-    }
-  }, [tipoVisualizacao, dadosSemanais.length, dadosResultados.length, carregandoSemanais, carregandoResultados]);
+  }, [abaAtiva, aba6Habilitada, planoMidiaGrupo_pk]);
 
   
   // Estados para aba 2 - Configurar target
@@ -977,8 +993,23 @@ export const CriarRoteiro: React.FC = () => {
         // Marcar Aba 4 como preenchida (permite ir para Aba 6)
         setAba4Preenchida(true);
         
-        // Ativar Aba 6 para visualizar resultados
+        // Ativar Aba 6 e navegar para ela
         setAba6Habilitada(true);
+        setAbaAtiva(6);
+        
+        // Ativar polling para aguardar processamento do Databricks
+        console.log('⏳ Roteiro simulado publicado. Ativando polling para aguardar processamento...');
+        console.log('📊 PK do roteiro para polling:', planoMidiaGrupo_pk);
+        console.log('📊 Tipo de planoMidiaGrupo_pk:', typeof planoMidiaGrupo_pk);
+        
+        if (!planoMidiaGrupo_pk) {
+          console.error('❌ ERRO CRÍTICO: planoMidiaGrupo_pk está null ao tentar ativar polling!');
+          alert('Erro: PK do roteiro não encontrado. O polling não funcionará.');
+        } else {
+          console.log('✅ PK válido encontrado:', planoMidiaGrupo_pk);
+        }
+        
+        setAguardandoProcessamento(true);
 
       } catch (databricksError) {
         console.error('❌ Erro no processamento Databricks:', databricksError);
@@ -1525,6 +1556,37 @@ export const CriarRoteiro: React.FC = () => {
     }
   };
 
+  // Função para verificar status do roteiro e decidir se carrega dados ou ativa polling
+  const verificarStatusECarregarDados = async () => {
+    if (!planoMidiaGrupo_pk) {
+      console.log('⚠️ planoMidiaGrupo_pk não disponível para verificar status');
+      return;
+    }
+    
+    try {
+      console.log('🔍 Verificando status do roteiro:', planoMidiaGrupo_pk);
+      const statusResponse = await axios.get(`/roteiro-status?pk=${planoMidiaGrupo_pk}`);
+      
+      if (statusResponse.data.success && statusResponse.data.data) {
+        const { inProgress } = statusResponse.data.data;
+        console.log('📊 Status do roteiro - inProgress:', inProgress);
+        
+        if (inProgress) {
+          console.log('⏳ Roteiro ainda em processamento. Ativando polling...');
+          setAguardandoProcessamento(true);
+        } else {
+          console.log('✅ Roteiro processado. Carregando dados...');
+          await carregarDadosResultados(planoMidiaGrupo_pk);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Erro ao verificar status do roteiro:', error);
+      // Em caso de erro, tentar carregar os dados mesmo assim
+      console.log('⚠️ Tentando carregar dados mesmo com erro no status...');
+      await carregarDadosResultados(planoMidiaGrupo_pk);
+    }
+  };
+
   // Função para carregar dados dos resultados
   const carregarDadosResultados = async (pkOverride?: number) => {
     const pkToUse = pkOverride || planoMidiaGrupo_pk;
@@ -1538,23 +1600,15 @@ export const CriarRoteiro: React.FC = () => {
     }
 
     try {
-      // ATIVAR TODOS OS LOADINGS ANTES DE COMEÇAR A CARREGAR
-      setCarregandoResultados(true);
-      setCarregandoTarget(true);
-      setCarregandoSemanais(true);
+      // ✅ ATIVAR LOADING UNIFICADO
+      setCarregandoDadosGerais(true);
       
       console.log('🔄 Carregando TODOS os dados em paralelo...');
       console.log('📊 PK sendo usado:', pkToUse);
 
-      // Carregar TUDO em paralelo: resumo geral + target + semanais
-      const [
-        responseGeral,
-        summaryResponseGeral,
-        responseTarget,
-        summaryResponseTarget,
-        responseSemanais,
-        summaryResponseSemanais
-      ] = await Promise.all([
+      // Carregar TUDO em paralelo usando Promise.allSettled (permite falhas individuais)
+      // 404 é esperado para roteiros simulados (apenas Vias Públicas tem dados)
+      const results = await Promise.allSettled([
         axios.post('/report-indicadores-vias-publicas', { report_pk: pkToUse }),
         axios.post('/report-indicadores-summary', { report_pk: pkToUse }),
         axios.post('/report-indicadores-target', { report_pk: pkToUse }),
@@ -1563,14 +1617,24 @@ export const CriarRoteiro: React.FC = () => {
         axios.post('/report-indicadores-week-summary', { report_pk: pkToUse })
       ]);
 
-      console.log('📊 Todas as respostas recebidas!');
+      // Extrair respostas (ou null se falharam)
+      const [
+        responseGeral,
+        summaryResponseGeral,
+        responseTarget,
+        summaryResponseTarget,
+        responseSemanais,
+        summaryResponseSemanais
+      ] = results.map(result => result.status === 'fulfilled' ? result.value : null);
+
+      console.log('📊 Todas as requisições concluídas!');
 
       // Processar dados gerais
-      if (responseGeral.data.success) {
+      if (responseGeral?.data?.success) {
         setDadosResultados(responseGeral.data.data);
         console.log('✅ Dados gerais carregados:', responseGeral.data.data.length);
         
-        if (summaryResponseGeral.data.success && summaryResponseGeral.data.data) {
+        if (summaryResponseGeral?.data?.success && summaryResponseGeral.data.data) {
           const summaryData = summaryResponseGeral.data.data;
           setTotaisResultados({
             impactosTotal_vl: summaryData.impactosTotal_vl || 0,
@@ -1581,14 +1645,16 @@ export const CriarRoteiro: React.FC = () => {
           });
           console.log('✅ Totais gerais carregados');
         }
+      } else {
+        console.log('ℹ️ Dados gerais não disponíveis (normal para roteiros simulados)');
       }
 
       // Processar dados de target
-      if (responseTarget.data.success) {
+      if (responseTarget?.data?.success) {
         setDadosTarget(responseTarget.data.data);
         console.log('✅ Dados de target carregados:', responseTarget.data.data.length);
         
-        if (summaryResponseTarget.data.success && summaryResponseTarget.data.data) {
+        if (summaryResponseTarget?.data?.success && summaryResponseTarget.data.data) {
           const summaryData = summaryResponseTarget.data.data;
           setTotaisTarget({
             impactosTotal_vl: summaryData.impactosTotal_vl || 0,
@@ -1599,32 +1665,34 @@ export const CriarRoteiro: React.FC = () => {
           });
           console.log('✅ Totais de target carregados');
         }
+      } else {
+        console.log('ℹ️ Dados de target não disponíveis (normal para roteiros simulados)');
       }
 
       // Processar dados semanais
-      if (responseSemanais.data.success) {
+      if (responseSemanais?.data?.success) {
         setDadosSemanais(responseSemanais.data.data);
         console.log('✅ Dados semanais carregados:', responseSemanais.data.data.length);
         
-        if (summaryResponseSemanais.data.success) {
+        if (summaryResponseSemanais?.data?.success) {
           setDadosSemanaisSummary(summaryResponseSemanais.data.data);
           console.log('✅ Resumo semanal carregado');
         }
+      } else {
+        console.log('ℹ️ Dados semanais não disponíveis (normal para roteiros simulados)');
       }
 
       // Carregar dados semanais de target (não bloqueia)
       carregarDadosSemanaisTarget(pkToUse);
       
-      console.log('✅ TODOS os dados principais carregados e exibidos!');
+      console.log('✅ Carregamento concluído! Dados disponíveis foram processados.');
       
     } catch (error) {
       console.error('❌ Erro ao carregar dados:', error);
       setAba6Habilitada(true);
     } finally {
-      // Desativar TODOS os loadings
-      setCarregandoResultados(false);
-      setCarregandoTarget(false);
-      setCarregandoSemanais(false);
+      // ✅ DESATIVAR LOADING UNIFICADO
+      setCarregandoDadosGerais(false);
     }
   };
 
@@ -1655,28 +1723,32 @@ export const CriarRoteiro: React.FC = () => {
       setCarregandoSemanaisTarget(true);
       console.log('🔄 Carregando dados semanais de target em paralelo...');
 
-      // Carregar dados e resumo EM PARALELO
-      const [response, summaryResponse] = await Promise.all([
+      // Carregar dados e resumo EM PARALELO (permite falhas individuais)
+      const results = await Promise.allSettled([
         axios.post('/report-indicadores-week-target', { report_pk: pkToUse }),
         axios.post('/report-indicadores-week-target-summary', { report_pk: pkToUse })
       ]);
 
-      console.log('📊 Resposta da API (semanais target):', response.data);
-      console.log('📊 Resposta da API (resumo semanal target):', summaryResponse.data);
+      const [response, summaryResponse] = results.map(result => 
+        result.status === 'fulfilled' ? result.value : null
+      );
 
-      if (response.data.success) {
+      console.log('📊 Resposta da API (semanais target):', response?.data);
+      console.log('📊 Resposta da API (resumo semanal target):', summaryResponse?.data);
+
+      if (response?.data?.success) {
         setDadosSemanaisTarget(response.data.data);
         console.log('✅ Dados semanais de target carregados:', response.data.data.length);
         
-        if (summaryResponse.data.success) {
+        if (summaryResponse?.data?.success) {
           setDadosSemanaisTargetSummary(summaryResponse.data.data);
           console.log('✅ Dados de resumo semanal de target carregados:', summaryResponse.data.data.length);
         } else {
-          console.error('❌ Erro na resposta da API de resumo semanal de target:', summaryResponse.data.message);
+          console.log('ℹ️ Resumo semanal de target não disponível (normal para roteiros simulados)');
           setDadosSemanaisTargetSummary([]);
         }
       } else {
-        console.error('❌ Erro na resposta da API de dados semanais de target:', response.data.message);
+        console.log('ℹ️ Dados semanais de target não disponíveis (normal para roteiros simulados)');
         setDadosSemanaisTarget([]);
         setDadosSemanaisTargetSummary([]);
       }
@@ -2106,10 +2178,33 @@ export const CriarRoteiro: React.FC = () => {
       console.log('📊 Carregando dados das tabelas dinâmicas...');
       await carregarDadosMatrix();
 
-      // 8. Habilitar Aba 6 e carregar dados dos resultados imediatamente
-      console.log('✅ Habilitando Aba 6 e carregando dados dos resultados...');
+      // 8. Habilitar Aba 6, navegar para ela e verificar status antes de carregar dados
+      console.log('✅ Habilitando Aba 6, navegando para ela e verificando status do roteiro...');
       setAba6Habilitada(true);
-      await carregarDadosResultados();
+      setAbaAtiva(6); // Navegar automaticamente para a Aba 6
+      
+      // Verificar se o roteiro está em processamento antes de tentar carregar dados
+      try {
+        const statusResponse = await axios.get(`/roteiro-status?pk=${planoMidiaGrupo_pk}`);
+        if (statusResponse.data.success && statusResponse.data.data) {
+          const { inProgress } = statusResponse.data.data;
+          console.log('📊 Status do roteiro após publicação - inProgress:', inProgress);
+          
+          if (inProgress) {
+            console.log('⏳ Roteiro publicado está em processamento. Ativando polling para aguardar...');
+            setAguardandoProcessamento(true);
+            // NÃO carregar dados ainda - o polling fará isso quando terminar
+          } else {
+            console.log('✅ Roteiro publicado já processado. Carregando dados...');
+            await carregarDadosResultados();
+          }
+        }
+      } catch (error) {
+        console.error('❌ Erro ao verificar status do roteiro após publicação:', error);
+        // Em caso de erro, ativar polling por precaução
+        console.log('⚠️ Ativando polling por precaução devido a erro na verificação...');
+        setAguardandoProcessamento(true);
+      }
 
       // 9. Mostrar resultado final completo COM RELATÓRIO DO BANCO DE ATIVOS
       const totalRoteiros = uploadResponse.data.roteiros.length;
@@ -4345,33 +4440,39 @@ export const CriarRoteiro: React.FC = () => {
                     }
                   `}</style>
                   
-                  {/* Mostrar loading especial se está aguardando processamento */}
-                  {aguardandoProcessamento ? (
+                  {/* HIERARQUIA DE LOADING CLARA */}
+                  {aguardandoProcessamento && planoMidiaGrupo_pk ? (
+                    /* NÍVEL 1: Processamento Databricks em andamento */
                     <ProcessingResultsLoader 
                       nomeRoteiro={nomeRoteiro || roteiroData?.planoMidiaGrupo_st || 'Roteiro'}
                       tempoDecorrido={tempoDecorrido}
                     />
+                  ) : carregandoDadosGerais ? (
+                    /* NÍVEL 2: Carregando dados já processados */
+                    <div className="text-center py-16">
+                      <div className="mx-auto mb-6" style={{ width: 64, height: 64 }}>
+                        <svg width="64" height="64" viewBox="0 0 24 24" 
+                             style={{ animation: 'apple-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}>
+                          <circle cx="12" cy="12" r="10" fill="none" 
+                                  stroke="#ff4600" strokeWidth="2.5" 
+                                  strokeLinecap="round" strokeDasharray="60 158" />
+                        </svg>
+                      </div>
+                      <p className="text-gray-700 font-semibold text-lg mb-2">
+                        Carregando dados dos resultados
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Buscando métricas de performance...
+                      </p>
+                    </div>
                   ) : (
+                  /* NÍVEL 3: Dados carregados - mostrar tabelas */
                   <div className="space-y-8">
                     {/* Visão Geral */}
                     {tipoVisualizacao === 'geral' && (
                       <div>
                         <h4 className="text-lg font-bold text-[#3a3a3a] mb-4">RESUMO TOTAL</h4>
-                      {(() => {
-                        console.log('🎯 Renderizando Aba 6 - carregandoResultados:', carregandoResultados, 'dadosResultados.length:', dadosResultados.length);
-                        // Se estiver carregando mas SEM aguardar processamento, mostra loading simples
-                        // Se estiver aguardando processamento, não mostra esse loading (já tem o ProcessingResultsLoader)
-                        return carregandoResultados && !aguardandoProcessamento ? (
-                          <div className="text-center py-12">
-                            <div className="mx-auto mb-6" style={{ width: 56, height: 56 }}>
-                              <svg width="56" height="56" viewBox="0 0 24 24" style={{ animation: 'apple-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}>
-                                <circle cx="12" cy="12" r="10" fill="none" stroke="#ff4600" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="60 158" />
-                              </svg>
-                            </div>
-                            <p className="text-gray-600 font-medium">Carregando dados dos resultados...</p>
-                            <p className="text-sm text-gray-400 mt-2">Isso pode levar alguns segundos</p>
-                          </div>
-                        ) : dadosResultados.length > 0 ? (
+                      {dadosResultados.length > 0 ? (
                         <div className="overflow-x-auto">
                           <table className="w-full border-collapse border border-gray-300">
                             <thead>
@@ -4438,8 +4539,7 @@ export const CriarRoteiro: React.FC = () => {
                           <p className="text-gray-500">Nenhum dado disponível ainda.</p>
                           <p className="text-sm text-gray-400 mt-2">Os dados podem estar sendo processados ou não há informações para este plano.</p>
                         </div>
-                      );
-                      })()}
+                      )}
                       </div>
                     )}
 
@@ -4447,26 +4547,7 @@ export const CriarRoteiro: React.FC = () => {
                     {tipoVisualizacao === 'geral' && (
                       <div>
                         <h4 className="text-lg font-bold text-blue-600 mb-4">TARGET</h4>
-                        {(() => {
-                          console.log('🎯 Renderizando TARGET - carregandoTarget:', carregandoTarget, 'dadosTarget.length:', dadosTarget.length);
-                          // Mostrar loading se está carregando (target ou geral) e NÃO está aguardando processamento
-                          if ((carregandoTarget || carregandoResultados) && !aguardandoProcessamento) {
-                            return (
-                              <div className="text-center py-12">
-                                <div className="mx-auto mb-6" style={{ width: 56, height: 56 }}>
-                                  <svg width="56" height="56" viewBox="0 0 24 24" style={{ animation: 'apple-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}>
-                                    <circle cx="12" cy="12" r="10" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="60 158" />
-                                  </svg>
-                                </div>
-                                <p className="text-gray-600 font-medium">Carregando dados de target...</p>
-                                <p className="text-sm text-gray-400 mt-2">Isso pode levar alguns segundos</p>
-                              </div>
-                            );
-                          }
-                          
-                          // Mostrar dados se existirem
-                          if (dadosTarget.length > 0) {
-                            return (
+                        {dadosTarget.length > 0 ? (
                             <div className="overflow-x-auto">
                               <table className="w-full border-collapse border border-gray-300">
                                 <thead>
@@ -4528,17 +4609,12 @@ export const CriarRoteiro: React.FC = () => {
                                 </tbody>
                               </table>
                             </div>
-                            );
-                          }
-                          
-                          // Mostrar mensagem de sem dados
-                          return (
-                            <div className="text-center py-8">
-                              <p className="text-gray-500">Nenhum dado de target disponível ainda.</p>
-                              <p className="text-sm text-gray-400 mt-2">Os dados podem estar sendo processados ou não há informações para este plano.</p>
-                            </div>
-                          );
-                        })()}
+                          ) : (
+                          <div className="text-center py-8">
+                            <p className="text-gray-500">Nenhum dado de target disponível ainda.</p>
+                            <p className="text-sm text-gray-400 mt-2">Os dados podem estar sendo processados ou não há informações para este plano.</p>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -4546,22 +4622,7 @@ export const CriarRoteiro: React.FC = () => {
                     {tipoVisualizacao === 'praca' && (
                       <div>
                         <h4 className="text-lg font-bold text-[#3a3a3a] mb-4">VISÃO POR PRAÇA</h4>
-                        {(() => {
-                          if (carregandoSemanais && !aguardandoProcessamento) {
-                            return (
-                              <div className="text-center py-12">
-                                <div className="mx-auto mb-6" style={{ width: 56, height: 56 }}>
-                                  <svg width="56" height="56" viewBox="0 0 24 24" style={{ animation: 'apple-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}>
-                                    <circle cx="12" cy="12" r="10" fill="none" stroke="#ff4600" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="60 158" />
-                                  </svg>
-                                </div>
-                                <p className="text-gray-600 font-medium">Carregando dados semanais...</p>
-                                <p className="text-sm text-gray-400 mt-2">Isso pode levar alguns segundos</p>
-                              </div>
-                            );
-                          }
-
-                          if (dadosSemanais.length > 0) {
+                        {dadosSemanais.length > 0 ? (() => {
                             // Agrupar dados por cidade e organizar por semana
                             const dadosPorCidade = dadosSemanais.reduce((acc: any, item: any) => {
                               const cidade = item.cidade_st;
@@ -4713,15 +4774,12 @@ export const CriarRoteiro: React.FC = () => {
                                 ))}
                               </div>
                             );
-                          }
-
-                          return (
+                          })() : (
                             <div className="text-center py-8">
                               <p className="text-gray-500">Nenhum dado semanal disponível ainda.</p>
                               <p className="text-sm text-gray-400 mt-2">Os dados podem estar sendo processados ou não há informações para este plano.</p>
                             </div>
-                          );
-                        })()}
+                          )}
                       </div>
                     )}
                   </div>
