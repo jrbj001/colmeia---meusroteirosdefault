@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Avatar } from "../../components/Avatar";
 import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { Topbar } from "../../components/Topbar/Topbar";
@@ -6,6 +6,8 @@ import { ExitToApp } from "../../icons/ExitToApp";
 import { StyleOutlined7 } from "../../icons/StyleOutlined7";
 import { Difference4 } from "../../icons/Difference4";
 import { Delete4 } from "../../icons/Delete4";
+import { Search } from "../../icons/Search";
+import { X } from "../../icons/X";
 import { Pagination } from "./sections/Pagination";
 import api from "../../config/axios";
 import { TableSkeleton } from "./components/TableSkeleton";
@@ -14,6 +16,8 @@ import { CheckCircle } from "../../icons/CheckCircle";
 import { PinDrop } from "../../icons/PinDrop/PinDrop";
 import { Link, useNavigate } from "react-router-dom";
 import { useRoteirosRefresh } from "../../hooks/useRoteirosRefresh";
+import { useDebounce } from "../../hooks/useDebounce";
+import { ConfirmDeleteModal } from "../../components/ConfirmDeleteModal/ConfirmDeleteModal";
 
 // Definir a interface dos dados da view
 interface Roteiro {
@@ -56,6 +60,19 @@ export const MeusRoteiros: React.FC = () => {
   });
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    roteiro: Roteiro | null;
+  }>({
+    isOpen: false,
+    roteiro: null
+  });
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Aplicar debounce ao termo de busca (300ms)
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   // Verificar se há roteiros em processamento
   const hasProcessing = dados.some(roteiro => roteiro.inProgress_bl === 1);
@@ -63,9 +80,25 @@ export const MeusRoteiros: React.FC = () => {
   // Hook de refresh automático
   useRoteirosRefresh({
     hasProcessing,
-    onRefresh: () => carregarDados(paginacao.currentPage),
+    onRefresh: () => {
+      if (isSearching && debouncedSearchTerm) {
+        buscarRoteiros(debouncedSearchTerm, paginacao.currentPage);
+      } else {
+        carregarDados(paginacao.currentPage);
+      }
+    },
     interval: 5000 // 5 segundos
   });
+
+  // Handler para o campo de busca
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  }, []);
+
+  // Limpa a busca
+  const clearSearch = useCallback(() => {
+    setSearchTerm("");
+  }, []);
 
   const formatarData = (dataString: string) => {
     const data = new Date(dataString);
@@ -98,12 +131,50 @@ export const MeusRoteiros: React.FC = () => {
     }
   };
 
+  const buscarRoteiros = async (termo: string, pagina: number) => {
+    try {
+      setLoading(true);
+      setErro(null);
+      setIsSearching(true);
+      const response = await api.get(`/roteiros-search?q=${encodeURIComponent(termo)}&page=${pagina}`);
+      console.log('Resposta da busca:', response.data);
+      if (response.data && response.data.data) {
+        setDados(response.data.data);
+        setPaginacao(response.data.pagination);
+      } else {
+        setErro('Formato de resposta inválido da API');
+      }
+    } catch (err: any) {
+      console.error('Erro ao buscar dados:', err);
+      setErro(err.response?.data?.message || 'Erro ao buscar os dados. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     carregarDados(1);
   }, []);
 
+  // Effect para busca com debounce
+  useEffect(() => {
+    if (debouncedSearchTerm && debouncedSearchTerm.length >= 2) {
+      buscarRoteiros(debouncedSearchTerm, 1);
+    } else if (debouncedSearchTerm.length === 0 && isSearching) {
+      // Voltou ao estado normal, recarregar dados
+      setIsSearching(false);
+      carregarDados(paginacao.currentPage);
+    }
+  }, [debouncedSearchTerm]);
+
   const handlePageChange = (novaPagina: number) => {
-    carregarDados(novaPagina);
+    if (isSearching && debouncedSearchTerm) {
+      // Se está buscando, paginar nos resultados da busca
+      buscarRoteiros(debouncedSearchTerm, novaPagina);
+    } else {
+      // Paginação normal
+      carregarDados(novaPagina);
+    }
   };
 
   const handleActionRestricted = (action: string) => {
@@ -130,6 +201,63 @@ Email: suporte@be180.com.br`;
     });
   };
 
+  const handleOpenDeleteModal = (roteiro: Roteiro) => {
+    setDeleteModal({
+      isOpen: true,
+      roteiro
+    });
+  };
+
+  const handleCloseDeleteModal = () => {
+    if (!isDeleting) {
+      setDeleteModal({
+        isOpen: false,
+        roteiro: null
+      });
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteModal.roteiro) return;
+
+    try {
+      setIsDeleting(true);
+      setErro(null);
+
+      const response = await api.post('/roteiros-delete', {
+        pk: deleteModal.roteiro.planoMidiaGrupo_pk
+      });
+
+      if (response.data.success) {
+        // Fechar modal
+        setDeleteModal({
+          isOpen: false,
+          roteiro: null
+        });
+
+        // Recarregar dados da página atual
+        if (isSearching && debouncedSearchTerm) {
+          await buscarRoteiros(debouncedSearchTerm, paginacao.currentPage);
+        } else {
+          await carregarDados(paginacao.currentPage);
+        }
+
+        // Mostrar mensagem de sucesso (opcional - você pode criar um toast component)
+        console.log('✅ Roteiro excluído com sucesso');
+      }
+    } catch (err: any) {
+      console.error('❌ Erro ao deletar roteiro:', err);
+      setErro(err.response?.data?.error || 'Erro ao excluir roteiro. Tente novamente.');
+      // Fechar modal em caso de erro também
+      setDeleteModal({
+        isOpen: false,
+        roteiro: null
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <>
       <div className="min-h-screen bg-white flex font-sans">
@@ -151,17 +279,47 @@ Email: suporte@be180.com.br`;
             className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`}
           />
           <div className="w-full overflow-x-auto pt-20 flex-1 overflow-auto">
-            <div className="flex items-center justify-between pr-6">
-              <h1 className="text-lg font-bold text-[#222] tracking-wide mb-4 uppercase font-sans mt-4 pl-6">
+            <div className="flex items-center justify-between pr-6 mb-2">
+              <h1 className="text-lg font-bold text-[#222] tracking-wide uppercase font-sans mt-4 pl-6">
                 Meus roteiros
               </h1>
-              {hasProcessing && (
-                <div className="flex items-center gap-2 mb-4 mt-4 text-xs text-[#FF9800]">
-                  <div className="w-2 h-2 bg-[#FF9800] rounded-full animate-pulse"></div>
-                  <span className="font-medium">Atualizando automaticamente</span>
+              <div className="flex items-center gap-4 mt-4">
+                {hasProcessing && (
+                  <div className="flex items-center gap-2 text-xs text-[#FF9800]">
+                    <div className="w-2 h-2 bg-[#FF9800] rounded-full animate-pulse"></div>
+                    <span className="font-medium">Atualizando automaticamente</span>
+                  </div>
+                )}
+                <div className="relative w-96">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={handleSearchChange}
+                    placeholder="Buscar por nome do roteiro..."
+                    className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF9800] focus:border-transparent outline-none transition-all duration-200 text-sm"
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={clearSearch}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 hover:bg-gray-100 rounded-full p-1 transition-colors duration-200"
+                      title="Limpar busca"
+                    >
+                      <X className="w-4 h-4 text-gray-500" />
+                    </button>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
+
+            {isSearching && searchTerm && searchTerm.length >= 2 && (
+              <div className="px-6 py-2 text-sm text-gray-600 mb-2">
+                {paginacao.totalItems} resultado{paginacao.totalItems !== 1 ? 's' : ''} encontrado{paginacao.totalItems !== 1 ? 's' : ''} em todo o banco
+                {paginacao.totalItems === 0 && (
+                  <span className="ml-2 text-gray-500">- Tente outro termo de busca</span>
+                )}
+              </div>
+            )}
 
             <div className="w-full">
               <table className="w-full border-separate border-spacing-0 font-sans">
@@ -207,7 +365,9 @@ Email: suporte@be180.com.br`;
                     </tr>
                   ) : dados.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="text-center py-4">Nenhum roteiro encontrado</td>
+                      <td colSpan={5} className="text-center py-4">
+                        {isSearching ? "Nenhum roteiro encontrado com esse termo" : "Nenhum roteiro encontrado"}
+                      </td>
                     </tr>
                   ) : (
                     dados.map((item, idx) => (
@@ -245,10 +405,11 @@ Email: suporte@be180.com.br`;
                             <Difference4 className="w-6 h-6 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
                           </button>
                           <button
-                            onClick={() => handleActionRestricted("Excluir roteiro")}
+                            onClick={() => handleOpenDeleteModal(item)}
                             className="transition-transform duration-200 hover:scale-110"
+                            title="Excluir roteiro"
                           >
-                            <Delete4 className="w-6 h-6 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
+                            <Delete4 className="w-6 h-6 hover:text-red-600 cursor-pointer text-[#3A3A3A]" />
                           </button>
                         </td>
                       </tr>
@@ -275,6 +436,15 @@ Email: suporte@be180.com.br`;
           </footer>
         </div>
       </div>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <ConfirmDeleteModal
+        isOpen={deleteModal.isOpen}
+        onClose={handleCloseDeleteModal}
+        onConfirm={handleConfirmDelete}
+        roteiroNome={deleteModal.roteiro?.planoMidiaGrupo_st || ""}
+        isDeleting={isDeleting}
+      />
     </>
   );
 };

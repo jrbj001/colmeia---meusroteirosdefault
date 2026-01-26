@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { Topbar } from "../../components/Topbar/Topbar";
 import { useAuth } from "../../contexts/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "../../config/axios";
 import * as XLSX from "xlsx";
+import { useRoteiroStatusPolling } from "../../hooks/useRoteiroStatusPolling";
+import { ProcessingResultsLoader } from "../../components/ProcessingResultsLoader/ProcessingResultsLoader";
+import { AppleSaveLoader } from "../../components/AppleSaveLoader/AppleSaveLoader";
 
 interface Agencia {
   id_agencia: number;
@@ -86,22 +89,48 @@ export const CriarRoteiro: React.FC = () => {
   // Estados para aba 6 - Resultados
   const [dadosResultados, setDadosResultados] = useState<any[]>([]);
   const [totaisResultados, setTotaisResultados] = useState<any>(null);
-  const [carregandoResultados, setCarregandoResultados] = useState(false);
   const [aba6Habilitada, setAba6Habilitada] = useState(false);
   
   // Estados para visão semanal
   const [tipoVisualizacao, setTipoVisualizacao] = useState<'geral' | 'praca'>('geral');
   const [dadosSemanais, setDadosSemanais] = useState<any[]>([]);
   const [dadosSemanaisSummary, setDadosSemanaisSummary] = useState<any[]>([]);
-  const [carregandoSemanais, setCarregandoSemanais] = useState(false);
   
   // Estados para dados de target
   const [dadosTarget, setDadosTarget] = useState<any[]>([]);
   const [totaisTarget, setTotaisTarget] = useState<any>(null);
-  const [carregandoTarget, setCarregandoTarget] = useState(false);
   const [dadosSemanaisTarget, setDadosSemanaisTarget] = useState<any[]>([]);
   const [dadosSemanaisTargetSummary, setDadosSemanaisTargetSummary] = useState<any[]>([]);
   const [carregandoSemanaisTarget, setCarregandoSemanaisTarget] = useState(false);
+  
+  // Estado unificado de loading para dados prontos (não processamento)
+  const [carregandoDadosGerais, setCarregandoDadosGerais] = useState(false);
+  
+  // Estados para controle de processamento em background
+  const [aguardandoProcessamento, setAguardandoProcessamento] = useState(false);
+  const [planoMidiaGrupo_pk, setPlanoMidiaGrupo_pk] = useState<number | null>(null);
+
+  // Hook de polling para verificar status do processamento
+  // ✅ Usa dataCriacao do banco como timestamp - sempre consistente!
+  const { isProcessing, tempoDecorrido } = useRoteiroStatusPolling({
+    roteiroPk: planoMidiaGrupo_pk,
+    enabled: aguardandoProcessamento, // Polling funciona em background
+    onComplete: () => {
+      console.log('✅ Processamento concluído! Carregando resultados...');
+      setAguardandoProcessamento(false);
+      if (planoMidiaGrupo_pk) {
+        carregarDadosResultados(planoMidiaGrupo_pk);
+      }
+    },
+    interval: 3000 // Verificar a cada 3 segundos
+  });
+
+  // Debug: Monitorar mudanças no tempoDecorrido
+  useEffect(() => {
+    console.log('🕐 CriarRoteiro - tempoDecorrido atualizado para:', tempoDecorrido, 'segundos');
+    console.log('📍 aguardandoProcessamento:', aguardandoProcessamento);
+    console.log('📍 planoMidiaGrupo_pk:', planoMidiaGrupo_pk);
+  }, [tempoDecorrido, aguardandoProcessamento, planoMidiaGrupo_pk]);
 
   // Detectar modo visualização e carregar dados
   useEffect(() => {
@@ -147,9 +176,14 @@ export const CriarRoteiro: React.FC = () => {
           console.log('📊 Definindo planoMidiaGrupo_pk:', roteiro.planoMidiaGrupo_pk);
           setPlanoMidiaGrupo_pk(roteiro.planoMidiaGrupo_pk);
           
-          // Carregar dados imediatamente
-          console.log('🔄 Chamando carregarDadosResultados imediatamente...');
-          carregarDadosResultados(roteiro.planoMidiaGrupo_pk);
+          // Verificar se está em processamento
+          if (roteiro.inProgress_bl === 1) {
+            console.log('⏳ Roteiro em processamento. Ativando polling...');
+            setAguardandoProcessamento(true);
+          } else {
+            console.log('✅ Roteiro finalizado. Carregando dados...');
+            carregarDadosResultados(roteiro.planoMidiaGrupo_pk);
+          }
         } else {
           console.log('⚠️ planoMidiaGrupo_pk não encontrado no roteiro');
         }
@@ -157,16 +191,24 @@ export const CriarRoteiro: React.FC = () => {
     }
   }, [location.state]);
 
-  // Forçar re-render quando tipoVisualizacao muda para garantir que dados sejam exibidos
+  // useEffect removido - não é mais necessário forçar re-render
+  // O estado unificado carregandoDadosGerais é gerenciado pela função carregarDadosResultados
+
+  // Verificar status e carregar dados ao entrar na Aba 6
   useEffect(() => {
-    // Fazer uma forçar atualização dos estados para garantir renderização
-    if (tipoVisualizacao === 'praca' && dadosSemanais.length > 0 && carregandoSemanais) {
-      setCarregandoSemanais(false);
+    if (abaAtiva === 6 && aba6Habilitada && planoMidiaGrupo_pk && !modoVisualizacao) {
+      // Verificar se já tem dados carregados ou se está em algum processo
+      // ✅ IMPORTANTE: NÃO verificar status se JÁ ESTÁ aguardando processamento
+      // Isso evita resetar o polling quando volta para a aba
+      if (dadosResultados.length === 0 && !aguardandoProcessamento && !carregandoDadosGerais) {
+        console.log('📊 Entrando na Aba 6 sem dados e sem processamento ativo. Verificando status do roteiro...');
+        verificarStatusECarregarDados();
+      } else if (aguardandoProcessamento) {
+        console.log('⏳ Retornando para Aba 6 com processamento JÁ EM ANDAMENTO. Continuando polling...');
+        // Não fazer nada - o polling já está ativo em background
+      }
     }
-    if (tipoVisualizacao === 'geral' && dadosResultados.length > 0 && carregandoResultados) {
-      setCarregandoResultados(false);
-    }
-  }, [tipoVisualizacao, dadosSemanais.length, dadosResultados.length, carregandoSemanais, carregandoResultados]);
+  }, [abaAtiva, aba6Habilitada, planoMidiaGrupo_pk]);
 
   
   // Estados para aba 2 - Configurar target
@@ -184,7 +226,6 @@ export const CriarRoteiro: React.FC = () => {
   const [inventarioCidades, setInventarioCidades] = useState<{[key: string]: any}>({});
   
   // Estados para controle de salvamento
-  const [planoMidiaGrupo_pk, setPlanoMidiaGrupo_pk] = useState<number | null>(null);
   const [planoMidiaDesc_pks, setPlanoMidiaDesc_pks] = useState<number[]>([]);
   const [planoMidia_pks, setPlanoMidia_pks] = useState<number[]>([]);
   
@@ -200,6 +241,16 @@ export const CriarRoteiro: React.FC = () => {
   const [salvandoAba3, setSalvandoAba3] = useState(false);
   const [salvandoAba4, setSalvandoAba4] = useState(false);
   const [roteiroSimuladoSalvo, setRoteiroSimuladoSalvo] = useState(false);
+  
+  // Estados para loading Apple do roteiro simulado
+  const [showAppleLoader, setShowAppleLoader] = useState(false);
+  const [saveProgress, setSaveProgress] = useState(0);
+  const [saveSteps, setSaveSteps] = useState<Array<{
+    id: string;
+    label: string;
+    status: 'pending' | 'processing' | 'completed' | 'error';
+    detail?: string;
+  }>>([]);
   
   // 📊 LOADING EM TEMPO REAL - Aba 4
   const [loadingAba4, setLoadingAba4] = useState({
@@ -405,16 +456,16 @@ export const CriarRoteiro: React.FC = () => {
     try {
       console.log('🏗️ Gerando tabelas simuladas por praça...', { cidadesSalvas, semanas });
       
-      if (pracasSelecionadasSimulado.length === 0) {
-        alert('Selecione pelo menos uma praça primeiro');
+      if (cidadesSalvas.length === 0) {
+        alert('Configure as praças na Aba 3 primeiro');
         return;
       }
       
       // Objeto para armazenar tabelas por praça: id_cidade -> array de linhas
       const tabelasPorPraca: Record<number, any[]> = {};
       
-      // Gerar uma tabela separada para cada praça
-      for (const praca of pracasSelecionadasSimulado) {
+      // Gerar uma tabela separada para cada praça configurada na Aba 3
+      for (const praca of cidadesSalvas) {
         try {
           const estruturaTabela: any[] = [];
           
@@ -486,6 +537,18 @@ export const CriarRoteiro: React.FC = () => {
   const salvarRoteiroSimulado = async () => {
     try {
       setSalvandoAba4(true);
+      setShowAppleLoader(true);
+      setSaveProgress(0);
+      
+      // Inicializar etapas
+      const initialSteps = [
+        { id: 'validacao', label: 'Validando dados', status: 'processing' as const, detail: 'Verificando configurações' },
+        { id: 'criar-pks', label: 'Criando registros', status: 'pending' as const, detail: `${cidadesSalvas.length} praça(s)` },
+        { id: 'salvar-dados', label: 'Salvando dados das praças', status: 'pending' as const, detail: 'Processando vias públicas' },
+        { id: 'databricks', label: 'Processamento Databricks', status: 'pending' as const, detail: 'Gerando resultados' },
+        { id: 'finalizar', label: 'Finalizando', status: 'pending' as const, detail: 'Concluindo salvamento' }
+      ];
+      setSaveSteps(initialSteps);
       
       console.log('🚀 Iniciando salvamento do roteiro simulado...');
       
@@ -493,35 +556,33 @@ export const CriarRoteiro: React.FC = () => {
       if (!planoMidiaGrupo_pk) {
         alert('É necessário salvar a Aba 1 primeiro');
         setSalvandoAba4(false);
+        setShowAppleLoader(false);
         return;
       }
 
       if (!targetSalvoLocal?.salvo) {
         alert('É necessário salvar a Aba 2 primeiro');
         setSalvandoAba4(false);
+        setShowAppleLoader(false);
         return;
       }
 
       if (cidadesSalvas.length === 0) {
         alert('É necessário configurar as praças na Aba 3 primeiro');
         setSalvandoAba4(false);
-        return;
-      }
-
-      if (pracasSelecionadasSimulado.length === 0) {
-        alert('Selecione pelo menos uma praça para configurar');
-        setSalvandoAba4(false);
+        setShowAppleLoader(false);
         return;
       }
 
       if (Object.keys(tabelaSimulado).length === 0) {
-        alert('Configure a tabela de vias públicas primeiro');
+        alert('Gere a tabela de vias públicas primeiro clicando em "Gerar Tabela"');
         setSalvandoAba4(false);
+        setShowAppleLoader(false);
         return;
       }
 
-      // Verificar se todas as praças selecionadas têm tabela (usando número como chave)
-      const pracasSemTabela = pracasSelecionadasSimulado.filter(p => {
+      // Verificar se todas as praças configuradas têm tabela (usando número como chave)
+      const pracasSemTabela = cidadesSalvas.filter(p => {
         const idPraca = Number(p.id_cidade);
         const tabela = tabelaSimulado[idPraca] || tabelaSimulado[p.id_cidade as any];
         return !tabela || tabela.length === 0;
@@ -529,16 +590,23 @@ export const CriarRoteiro: React.FC = () => {
       if (pracasSemTabela.length > 0) {
         alert(`As seguintes praças não possuem tabela configurada: ${pracasSemTabela.map(p => p.nome_cidade).join(', ')}`);
         setSalvandoAba4(false);
+        setShowAppleLoader(false);
         return;
       }
+      
+      // Validação concluída
+      setSaveSteps(prev => prev.map(step => 
+        step.id === 'validacao' ? { ...step, status: 'completed' as const } : step
+      ));
+      setSaveProgress(10);
 
       console.log('📊 Total de semanas configuradas:', quantidadeSemanas);
-      console.log('📊 Total de praças selecionadas:', pracasSelecionadasSimulado.length);
-      console.log('📊 Praças selecionadas:', pracasSelecionadasSimulado.map(p => `${p.nome_cidade} (ID: ${p.id_cidade}, tipo: ${typeof p.id_cidade})`).join(', '));
+      console.log('📊 Total de praças configuradas:', cidadesSalvas.length);
+      console.log('📊 Praças configuradas:', cidadesSalvas.map(p => `${p.nome_cidade} (ID: ${p.id_cidade}, tipo: ${typeof p.id_cidade})`).join(', '));
       console.log('📊 Tabelas disponíveis:', Object.keys(tabelaSimulado).map(id => `ID ${id} (tipo: ${typeof id})`).join(', '));
       
       // Validar correspondência entre IDs das praças e tabelas
-      pracasSelecionadasSimulado.forEach(praca => {
+      cidadesSalvas.forEach(praca => {
         const idNumero = Number(praca.id_cidade);
         const idString = String(praca.id_cidade);
         const tabelaPorNumero = tabelaSimulado[idNumero];
@@ -557,16 +625,22 @@ export const CriarRoteiro: React.FC = () => {
       const resultadosPraças: any[] = [];
       const errosPraças: any[] = [];
 
-      console.log(`🔄 ETAPA 1: Criando planoMidiaDesc_pk para ${pracasSelecionadasSimulado.length} praça(s) em UMA ÚNICA CHAMADA...`);
-      console.log(`🔄 Lista de praças a processar:`, pracasSelecionadasSimulado.map((p, idx) => `${idx + 1}. ${p.nome_cidade} (ID: ${p.id_cidade})`).join('\n'));
+      console.log(`🔄 ETAPA 1: Criando planoMidiaDesc_pk para ${cidadesSalvas.length} praça(s) em UMA ÚNICA CHAMADA...`);
+      console.log(`🔄 Lista de praças a processar:`, cidadesSalvas.map((p, idx) => `${idx + 1}. ${p.nome_cidade} (ID: ${p.id_cidade})`).join('\n'));
+
+      // Atualizar etapa: Criar PKs
+      setSaveSteps(prev => prev.map(step => 
+        step.id === 'criar-pks' ? { ...step, status: 'processing' as const } : step
+      ));
+      setSaveProgress(15);
 
       // ETAPA 1: Preparar recordsJson com TODAS as cidades
       const allRecordsJson: any[] = [];
       const pracasComIbge: any[] = [];
       
-      for (let i = 0; i < pracasSelecionadasSimulado.length; i++) {
-        const praca = pracasSelecionadasSimulado[i];
-        console.log(`\n📍 ===== INICIANDO PROCESSAMENTO DA PRAÇA ${i + 1}/${pracasSelecionadasSimulado.length} =====`);
+      for (let i = 0; i < cidadesSalvas.length; i++) {
+        const praca = cidadesSalvas[i];
+        console.log(`\n📍 ===== INICIANDO PROCESSAMENTO DA PRAÇA ${i + 1}/${cidadesSalvas.length} =====`);
         console.log(`📍 Nome: ${praca.nome_cidade} - ${praca.nome_estado}`);
         console.log(`📍 ID Cidade: ${praca.id_cidade}`);
         console.log(`📍 Praça completa:`, JSON.stringify(praca));
@@ -662,6 +736,17 @@ export const CriarRoteiro: React.FC = () => {
       
       console.log(`📊 Todos os PKs criados:`, planosMidiaDescPk.join(', '));
       console.log(`📊 Response completo da API:`, JSON.stringify(descResponse.data));
+      
+      // PKs criados com sucesso
+      setSaveSteps(prev => prev.map(step => 
+        step.id === 'criar-pks' ? { ...step, status: 'completed' as const } : step
+      ));
+      setSaveProgress(30);
+      
+      // Iniciar salvamento de dados
+      setSaveSteps(prev => prev.map(step => 
+        step.id === 'salvar-dados' ? { ...step, status: 'processing' as const } : step
+      ));
       
       // ETAPA 3: Salvar roteiro simulado para cada cidade (isso precisa ser loop)
       for (let i = 0; i < pracasComIbge.length; i++) {
@@ -766,13 +851,20 @@ export const CriarRoteiro: React.FC = () => {
               resultado: response.data.data
             });
             console.log(`✅ Roteiro simulado salvo para ${praca.nome_cidade}`);
-            console.log(`📍 ===== FINALIZANDO PROCESSAMENTO DA PRAÇA ${i + 1}/${pracasSelecionadasSimulado.length} =====\n`);
+            console.log(`📍 ===== FINALIZANDO PROCESSAMENTO DA PRAÇA ${i + 1}/${cidadesSalvas.length} =====\n`);
+            
+            // Atualizar progresso de salvamento (30% a 60% distribuído entre as praças)
+            const progressoPorPraca = 30 / cidadesSalvas.length;
+            setSaveProgress(prev => Math.min(prev + progressoPorPraca, 60));
+            setSaveSteps(prev => prev.map(step => 
+              step.id === 'salvar-dados' ? { ...step, detail: `${i + 1}/${cidadesSalvas.length} praça(s) processada(s)` } : step
+            ));
           } else {
             throw new Error(response.data.message || 'Erro desconhecido ao salvar roteiro simulado');
           }
 
         } catch (error: any) {
-          console.error(`\n❌ ===== ERRO AO PROCESSAR PRAÇA ${i + 1}/${pracasSelecionadasSimulado.length} =====`);
+          console.error(`\n❌ ===== ERRO AO PROCESSAR PRAÇA ${i + 1}/${cidadesSalvas.length} =====`);
           console.error(`❌ Praça: ${praca.nome_cidade} (ID: ${praca.id_cidade})`);
           console.error(`❌ Erro:`, error);
           console.error(`❌ Erro completo:`, error.response?.data || error.message || 'Erro desconhecido');
@@ -789,7 +881,7 @@ export const CriarRoteiro: React.FC = () => {
       }
       
       console.log(`\n📊 ===== RESUMO DO PROCESSAMENTO =====`);
-      console.log(`📊 Total de praças selecionadas: ${pracasSelecionadasSimulado.length}`);
+      console.log(`📊 Total de praças configuradas: ${cidadesSalvas.length}`);
       console.log(`📊 Praças processadas com sucesso: ${planosMidiaDescPk.length}`);
       console.log(`📊 Praças com erro: ${errosPraças.length}`);
       console.log(`📊 Planos criados:`, planosMidiaDescPk.join(', '));
@@ -799,12 +891,25 @@ export const CriarRoteiro: React.FC = () => {
       }
 
       console.log(`✅ ETAPAS 1, 2 e 3 CONCLUÍDAS - ${planosMidiaDescPk.length} praça(s) processada(s) com sucesso`);
+      
+      // Dados salvos com sucesso
+      setSaveSteps(prev => prev.map(step => 
+        step.id === 'salvar-dados' ? { ...step, status: 'completed' as const, detail: `${planosMidiaDescPk.length} praça(s) processada(s)` } : step
+      ));
+      setSaveProgress(60);
+      
       console.log('⏳ Aguardando 2 segundos para garantir que todos os dados foram persistidos...');
       
       // Aguardar um pouco para garantir que o SQL Server commitou todos os dados
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       console.log('🔄 ETAPA 4: Executando processamento Databricks para o grupo...');
+
+      // Iniciar Databricks
+      setSaveSteps(prev => prev.map(step => 
+        step.id === 'databricks' ? { ...step, status: 'processing' as const } : step
+      ));
+      setSaveProgress(70);
 
       // Executar Databricks UMA VEZ para o GRUPO (não para cada cidade individual)
       try {
@@ -855,19 +960,68 @@ export const CriarRoteiro: React.FC = () => {
         mensagemSucesso += `✅ PROCESSAMENTO DATABRICKS EXECUTADO!\n`;
         mensagemSucesso += `🎯 ROTEIRO SIMULADO PRONTO PARA VISUALIZAÇÃO!`;
 
-        alert(mensagemSucesso);
+        // Databricks concluído
+        setSaveSteps(prev => prev.map(step => 
+          step.id === 'databricks' ? { ...step, status: 'completed' as const } : step
+        ));
+        setSaveProgress(85);
         
+        // Finalizando
+        setSaveSteps(prev => prev.map(step => 
+          step.id === 'finalizar' ? { ...step, status: 'processing' as const } : step
+        ));
+        setSaveProgress(95);
+        
+        // Aguardar um momento para mostrar o progresso final
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Concluído!
+        setSaveSteps(prev => prev.map(step => 
+          step.id === 'finalizar' ? { ...step, status: 'completed' as const } : step
+        ));
+        setSaveProgress(100);
+        
+        // Aguardar mais um momento antes de fechar o loading
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        setShowAppleLoader(false);
+        alert(mensagemSucesso);
+
         // Marcar roteiro simulado como salvo
         setRoteiroSimuladoSalvo(true);
         
         // Marcar Aba 4 como preenchida (permite ir para Aba 6)
         setAba4Preenchida(true);
         
-        // Ativar Aba 6 para visualizar resultados
+        // Ativar Aba 6 e navegar para ela
         setAba6Habilitada(true);
+        setAbaAtiva(6);
+        
+        // Ativar polling para aguardar processamento do Databricks
+        console.log('⏳ Roteiro simulado publicado. Ativando polling para aguardar processamento...');
+        console.log('📊 PK do roteiro para polling:', planoMidiaGrupo_pk);
+        console.log('📊 Tipo de planoMidiaGrupo_pk:', typeof planoMidiaGrupo_pk);
+        
+        if (!planoMidiaGrupo_pk) {
+          console.error('❌ ERRO CRÍTICO: planoMidiaGrupo_pk está null ao tentar ativar polling!');
+          alert('Erro: PK do roteiro não encontrado. O polling não funcionará.');
+        } else {
+          console.log('✅ PK válido encontrado:', planoMidiaGrupo_pk);
+        }
+        
+        setAguardandoProcessamento(true);
 
       } catch (databricksError) {
         console.error('❌ Erro no processamento Databricks:', databricksError);
+        
+        // Marcar Databricks como erro
+        setSaveSteps(prev => prev.map(step => 
+          step.id === 'databricks' ? { ...step, status: 'error' as const, detail: 'Erro no processamento' } : step
+        ));
+        
+        // Fechar loading após um momento
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        setShowAppleLoader(false);
         
         let mensagemErro = `⚠️ ROTEIRO SIMULADO SALVO, MAS ERRO NO PROCESSAMENTO!\n\n`;
         mensagemErro += `✅ Dados salvos na base calculadora para ${planosMidiaDescPk.length} praça(s)\n`;
@@ -894,6 +1048,18 @@ export const CriarRoteiro: React.FC = () => {
 
     } catch (error) {
       console.error('❌ Erro ao salvar roteiro simulado:', error);
+      
+      // Marcar etapa atual como erro
+      setSaveSteps(prev => prev.map(step => {
+        if (step.status === 'processing') {
+          return { ...step, status: 'error' as const, detail: 'Erro no processamento' };
+        }
+        return step;
+      }));
+      
+      // Fechar loading após um momento
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setShowAppleLoader(false);
       
       let mensagemErro = 'Erro ao salvar roteiro simulado:\n\n';
       if (error instanceof Error && 'response' in error) {
@@ -1390,6 +1556,37 @@ export const CriarRoteiro: React.FC = () => {
     }
   };
 
+  // Função para verificar status do roteiro e decidir se carrega dados ou ativa polling
+  const verificarStatusECarregarDados = async () => {
+    if (!planoMidiaGrupo_pk) {
+      console.log('⚠️ planoMidiaGrupo_pk não disponível para verificar status');
+      return;
+    }
+    
+    try {
+      console.log('🔍 Verificando status do roteiro:', planoMidiaGrupo_pk);
+      const statusResponse = await axios.get(`/roteiro-status?pk=${planoMidiaGrupo_pk}`);
+      
+      if (statusResponse.data.success && statusResponse.data.data) {
+        const { inProgress } = statusResponse.data.data;
+        console.log('📊 Status do roteiro - inProgress:', inProgress);
+        
+        if (inProgress) {
+          console.log('⏳ Roteiro ainda em processamento. Ativando polling...');
+          setAguardandoProcessamento(true);
+        } else {
+          console.log('✅ Roteiro processado. Carregando dados...');
+          await carregarDadosResultados(planoMidiaGrupo_pk);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Erro ao verificar status do roteiro:', error);
+      // Em caso de erro, tentar carregar os dados mesmo assim
+      console.log('⚠️ Tentando carregar dados mesmo com erro no status...');
+      await carregarDadosResultados(planoMidiaGrupo_pk);
+    }
+  };
+
   // Função para carregar dados dos resultados
   const carregarDadosResultados = async (pkOverride?: number) => {
     const pkToUse = pkOverride || planoMidiaGrupo_pk;
@@ -1403,186 +1600,112 @@ export const CriarRoteiro: React.FC = () => {
     }
 
     try {
-      setCarregandoResultados(true);
-      console.log('🔄 Carregando dados dos resultados...');
+      // ✅ ATIVAR LOADING UNIFICADO
+      setCarregandoDadosGerais(true);
+      
+      console.log('🔄 Carregando TODOS os dados em paralelo...');
       console.log('📊 PK sendo usado:', pkToUse);
 
-      // Buscar dados por cidade
-      const response = await axios.post('/report-indicadores-vias-publicas', {
-        report_pk: pkToUse
-      });
+      // Carregar TUDO em paralelo usando Promise.allSettled (permite falhas individuais)
+      // 404 é esperado para roteiros simulados (apenas Vias Públicas tem dados)
+      const results = await Promise.allSettled([
+        axios.post('/report-indicadores-vias-publicas', { report_pk: pkToUse }),
+        axios.post('/report-indicadores-summary', { report_pk: pkToUse }),
+        axios.post('/report-indicadores-target', { report_pk: pkToUse }),
+        axios.post('/report-indicadores-target-summary', { report_pk: pkToUse }),
+        axios.post('/report-indicadores-week', { report_pk: pkToUse }),
+        axios.post('/report-indicadores-week-summary', { report_pk: pkToUse })
+      ]);
 
-      console.log('📊 Resposta da API (cidades):', response.data);
+      // Extrair respostas (ou null se falharam)
+      const [
+        responseGeral,
+        summaryResponseGeral,
+        responseTarget,
+        summaryResponseTarget,
+        responseSemanais,
+        summaryResponseSemanais
+      ] = results.map(result => result.status === 'fulfilled' ? result.value : null);
 
-      if (response.data.success) {
-        setDadosResultados(response.data.data);
-        console.log('✅ Dados por cidade carregados:', response.data.data.length);
+      console.log('📊 Todas as requisições concluídas!');
+
+      // Processar dados gerais
+      if (responseGeral?.data?.success) {
+        setDadosResultados(responseGeral.data.data);
+        console.log('✅ Dados gerais carregados:', responseGeral.data.data.length);
         
-        // Buscar dados de resumo da stored procedure
-        console.log('🔄 Buscando dados de resumo da stored procedure...');
-        const summaryResponse = await axios.post('/report-indicadores-summary', {
-          report_pk: pkToUse
-        });
-
-        console.log('📊 Resposta da API (resumo):', summaryResponse.data);
-
-        let totais;
-        if (summaryResponse.data.success && summaryResponse.data.data) {
-          // Usar dados da stored procedure para os totais
-          const summaryData = summaryResponse.data.data;
-          totais = {
+        if (summaryResponseGeral?.data?.success && summaryResponseGeral.data.data) {
+          const summaryData = summaryResponseGeral.data.data;
+          setTotaisResultados({
             impactosTotal_vl: summaryData.impactosTotal_vl || 0,
             coberturaPessoasTotal_vl: summaryData.coberturaPessoasTotal_vl || 0,
             coberturaProp_vl: summaryData.coberturaProp_vl || 0,
             frequencia_vl: summaryData.frequencia_vl || 0,
             grp_vl: summaryData.grp_vl || 0
-          };
-          
-          console.log('✅ Totais da stored procedure carregados:', totais);
-          setTotaisResultados(totais);
-        } else {
-          console.log('⚠️ Nenhum dado de resumo encontrado, usando totais da API original');
-          // Fallback: usar totais da API original
-          totais = response.data.totais;
-          setTotaisResultados(totais);
+          });
+          console.log('✅ Totais gerais carregados');
         }
-        
-        console.log('🎯 Estados atualizados - dadosResultados:', response.data.data.length, 'totaisResultados:', totais);
-        
-        // Carregar dados semanais e target também
-        await carregarDadosSemanais(pkToUse);
-        await carregarDadosTarget(pkToUse);
       } else {
-        console.error('❌ Erro na resposta da API de resultados:', response.data.message);
-        // Mesmo com erro, habilitar a aba para mostrar estado vazio
-        setAba6Habilitada(true);
+        console.log('ℹ️ Dados gerais não disponíveis (normal para roteiros simulados)');
       }
+
+      // Processar dados de target
+      if (responseTarget?.data?.success) {
+        setDadosTarget(responseTarget.data.data);
+        console.log('✅ Dados de target carregados:', responseTarget.data.data.length);
+        
+        if (summaryResponseTarget?.data?.success && summaryResponseTarget.data.data) {
+          const summaryData = summaryResponseTarget.data.data;
+          setTotaisTarget({
+            impactosTotal_vl: summaryData.impactosTotal_vl || 0,
+            coberturaPessoasTotal_vl: summaryData.coberturaPessoasTotal_vl || 0,
+            coberturaProp_vl: summaryData.coberturaProp_vl || 0,
+            frequencia_vl: summaryData.frequencia_vl || 0,
+            grp_vl: summaryData.grp_vl || 0
+          });
+          console.log('✅ Totais de target carregados');
+        }
+      } else {
+        console.log('ℹ️ Dados de target não disponíveis (normal para roteiros simulados)');
+      }
+
+      // Processar dados semanais
+      if (responseSemanais?.data?.success) {
+        setDadosSemanais(responseSemanais.data.data);
+        console.log('✅ Dados semanais carregados:', responseSemanais.data.data.length);
+        
+        if (summaryResponseSemanais?.data?.success) {
+          setDadosSemanaisSummary(summaryResponseSemanais.data.data);
+          console.log('✅ Resumo semanal carregado');
+        }
+      } else {
+        console.log('ℹ️ Dados semanais não disponíveis (normal para roteiros simulados)');
+      }
+
+      // Carregar dados semanais de target (não bloqueia)
+      carregarDadosSemanaisTarget(pkToUse);
+      
+      console.log('✅ Carregamento concluído! Dados disponíveis foram processados.');
+      
     } catch (error) {
-      console.error('❌ Erro ao carregar dados dos resultados:', error);
-      // Mesmo com erro, habilitar a aba para mostrar estado vazio
+      console.error('❌ Erro ao carregar dados:', error);
       setAba6Habilitada(true);
     } finally {
-      setCarregandoResultados(false);
+      // ✅ DESATIVAR LOADING UNIFICADO
+      setCarregandoDadosGerais(false);
     }
   };
 
-  // Função para carregar dados semanais (visão por praça)
+  // Função para carregar dados semanais (visão por praça) - LEGADO, dados carregados na principal
   const carregarDadosSemanais = async (pkOverride?: number) => {
-    const pkToUse = pkOverride || planoMidiaGrupo_pk;
-    console.log('🔄 carregarDadosSemanais chamada');
-    console.log('📊 pkToUse:', pkToUse);
-    
-    if (!pkToUse) {
-      console.log('⚠️ planoMidiaGrupo_pk não disponível para carregar dados semanais');
-      return;
-    }
-
-    try {
-      setCarregandoSemanais(true);
-      console.log('🔄 Carregando dados semanais...');
-
-      const response = await axios.post('/report-indicadores-week', {
-        report_pk: pkToUse
-      });
-
-      console.log('📊 Resposta da API (semanais):', response.data);
-
-      if (response.data.success) {
-        setDadosSemanais(response.data.data);
-        console.log('✅ Dados semanais carregados:', response.data.data.length);
-        
-        // Buscar dados de resumo semanal
-        console.log('🔄 Buscando dados de resumo semanal...');
-        const summaryResponse = await axios.post('/report-indicadores-week-summary', {
-          report_pk: pkToUse
-        });
-
-        console.log('📊 Resposta da API (resumo semanal):', summaryResponse.data);
-
-        if (summaryResponse.data.success) {
-          setDadosSemanaisSummary(summaryResponse.data.data);
-          console.log('✅ Dados de resumo semanal carregados:', summaryResponse.data.data.length);
-        } else {
-          console.error('❌ Erro na resposta da API de resumo semanal:', summaryResponse.data.message);
-          setDadosSemanaisSummary([]);
-        }
-        
-        // Carregar dados semanais de target também
-        await carregarDadosSemanaisTarget(pkToUse);
-      } else {
-        console.error('❌ Erro na resposta da API de dados semanais:', response.data.message);
-        setDadosSemanais([]);
-        setDadosSemanaisSummary([]);
-      }
-    } catch (error) {
-      console.error('❌ Erro ao carregar dados semanais:', error);
-      setDadosSemanais([]);
-    } finally {
-      setCarregandoSemanais(false);
-    }
+    // Esta função agora é um wrapper, os dados são carregados na carregarDadosResultados
+    console.log('ℹ️ carregarDadosSemanais: dados já carregados na função principal');
   };
 
-  // Função para carregar dados de target
+  // Função para carregar dados de target - LEGADO, dados carregados na principal
   const carregarDadosTarget = async (pkOverride?: number) => {
-    const pkToUse = pkOverride || planoMidiaGrupo_pk;
-    console.log('🎯 carregarDadosTarget chamada');
-    console.log('📊 pkToUse:', pkToUse);
-    
-    if (!pkToUse) {
-      console.log('⚠️ planoMidiaGrupo_pk não disponível para carregar dados de target');
-      return;
-    }
-
-    try {
-      setCarregandoTarget(true);
-      console.log('🔄 Carregando dados de target...');
-
-      const response = await axios.post('/report-indicadores-target', {
-        report_pk: pkToUse
-      });
-
-      console.log('📊 Resposta da API (target):', response.data);
-
-      if (response.data.success) {
-        setDadosTarget(response.data.data);
-        console.log('✅ Dados de target carregados:', response.data.data.length);
-        
-        // Buscar dados de resumo de target
-        console.log('🔄 Buscando dados de resumo de target...');
-        const summaryResponse = await axios.post('/report-indicadores-target-summary', {
-          report_pk: pkToUse
-        });
-
-        console.log('📊 Resposta da API (resumo target):', summaryResponse.data);
-
-        if (summaryResponse.data.success && summaryResponse.data.data) {
-          const summaryData = summaryResponse.data.data;
-          const totais = {
-            impactosTotal_vl: summaryData.impactosTotal_vl || 0,
-            coberturaPessoasTotal_vl: summaryData.coberturaPessoasTotal_vl || 0,
-            coberturaProp_vl: summaryData.coberturaProp_vl || 0,
-            frequencia_vl: summaryData.frequencia_vl || 0,
-            grp_vl: summaryData.grp_vl || 0
-          };
-          
-          console.log('✅ Totais de target carregados:', totais);
-          setTotaisTarget(totais);
-        } else {
-          console.error('❌ Erro na resposta da API de resumo de target:', summaryResponse.data.message);
-          setTotaisTarget(null);
-        }
-      } else {
-        console.error('❌ Erro na resposta da API de target:', response.data.message);
-        setDadosTarget([]);
-        setTotaisTarget(null);
-      }
-    } catch (error) {
-      console.error('❌ Erro ao carregar dados de target:', error);
-      setDadosTarget([]);
-      setTotaisTarget(null);
-    } finally {
-      setCarregandoTarget(false);
-    }
+    // Esta função agora é um wrapper, os dados são carregados na carregarDadosResultados
+    console.log('ℹ️ carregarDadosTarget: dados já carregados na função principal');
   };
 
   // Função para carregar dados semanais de target
@@ -1598,35 +1721,34 @@ export const CriarRoteiro: React.FC = () => {
 
     try {
       setCarregandoSemanaisTarget(true);
-      console.log('🔄 Carregando dados semanais de target...');
+      console.log('🔄 Carregando dados semanais de target em paralelo...');
 
-      const response = await axios.post('/report-indicadores-week-target', {
-        report_pk: pkToUse
-      });
+      // Carregar dados e resumo EM PARALELO (permite falhas individuais)
+      const results = await Promise.allSettled([
+        axios.post('/report-indicadores-week-target', { report_pk: pkToUse }),
+        axios.post('/report-indicadores-week-target-summary', { report_pk: pkToUse })
+      ]);
 
-      console.log('📊 Resposta da API (semanais target):', response.data);
+      const [response, summaryResponse] = results.map(result => 
+        result.status === 'fulfilled' ? result.value : null
+      );
 
-      if (response.data.success) {
+      console.log('📊 Resposta da API (semanais target):', response?.data);
+      console.log('📊 Resposta da API (resumo semanal target):', summaryResponse?.data);
+
+      if (response?.data?.success) {
         setDadosSemanaisTarget(response.data.data);
         console.log('✅ Dados semanais de target carregados:', response.data.data.length);
         
-        // Buscar dados de resumo semanal de target
-        console.log('🔄 Buscando dados de resumo semanal de target...');
-        const summaryResponse = await axios.post('/report-indicadores-week-target-summary', {
-          report_pk: pkToUse
-        });
-
-        console.log('📊 Resposta da API (resumo semanal target):', summaryResponse.data);
-
-        if (summaryResponse.data.success) {
+        if (summaryResponse?.data?.success) {
           setDadosSemanaisTargetSummary(summaryResponse.data.data);
           console.log('✅ Dados de resumo semanal de target carregados:', summaryResponse.data.data.length);
         } else {
-          console.error('❌ Erro na resposta da API de resumo semanal de target:', summaryResponse.data.message);
+          console.log('ℹ️ Resumo semanal de target não disponível (normal para roteiros simulados)');
           setDadosSemanaisTargetSummary([]);
         }
       } else {
-        console.error('❌ Erro na resposta da API de dados semanais de target:', response.data.message);
+        console.log('ℹ️ Dados semanais de target não disponíveis (normal para roteiros simulados)');
         setDadosSemanaisTarget([]);
         setDadosSemanaisTargetSummary([]);
       }
@@ -2056,10 +2178,33 @@ export const CriarRoteiro: React.FC = () => {
       console.log('📊 Carregando dados das tabelas dinâmicas...');
       await carregarDadosMatrix();
 
-      // 8. Habilitar Aba 6 e carregar dados dos resultados imediatamente
-      console.log('✅ Habilitando Aba 6 e carregando dados dos resultados...');
+      // 8. Habilitar Aba 6, navegar para ela e verificar status antes de carregar dados
+      console.log('✅ Habilitando Aba 6, navegando para ela e verificando status do roteiro...');
       setAba6Habilitada(true);
-      await carregarDadosResultados();
+      setAbaAtiva(6); // Navegar automaticamente para a Aba 6
+      
+      // Verificar se o roteiro está em processamento antes de tentar carregar dados
+      try {
+        const statusResponse = await axios.get(`/roteiro-status?pk=${planoMidiaGrupo_pk}`);
+        if (statusResponse.data.success && statusResponse.data.data) {
+          const { inProgress } = statusResponse.data.data;
+          console.log('📊 Status do roteiro após publicação - inProgress:', inProgress);
+          
+          if (inProgress) {
+            console.log('⏳ Roteiro publicado está em processamento. Ativando polling para aguardar...');
+            setAguardandoProcessamento(true);
+            // NÃO carregar dados ainda - o polling fará isso quando terminar
+          } else {
+            console.log('✅ Roteiro publicado já processado. Carregando dados...');
+            await carregarDadosResultados();
+          }
+        }
+      } catch (error) {
+        console.error('❌ Erro ao verificar status do roteiro após publicação:', error);
+        // Em caso de erro, ativar polling por precaução
+        console.log('⚠️ Ativando polling por precaução devido a erro na verificação...');
+        setAguardandoProcessamento(true);
+      }
 
       // 9. Mostrar resultado final completo COM RELATÓRIO DO BANCO DE ATIVOS
       const totalRoteiros = uploadResponse.data.roteiros.length;
@@ -3550,91 +3695,9 @@ export const CriarRoteiro: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Seleção de Múltiplas Praças */}
-                        {cidadesSalvas.length > 0 && (
-                          <div className="mb-8 bg-white p-6 rounded-xl border-2 border-gray-200 shadow-sm">
-                            <label className="block text-base font-bold text-[#3a3a3a] mb-4">
-                              Selecione as praças para configurar (múltiplas seleções permitidas)
-                            </label>
-                            <div className="space-y-3 max-h-96 overflow-y-auto border-2 border-gray-200 rounded-lg p-4 bg-gray-50">
-                              {cidadesSalvas.map((cidade) => {
-                                const estaPracaSelecionada = pracasSelecionadasSimulado.some(
-                                  p => p.id_cidade === cidade.id_cidade
-                                );
-                                return (
-                                  <label
-                                    key={cidade.id_cidade}
-                                    className="flex items-center gap-3 p-3 bg-white rounded-lg border-2 border-gray-300 hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition-all"
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={estaPracaSelecionada}
-                                      onChange={(e) => {
-                                        if (e.target.checked) {
-                                          // Adicionar praça
-                                          setPracasSelecionadasSimulado([...pracasSelecionadasSimulado, cidade]);
-                                        } else {
-                                          // Remover praça
-                                          setPracasSelecionadasSimulado(
-                                            pracasSelecionadasSimulado.filter(p => p.id_cidade !== cidade.id_cidade)
-                                          );
-                                          // Remover tabela desta praça quando remover - usar número como chave
-                                          setTabelaSimulado((prev) => {
-                                            const novasTabelas = { ...prev };
-                                            const idPraca = Number(cidade.id_cidade);
-                                            delete novasTabelas[idPraca];
-                                            // Também tentar remover se estiver como string
-                                            delete novasTabelas[cidade.id_cidade as any];
-                                            return novasTabelas;
-                                          });
-                                        }
-                                      }}
-                                      className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                                    />
-                                    <div className="flex-1">
-                                      <span className="text-sm font-medium text-gray-800">
-                                        {cidade.nome_cidade} - {cidade.nome_estado}
-                                      </span>
-                                    </div>
-                                    {estaPracaSelecionada && (
-                                      <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                      </div>
-                                    )}
-                                  </label>
-                                );
-                              })}
-                            </div>
-                            {pracasSelecionadasSimulado.length > 0 && (
-                              <div className="mt-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-lg">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                  </svg>
-                                  <p className="text-sm font-medium text-green-800">
-                                    {pracasSelecionadasSimulado.length} {pracasSelecionadasSimulado.length === 1 ? 'praça selecionada' : 'praças selecionadas'}
-                                  </p>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                  {pracasSelecionadasSimulado.map((praca) => (
-                                    <span
-                                      key={praca.id_cidade}
-                                      className="px-3 py-1 bg-green-600 text-white text-xs font-medium rounded-full"
-                                    >
-                                      {praca.nome_cidade} - {praca.nome_estado}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
 
                         {/* Card de Configuração */}
-                        {pracasSelecionadasSimulado.length > 0 && (
+                        {cidadesSalvas.length > 0 && (
                           <div className="mb-8 bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl border-2 border-orange-200 shadow-sm">
                             <div className="space-y-4">
                               {/* Seleção de Semanas */}
@@ -3664,6 +3727,9 @@ export const CriarRoteiro: React.FC = () => {
                               
                               {/* Botão para gerar tabela */}
                               <div>
+                                <p className="text-sm text-gray-600 mb-3">
+                                  Clique no botão abaixo para gerar automaticamente as tabelas de vias públicas para <span className="font-bold text-orange-600">{cidadesSalvas.length} {cidadesSalvas.length === 1 ? 'praça configurada' : 'praças configuradas'}</span>
+                                </p>
                                 <button
                                   type="button"
                                   onClick={() => gerarTabelaSimulado(quantidadeSemanas)}
@@ -3672,7 +3738,7 @@ export const CriarRoteiro: React.FC = () => {
                                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                   </svg>
-                                  Configurar vias públicas
+                                  Gerar Tabelas para Todas as Praças
                                 </button>
                               </div>
                             </div>
@@ -3682,7 +3748,7 @@ export const CriarRoteiro: React.FC = () => {
                         {/* Tabelas Simuladas - Uma por Praça */}
                         {Object.keys(tabelaSimulado).length > 0 && (
                           <div className="mb-8 space-y-8">
-                            {pracasSelecionadasSimulado.map((praca) => {
+                            {cidadesSalvas.map((praca) => {
                               // Buscar tabela usando número como chave
                               const idPracaNumero = Number(praca.id_cidade);
                               const tabelaDaPraca = tabelaSimulado[idPracaNumero] || tabelaSimulado[praca.id_cidade as any];
@@ -4373,24 +4439,40 @@ export const CriarRoteiro: React.FC = () => {
                       to { transform: rotate(360deg); }
                     }
                   `}</style>
+                  
+                  {/* HIERARQUIA DE LOADING CLARA */}
+                  {aguardandoProcessamento && planoMidiaGrupo_pk ? (
+                    /* NÍVEL 1: Processamento Databricks em andamento */
+                    <ProcessingResultsLoader 
+                      nomeRoteiro={nomeRoteiro || roteiroData?.planoMidiaGrupo_st || 'Roteiro'}
+                      tempoDecorrido={tempoDecorrido}
+                    />
+                  ) : carregandoDadosGerais ? (
+                    /* NÍVEL 2: Carregando dados já processados */
+                    <div className="text-center py-16">
+                      <div className="mx-auto mb-6" style={{ width: 64, height: 64 }}>
+                        <svg width="64" height="64" viewBox="0 0 24 24" 
+                             style={{ animation: 'apple-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}>
+                          <circle cx="12" cy="12" r="10" fill="none" 
+                                  stroke="#ff4600" strokeWidth="2.5" 
+                                  strokeLinecap="round" strokeDasharray="60 158" />
+                        </svg>
+                      </div>
+                      <p className="text-gray-700 font-semibold text-lg mb-2">
+                        Carregando dados dos resultados
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Buscando métricas de performance...
+                      </p>
+                    </div>
+                  ) : (
+                  /* NÍVEL 3: Dados carregados - mostrar tabelas */
                   <div className="space-y-8">
                     {/* Visão Geral */}
                     {tipoVisualizacao === 'geral' && (
                       <div>
                         <h4 className="text-lg font-bold text-[#3a3a3a] mb-4">RESUMO TOTAL</h4>
-                      {(() => {
-                        console.log('🎯 Renderizando Aba 6 - carregandoResultados:', carregandoResultados, 'dadosResultados.length:', dadosResultados.length);
-                        return carregandoResultados ? (
-                          <div className="text-center py-12">
-                            <div className="mx-auto mb-6" style={{ width: 56, height: 56 }}>
-                              <svg width="56" height="56" viewBox="0 0 24 24" style={{ animation: 'apple-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}>
-                                <circle cx="12" cy="12" r="10" fill="none" stroke="#ff4600" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="60 158" />
-                              </svg>
-                            </div>
-                            <p className="text-gray-600 font-medium">Carregando dados dos resultados...</p>
-                            <p className="text-sm text-gray-400 mt-2">Isso pode levar alguns segundos</p>
-                          </div>
-                        ) : dadosResultados.length > 0 ? (
+                      {dadosResultados.length > 0 ? (
                         <div className="overflow-x-auto">
                           <table className="w-full border-collapse border border-gray-300">
                             <thead>
@@ -4457,8 +4539,7 @@ export const CriarRoteiro: React.FC = () => {
                           <p className="text-gray-500">Nenhum dado disponível ainda.</p>
                           <p className="text-sm text-gray-400 mt-2">Os dados podem estar sendo processados ou não há informações para este plano.</p>
                         </div>
-                      );
-                      })()}
+                      )}
                       </div>
                     )}
 
@@ -4466,19 +4547,7 @@ export const CriarRoteiro: React.FC = () => {
                     {tipoVisualizacao === 'geral' && (
                       <div>
                         <h4 className="text-lg font-bold text-blue-600 mb-4">TARGET</h4>
-                        {(() => {
-                          console.log('🎯 Renderizando TARGET - carregandoTarget:', carregandoTarget, 'dadosTarget.length:', dadosTarget.length);
-                          return carregandoTarget ? (
-                            <div className="text-center py-12">
-                              <div className="mx-auto mb-6" style={{ width: 56, height: 56 }}>
-                                <svg width="56" height="56" viewBox="0 0 24 24" style={{ animation: 'apple-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}>
-                                  <circle cx="12" cy="12" r="10" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="60 158" />
-                                </svg>
-                              </div>
-                              <p className="text-gray-600 font-medium">Carregando dados de target...</p>
-                              <p className="text-sm text-gray-400 mt-2">Isso pode levar alguns segundos</p>
-                            </div>
-                          ) : dadosTarget.length > 0 ? (
+                        {dadosTarget.length > 0 ? (
                             <div className="overflow-x-auto">
                               <table className="w-full border-collapse border border-gray-300">
                                 <thead>
@@ -4541,12 +4610,11 @@ export const CriarRoteiro: React.FC = () => {
                               </table>
                             </div>
                           ) : (
-                            <div className="text-center py-8">
-                              <p className="text-gray-500">Nenhum dado de target disponível ainda.</p>
-                              <p className="text-sm text-gray-400 mt-2">Os dados podem estar sendo processados ou não há informações para este plano.</p>
-                            </div>
-                          );
-                        })()}
+                          <div className="text-center py-8">
+                            <p className="text-gray-500">Nenhum dado de target disponível ainda.</p>
+                            <p className="text-sm text-gray-400 mt-2">Os dados podem estar sendo processados ou não há informações para este plano.</p>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -4554,22 +4622,7 @@ export const CriarRoteiro: React.FC = () => {
                     {tipoVisualizacao === 'praca' && (
                       <div>
                         <h4 className="text-lg font-bold text-[#3a3a3a] mb-4">VISÃO POR PRAÇA</h4>
-                        {(() => {
-                          if (carregandoSemanais) {
-                            return (
-                              <div className="text-center py-12">
-                                <div className="mx-auto mb-6" style={{ width: 56, height: 56 }}>
-                                  <svg width="56" height="56" viewBox="0 0 24 24" style={{ animation: 'apple-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}>
-                                    <circle cx="12" cy="12" r="10" fill="none" stroke="#ff4600" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="60 158" />
-                                  </svg>
-                                </div>
-                                <p className="text-gray-600 font-medium">Carregando dados semanais...</p>
-                                <p className="text-sm text-gray-400 mt-2">Isso pode levar alguns segundos</p>
-                              </div>
-                            );
-                          }
-
-                          if (dadosSemanais.length > 0) {
+                        {dadosSemanais.length > 0 ? (() => {
                             // Agrupar dados por cidade e organizar por semana
                             const dadosPorCidade = dadosSemanais.reduce((acc: any, item: any) => {
                               const cidade = item.cidade_st;
@@ -4721,20 +4774,20 @@ export const CriarRoteiro: React.FC = () => {
                                 ))}
                               </div>
                             );
-                          }
-
-                          return (
+                          })() : (
                             <div className="text-center py-8">
                               <p className="text-gray-500">Nenhum dado semanal disponível ainda.</p>
                               <p className="text-sm text-gray-400 mt-2">Os dados podem estar sendo processados ou não há informações para este plano.</p>
                             </div>
-                          );
-                        })()}
+                          )}
                       </div>
                     )}
+                  </div>
+                  )}
 
-                    {/* Botão Download Excel do SharePoint */}
-                    <div className="mt-8 flex justify-center">
+                  {/* Botão Download Excel do SharePoint */}
+                  {!aguardandoProcessamento && (
+                  <div className="mt-8 flex justify-center">
                       <button
                         onClick={baixarExcelSharePoint}
                         disabled={downloadingExcel || !planoMidiaGrupo_pk}
@@ -4764,9 +4817,9 @@ export const CriarRoteiro: React.FC = () => {
                           Salve o roteiro primeiro para habilitar o download
                         </p>
                       )}
-                    </div>
-
                   </div>
+                  )}
+
                 </>
               )}
             </div>
@@ -4783,6 +4836,14 @@ export const CriarRoteiro: React.FC = () => {
           </footer>
         </div>
       </div>
+      
+      {/* Apple-style Save Loader */}
+      <AppleSaveLoader
+        isOpen={showAppleLoader}
+        steps={saveSteps}
+        currentProgress={saveProgress}
+        title="Salvando Roteiro Simulado"
+      />
     </>
   );
 };
