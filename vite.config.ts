@@ -14,7 +14,6 @@ export default defineConfig({
           // Separa bibliotecas grandes em chunks próprios
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'xlsx-vendor': ['xlsx'],
-          'chart-vendor': ['chart.js', 'react-chartjs-2'],
         }
       }
     }
