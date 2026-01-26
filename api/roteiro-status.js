@@ -86,14 +86,14 @@ module.exports = async (req, res) => {
       });
       
       // Verificar se os dados realmente foram processados pelo Databricks
-      // Apenas considerar "completo" se inProgress_bl = false E existem dados em TODAS as views críticas
+      // Apenas considerar "completo" se inProgress_bl = false E existem dados nas views
       let dadosProcessados = false;
       
       if (roteiro.inProgress_bl === 0) {
-        console.log('🔍 inProgress_bl = false. Verificando se dados foram realmente processados em TODAS as views...');
+        console.log('🔍 inProgress_bl = false. Verificando se dados foram realmente processados...');
         
         try {
-          // ✅ Verificar TODAS as views críticas da Aba 6
+          // ✅ Verificar APENAS a view que EXISTE e FUNCIONA
           const checkViasPublicas = await pool.request()
             .input('pk', pk)
             .query(`
@@ -102,29 +102,16 @@ module.exports = async (req, res) => {
               WHERE report_pk = @pk
             `);
           
-          const checkResumo = await pool.request()
-            .input('pk', pk)
-            .query(`
-              SELECT COUNT(*) as total
-              FROM [serv_product_be180].[report_indicadores_vw]
-              WHERE report_pk = @pk
-            `);
-          
           const totalViasPublicas = checkViasPublicas.recordset[0]?.total || 0;
-          const totalResumo = checkResumo.recordset[0]?.total || 0;
           
           console.log('📊 Verificação de dados processados:');
           console.log('   - Vias Públicas:', totalViasPublicas, 'registros');
-          console.log('   - Resumo:', totalResumo, 'registros');
           
-          // ✅ Dados processados se:
-          // - Vias Públicas TEM dados OU
-          // - Resumo TEM dados
-          // (roteiros simulados podem não ter todas as views, mas devem ter pelo menos uma)
-          dadosProcessados = (totalViasPublicas > 0 || totalResumo > 0);
+          // ✅ Dados processados se tiver pelo menos 1 registro
+          dadosProcessados = totalViasPublicas > 0;
           
           if (!dadosProcessados) {
-            console.log('⚠️ inProgress_bl = false, mas ainda não há dados em nenhuma view. Databricks ainda processando...');
+            console.log('⚠️ inProgress_bl = false, mas ainda não há dados. Databricks ainda processando...');
           } else {
             console.log('✅ Dados processados encontrados! Databricks terminou.');
           }
