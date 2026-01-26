@@ -1003,7 +1003,14 @@ export const CriarRoteiro: React.FC = () => {
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         setShowAppleLoader(false);
-        alert(mensagemSucesso);
+        
+        // Mensagem amigável e resumida
+        const cidadesLista = resultadosPraças.map(r => r.praca.nome_cidade).join(', ');
+        mostrarModal(
+          `Seu roteiro simulado foi criado com sucesso! ${planosMidiaDescPk.length} ${planosMidiaDescPk.length === 1 ? 'cidade processada' : 'cidades processadas'}: ${cidadesLista}.`,
+          'success',
+          '🎉 Roteiro Simulado Pronto!'
+        );
 
         // Marcar roteiro simulado como salvo
         setRoteiroSimuladoSalvo(true);
@@ -1453,7 +1460,7 @@ export const CriarRoteiro: React.FC = () => {
           setMensagemProcessamento('❌ Nenhum roteiro válido encontrado');
           setProcessandoExcel(false);
           setTimeout(() => setMensagemProcessamento(''), 5000);
-          alert('Nenhum roteiro válido encontrado no arquivo Excel. Verifique se as colunas estão preenchidas corretamente.');
+          mostrarModal('Verifique se o arquivo está preenchido corretamente e tente novamente.', 'error', 'Nenhum roteiro encontrado');
         } else {
           setRoteirosCarregados(roteirosProcessados);
           setArquivoExcel(file);
@@ -1463,7 +1470,11 @@ export const CriarRoteiro: React.FC = () => {
           
           // O carregamento das tabelas será feito automaticamente pelo useEffect
           
-          alert(`Excel processado com sucesso!\n\nTotal de roteiros encontrados: ${roteirosProcessados.length}\nSemanas detectadas: ${semanasUnicas.join(', ')}\n\nAbas processadas:\n✅ Template: ${templateData.length - templateHeaderRow - 1} linhas\n✅ Param: ${paramData.length - paramHeaderRow - 1} linhas\n✅ IPV_vias públicas: ${ipvData.length - ipvHeaderRow - 1} linhas\n\nJoins realizados:\n✅ Template × Param: ${paramLookup.size} matches\n✅ Template × IPV: ${ipvLookup.size} matches`);
+          mostrarModal(
+            `Arquivo carregado com sucesso! ${roteirosProcessados.length} roteiros encontrados em ${semanasUnicas.length} ${semanasUnicas.length === 1 ? 'semana' : 'semanas'}.`,
+            'success',
+            '✅ Excel Processado!'
+          );
         }
         
       } catch (error) {
@@ -1471,7 +1482,7 @@ export const CriarRoteiro: React.FC = () => {
         setMensagemProcessamento(`❌ Erro: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
         setProcessandoExcel(false);
         setTimeout(() => setMensagemProcessamento(''), 8000);
-        alert(`Erro ao processar arquivo Excel:\n\n${error instanceof Error ? error.message : 'Erro desconhecido'}\n\nVerifique o formato e tente novamente.`);
+        mostrarModal('Não foi possível processar o arquivo. Verifique o formato e tente novamente.', 'error', 'Erro ao processar Excel');
       }
     };
     
@@ -1839,7 +1850,7 @@ export const CriarRoteiro: React.FC = () => {
       }, 100);
 
       console.log('✅ Download concluído com sucesso!');
-      alert(`✅ Download concluído!\n\nArquivo: ${nomeArquivo}`);
+      mostrarModal(`Arquivo salvo na pasta Downloads: ${nomeArquivo}`, 'success', '✅ Download Concluído!');
 
     } catch (error: any) {
       console.error('❌ ERRO DETALHADO:', error);
@@ -2236,68 +2247,14 @@ export const CriarRoteiro: React.FC = () => {
       // 📊 RELATÓRIO DETALHADO DO BANCO DE ATIVOS
       const relatorioBA = pontosResponse.data?.data?.relatorioDetalhado;
       
-      let mensagemSucesso = `🎯 FLUXO COMPLETO FINALIZADO COM SUCESSO!\n\n`;
-      mensagemSucesso += `📊 RESUMO COMPLETO:\n`;
-      mensagemSucesso += `• ${totalRoteiros} roteiros salvos do Excel\n`;
-      mensagemSucesso += `• ${totalCidadesSemanas} combinações cidade+semana detectadas\n`;
-      mensagemSucesso += `• ${totalPontosUnicos} pontos únicos processados\n`;
-      mensagemSucesso += `• ${cidadesExcel.length} planos mídia desc criados\n`;
-      mensagemSucesso += `• ${totalPlanosMidia} planos mídia finalizados\n`;
-      mensagemSucesso += `• Dados transferidos para base calculadora\n`;
-      mensagemSucesso += `• ${databricksInfo.successful}/${databricksInfo.total} jobs Databricks executados\n`;
-      mensagemSucesso += `• Tabelas dinâmicas carregadas e prontas para uso\n\n`;
+      // Mensagem resumida e amigável
+      const cidadesTexto = cidadesExcel.join(', ');
+      let mensagemSucesso = `Roteiro completo criado com sucesso! ${totalRoteiros} roteiros processados em ${cidadesExcel.length} ${cidadesExcel.length === 1 ? 'cidade' : 'cidades'}: ${cidadesTexto}.`;
       
-      // 🏦 RELATÓRIO DO BANCO DE ATIVOS
-      if (relatorioBA) {
-        mensagemSucesso += `🏦 DADOS DO BANCO DE ATIVOS:\n`;
-        mensagemSucesso += `• ${relatorioBA.comDados} pontos com dados reais de fluxo\n`;
-        if (relatorioBA.fluxoZero > 0) {
-          mensagemSucesso += `• ${relatorioBA.fluxoZero} pontos com fluxo zero (baixo movimento)\n`;
-        }
-        if (relatorioBA.apiSemDados > 0) {
-          mensagemSucesso += `• ${relatorioBA.apiSemDados} pontos sem cobertura da API (fluxo zero)\n`;
-        }
-        if (relatorioBA.valorPadrao > 0) {
-          mensagemSucesso += `• ${relatorioBA.valorPadrao} pontos com valor padrão (API falhou)\n`;
-        }
-        mensagemSucesso += `• Total: ${relatorioBA.total} pontos processados com sucesso\n\n`;
-        
-        // Se há pontos sem cobertura da API, mostrar detalhes
-        if (relatorioBA.apiSemDados > 0) {
-          mensagemSucesso += `⚠️ PONTOS SEM COBERTURA DA API:\n`;
-          relatorioBA.detalhes.pontosApiSemDados?.slice(0, 3).forEach((ponto: string) => {
-            mensagemSucesso += `• ${ponto}\n`;
-          });
-          if ((relatorioBA.detalhes.pontosApiSemDados?.length || 0) > 3) {
-            mensagemSucesso += `• ... e mais ${(relatorioBA.detalhes.pontosApiSemDados?.length || 0) - 3} pontos\n`;
-          }
-          mensagemSucesso += `\n`;
-        }
-        
-        // Se há pontos com valor padrão, mostrar detalhes
-        if (relatorioBA.valorPadrao > 0) {
-          mensagemSucesso += `🔧 PONTOS COM VALOR PADRÃO:\n`;
-          relatorioBA.detalhes.pontosValorPadrao?.slice(0, 3).forEach((ponto: string) => {
-            mensagemSucesso += `• ${ponto}\n`;
-          });
-          if ((relatorioBA.detalhes.pontosValorPadrao?.length || 0) > 3) {
-            mensagemSucesso += `• ... e mais ${(relatorioBA.detalhes.pontosValorPadrao?.length || 0) - 3} pontos\n`;
-          }
-          mensagemSucesso += `\n`;
-        }
-      }
-      
-      mensagemSucesso += `🏙️ CIDADES: ${cidadesExcel.join(', ')}\n`;
-      mensagemSucesso += `📅 Data/hora: ${uploadData.date_dh}\n\n`;
-      
-      // ⚠️ ALERTA ESPECÍFICO PARA VALORES PADRÃO
+      // Alerta se há pontos com observações
       if (relatorioBA && relatorioBA.valorPadrao > 0) {
-        mensagemSucesso += `⚠️ ATENÇÃO: ${relatorioBA.valorPadrao} pontos usaram VALOR PADRÃO!\n`;
-        mensagemSucesso += `   Motivo: API do Banco de Ativos falhou para essas coordenadas.\n`;
-        mensagemSucesso += `   Os valores de fluxo foram simulados automaticamente.\n\n`;
+        mensagemSucesso += ` ${relatorioBA.valorPadrao} ${relatorioBA.valorPadrao === 1 ? 'ponto utilizou' : 'pontos utilizaram'} dados simulados.`;
       }
-      
-      mensagemSucesso += `✅ PROJETO CRIADO E PROCESSAMENTO DATABRICKS INICIADO!\n✅ TABELAS DINÂMICAS CARREGADAS!`;
       
       // 📎 FUNÇÃO PARA EXPORTAR PONTOS SEM COBERTURA
       const exportarPontosSemCobertura = () => {
@@ -2388,23 +2345,8 @@ export const CriarRoteiro: React.FC = () => {
         alert(`📁 Arquivo exportado com sucesso!\\n\\nArquivo: ${nomeArquivo}\\nTotal de pontos: ${dadosExport.length}\\n\\nO arquivo foi salvo na pasta de Downloads e pode ser aberto no Excel.`);
       };
 
-      // Mostrar alert customizado com botão de exportação
-      if (relatorioBA && (relatorioBA.apiSemDados > 0 || relatorioBA.valorPadrao > 0)) {
-        // Alert com opção de exportação
-        const exportarAgora = confirm(
-          mensagemSucesso + 
-          `\\n\\n📎 EXPORTAÇÃO DISPONÍVEL:\\n` +
-          `Foram encontrados ${(relatorioBA.apiSemDados || 0) + (relatorioBA.valorPadrao || 0)} pontos com observações.\\n\\n` +
-          `Deseja exportar a lista completa destes pontos para arquivo CSV?`
-        );
-        
-        if (exportarAgora) {
-          exportarPontosSemCobertura();
-        }
-      } else {
-        // Alert normal sem opção de exportação
-        alert(mensagemSucesso);
-      }
+      // Mostrar mensagem de sucesso
+      mostrarModal(mensagemSucesso, 'success', '🎉 Roteiro Completo Criado!');
       
       // ✅ FINALIZAR LOADING COM SUCESSO
       atualizarLoadingAba4('Concluído', 100, 'Processamento finalizado com sucesso!');
@@ -2479,13 +2421,13 @@ export const CriarRoteiro: React.FC = () => {
         const newPk = response.data[0].new_pk;
         setPlanoMidiaGrupo_pk(newPk);
         setAba1Preenchida(true); // Marcar Aba 1 como preenchida
-        alert(`Roteiro criado com sucesso! PK: ${newPk}`);
+        mostrarModal('Seu roteiro foi criado! Agora configure o público-alvo.', 'success', '✅ Roteiro Salvo!');
       } else {
         throw new Error('Resposta inválida do servidor');
       }
     } catch (error) {
       console.error('Erro ao salvar Aba 1:', error);
-      alert('Erro ao salvar roteiro. Tente novamente.');
+      mostrarModal('Não foi possível salvar o roteiro. Tente novamente.', 'error', 'Erro ao salvar');
     } finally {
       setSalvandoAba1(false);
     }
@@ -2520,19 +2462,15 @@ export const CriarRoteiro: React.FC = () => {
       
       setAba2Preenchida(true); // Marcar Aba 2 como preenchida
       
-      let mensagemSucesso = `💾 TARGET CONFIGURADO LOCALMENTE!\n\n`;
-      mensagemSucesso += `📊 CONFIGURAÇÃO:\n`;
-      mensagemSucesso += `• Gênero: ${genero}\n`;
-      mensagemSucesso += `• Classe: ${classe}\n`;
-      mensagemSucesso += `• Faixa Etária: ${faixaEtaria}\n\n`;
-      mensagemSucesso += `⏭️ PRÓXIMO PASSO: Vá para a Aba 3 e selecione as cidades\n`;
-      mensagemSucesso += `🎯 Os registros de mídia serão criados apenas na Aba 4`;
-      
-      alert(mensagemSucesso);
+      mostrarModal(
+        `Público-alvo configurado: ${genero}, ${classe}, ${faixaEtaria}. Agora selecione as cidades do seu roteiro.`,
+        'success',
+        '✅ Target Salvo!'
+      );
 
     } catch (error) {
       console.error('💥 Erro ao salvar Aba 2:', error);
-      alert('Erro ao salvar configuração de target. Tente novamente.');
+      mostrarModal('Não foi possível salvar a configuração. Tente novamente.', 'error', 'Erro ao salvar');
     } finally {
       setSalvandoAba2(false);
     }
@@ -2567,19 +2505,16 @@ export const CriarRoteiro: React.FC = () => {
       
       const totalCidades = cidadesSelecionadas.length;
       
-      let mensagemSucesso = `💾 CONFIGURAÇÃO SALVA LOCALMENTE!\n\n`;
-      mensagemSucesso += `📊 RESUMO:\n`;
-      mensagemSucesso += `• ${totalCidades} cidades selecionadas\n`;
-      mensagemSucesso += `• Target: ${targetSalvoLocal.genero} | ${targetSalvoLocal.classe} | ${targetSalvoLocal.faixaEtaria}\n`;
-      mensagemSucesso += `🏙️ CIDADES: ${cidadesSelecionadas.map(c => c.nome_cidade).join(', ')}\n\n`;
-      mensagemSucesso += `⏭️ PRÓXIMO PASSO: Vá para a Aba 4 e faça o upload do Excel\n`;
-      mensagemSucesso += `🎯 Os registros de mídia serão criados automaticamente na Aba 4`;
-      
-      alert(mensagemSucesso);
+      const cidadesNomes = cidadesSelecionadas.map(c => c.nome_cidade).join(', ');
+      mostrarModal(
+        `${totalCidades} ${totalCidades === 1 ? 'cidade selecionada' : 'cidades selecionadas'}: ${cidadesNomes}. Agora faça o upload do arquivo Excel com os roteiros.`,
+        'success',
+        '✅ Cidades Salvas!'
+      );
 
     } catch (error) {
       console.error('💥 Erro ao salvar Aba 3:', error);
-      alert('Erro ao salvar configuração de cidades. Tente novamente.');
+      mostrarModal('Não foi possível salvar as cidades. Tente novamente.', 'error', 'Erro ao salvar');
     } finally {
       setSalvandoAba3(false);
     }
