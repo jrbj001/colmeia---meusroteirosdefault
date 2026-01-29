@@ -895,10 +895,10 @@ export const BancoDeAtivos: React.FC = () => {
                       </select>
                     </div>
 
-                    {/* Filtro: Tipo de Ambiente - Indoor */}
+                    {/* Filtro: Tipo de mídia - Indoor */}
                     <div>
                       <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">
-                        Tipo de Ambiente - Indoor
+                        Tipo de mídia - Indoor
                         <span className="block text-xs text-gray-400 font-normal mt-1 normal-case">
                           (válido somente para indoor)
                         </span>
