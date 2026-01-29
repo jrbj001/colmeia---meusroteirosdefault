@@ -2789,42 +2789,31 @@ export const CriarRoteiro: React.FC = () => {
                         </div>
 
                         {/* Agência */}
-                        <div className="w-[430px]">
+                        <div className="w-[500px]">
                           <label className="block text-base text-[#3a3a3a] mb-2">
                             Agência
                           </label>
-                          <div className="flex gap-2">
-                            <div className="relative flex-1">
-                              <select
-                                value={agencia}
-                                onChange={(e) => setAgencia(e.target.value)}
-                                className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
-                                disabled={loadingAgencias || modoVisualizacao}
-                              >
-                                <option value="">
-                                  {loadingAgencias ? "Carregando..." : "Ex.: Agência GUT"}
-                                </option>
-                                {agencias.map((ag) => (
-                                  <option key={ag.id_agencia} value={ag.nome_agencia}>
-                                    {ag.nome_agencia}
-                                  </option>
-                                ))}
-                              </select>
-                              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                <svg className="w-4 h-4 text-[#3A3A3A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                              </div>
-                            </div>
-                            
-                            <button
-                              type="button"
-                              className="w-[50px] h-[50px] bg-[#ff4600] text-white rounded-lg hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 flex items-center justify-center"
+                          <div className="relative">
+                            <select
+                              value={agencia}
+                              onChange={(e) => setAgencia(e.target.value)}
+                              className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                              disabled={loadingAgencias || modoVisualizacao}
                             >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              <option value="">
+                                {loadingAgencias ? "Carregando..." : "Ex.: Agência GUT"}
+                              </option>
+                              {agencias.map((ag) => (
+                                <option key={ag.id_agencia} value={ag.nome_agencia}>
+                                  {ag.nome_agencia}
+                                </option>
+                              ))}
+                            </select>
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                              <svg className="w-4 h-4 text-[#3A3A3A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
-                            </button>
+                            </div>
                           </div>
                         </div>
 
@@ -2915,42 +2904,31 @@ export const CriarRoteiro: React.FC = () => {
                         </div>
 
                         {/* Categoria */}
-                        <div className="w-[430px]">
+                        <div className="w-[500px]">
                           <label className="block text-base text-[#3a3a3a] mb-2">
                             Categoria
                           </label>
-                          <div className="flex gap-2">
-                            <div className="relative flex-1">
-                              <select
-                                value={categoria}
-                                onChange={(e) => setCategoria(e.target.value)}
-                                className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
-                                disabled={loadingCategorias || modoVisualizacao}
-                              >
-                                <option value="">
-                                  {loadingCategorias ? "Carregando..." : "Ex.: Bebidas"}
-                                </option>
-                                {categorias.map((c) => (
-                                  <option key={c.id_categoria} value={c.nome_categoria}>
-                                    {c.nome_categoria}
-                                  </option>
-                                ))}
-                              </select>
-                              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                <svg className="w-4 h-4 text-[#3A3A3A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                              </div>
-                            </div>
-                            
-                            <button
-                              type="button"
-                              className="w-[50px] h-[50px] bg-[#ff4600] text-white rounded-lg hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 flex items-center justify-center"
+                          <div className="relative">
+                            <select
+                              value={categoria}
+                              onChange={(e) => setCategoria(e.target.value)}
+                              className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                              disabled={loadingCategorias || modoVisualizacao}
                             >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              <option value="">
+                                {loadingCategorias ? "Carregando..." : "Ex.: Bebidas"}
+                              </option>
+                              {categorias.map((c) => (
+                                <option key={c.id_categoria} value={c.nome_categoria}>
+                                  {c.nome_categoria}
+                                </option>
+                              ))}
+                            </select>
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                              <svg className="w-4 h-4 text-[#3A3A3A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
-                            </button>
+                            </div>
                           </div>
                         </div>
                       </div>
