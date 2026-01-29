@@ -3501,8 +3501,8 @@ export const CriarRoteiro: React.FC = () => {
                       {/* Botão de Download do Template */}
                       <div className="mb-4">
                         <a
-                          href="/Template importacao_NU_Roteiro 02.xlsx"
-                          download="Template_importacao_NU_Roteiro_02.xlsx"
+                          href="/template_plano_midia.xlsx"
+                          download="template_plano_midia.xlsx"
                           className="flex items-center gap-2 px-4 py-2 text-[#ff4600] hover:text-orange-600 font-medium border border-orange-300 rounded-lg hover:bg-white transition-colors inline-flex"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
