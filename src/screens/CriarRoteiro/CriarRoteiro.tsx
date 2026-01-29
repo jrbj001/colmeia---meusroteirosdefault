@@ -520,6 +520,7 @@ export const CriarRoteiro: React.FC = () => {
                 // Campos da BaseCalculadora para configuração geral
                 seDigitalInsercoes_vl: 0, // Digital Inserções
                 seDigitalMaximoInsercoes_vl: 0, // Digital Máx. Inserções
+                quantidade: subgrupo.quantidade || 0, // Total de Ativos
                 // Array de semanas
                 semanas: semanasArray
               });
@@ -3738,6 +3739,7 @@ export const CriarRoteiro: React.FC = () => {
                                           <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Visibilidade</th>
                                           <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Digital Inserções</th>
                                           <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Digital Máx. Inserções</th>
+                                          <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Total de Ativos</th>
                                           {/* Colunas dinâmicas de semanas */}
                                           {tabelaDaPraca[0]?.semanas && tabelaDaPraca[0].semanas.map((semana: any, idx: number) => (
                                             <th key={idx} className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">
@@ -3797,6 +3799,11 @@ export const CriarRoteiro: React.FC = () => {
                                                 className="w-full px-3 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                                                 placeholder="0"
                                               />
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                              <div className="px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg">
+                                                {linha.quantidade || 0}
+                                              </div>
                                             </td>
                                             {/* Células dinâmicas de semanas */}
                                             {linha.semanas && linha.semanas.map((semana: any, semanaIdx: number) => (
