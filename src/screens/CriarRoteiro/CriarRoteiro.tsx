@@ -539,6 +539,7 @@ export const CriarRoteiro: React.FC = () => {
                 grupo_st: grupoKey,
                 grupoSub_st: subgrupo.codigo,
                 grupoDesc_st: subgrupo.descricao,
+                estaticoDigital_st: subgrupo.estaticoDigital_st || 'E', // 'D' = Digital, 'E' = Estático
                 visibilidade: '100', // Valor padrão - Alta
                 // Campos da BaseCalculadora para configuração geral
                 seDigitalInsercoes_vl: 0, // Digital Inserções
@@ -3771,21 +3772,28 @@ export const CriarRoteiro: React.FC = () => {
                                             <td className="px-4 py-3 text-sm font-bold text-gray-800">{linha.grupo_st}</td>
                                             <td className="px-4 py-3 text-sm text-gray-700">{linha.grupoDesc_st}</td>
                                             <td className="px-4 py-3">
-                                              <select 
-                                                value={linha.visibilidade}
-                                                onChange={(e) => {
-                                                  const novasTabelas = { ...tabelaSimulado };
-                                                  novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
-                                                  novasTabelas[idPracaNumero][index].visibilidade = e.target.value;
-                                                  setTabelaSimulado(novasTabelas);
-                                                }}
-                                                className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                                              >
-                                                <option value="25">Baixa</option>
-                                                <option value="50">Média</option>
-                                                <option value="75">Moderada</option>
-                                                <option value="100">Alta</option>
-                                              </select>
+                                              {/* Visibilidade só aparece para Estático */}
+                                              {linha.estaticoDigital_st === 'E' ? (
+                                                <select 
+                                                  value={linha.visibilidade}
+                                                  onChange={(e) => {
+                                                    const novasTabelas = { ...tabelaSimulado };
+                                                    novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
+                                                    novasTabelas[idPracaNumero][index].visibilidade = e.target.value;
+                                                    setTabelaSimulado(novasTabelas);
+                                                  }}
+                                                  className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                                >
+                                                  <option value="25">Baixa</option>
+                                                  <option value="50">Média</option>
+                                                  <option value="75">Moderada</option>
+                                                  <option value="100">Alta</option>
+                                                </select>
+                                              ) : (
+                                                <div className="w-full px-3 py-2 text-sm text-center text-gray-400 italic">
+                                                  N/A
+                                                </div>
+                                              )}
                                             </td>
                                             <td className="px-4 py-3">
                                               <input
