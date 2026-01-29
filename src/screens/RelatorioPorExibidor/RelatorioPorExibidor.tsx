@@ -166,9 +166,13 @@ export const RelatorioPorExibidor: React.FC = () => {
   };
 
   const handleSort = (column: keyof RelatorioData) => {
+    console.log('🔄 Ordenando por:', column, 'Direção atual:', sortDirection);
     if (sortColumn === column) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      const novaDirecao = sortDirection === 'asc' ? 'desc' : 'asc';
+      console.log('   → Alternando direção para:', novaDirecao);
+      setSortDirection(novaDirecao);
     } else {
+      console.log('   → Nova coluna, definindo como DESC');
       setSortColumn(column);
       setSortDirection('desc');
     }
@@ -232,7 +236,8 @@ export const RelatorioPorExibidor: React.FC = () => {
 
         return {
           'Ranking': getValue(item.ranking, 0),
-          'Praça/Cidade': getValue(item.praca_nome || item.cidade, ''),
+          'Bairro': getValue(item.praca_nome, ''),
+          'Cidade': getValue(item.cidade, ''),
           'Pts Indoor': getValue(item.pontos_indoor, 0),
           'Pts Vias Púb.': getValue(item.pontos_vias_publicas, 0),
           'Total': getValue(item.total, 0),
@@ -255,7 +260,8 @@ export const RelatorioPorExibidor: React.FC = () => {
 
       dadosExcel.push({
         'Ranking': '',
-        'Praça/Cidade': 'TOTAL',
+        'Bairro': 'TOTAL',
+        'Cidade': '',
         'Pts Indoor': totalPontosIndoor,
         'Pts Vias Púb.': totalPontosViasPublicas,
         'Total': totalGeral || 0,
@@ -276,7 +282,8 @@ export const RelatorioPorExibidor: React.FC = () => {
       }
       worksheet['!cols'] = [
         { wch: 10 }, // Ranking
-        { wch: 30 }, // Praça/Cidade
+        { wch: 25 }, // Bairro
+        { wch: 25 }, // Cidade
         { wch: 15 }, // Pts Indoor
         { wch: 20 }, // Pts Vias Púb.
         { wch: 12 }, // Total
@@ -311,7 +318,8 @@ export const RelatorioPorExibidor: React.FC = () => {
   const getSortColumnLabel = () => {
     const labels: Record<string, string> = {
       'total': 'Total',
-      'praca_nome': 'Praça/Cidade',
+      'praca_nome': 'Bairro',
+      'cidade': 'Cidade',
       'pontos_indoor': 'Pontos Indoor',
       'pontos_vias_publicas': 'Pontos Vias Públicas',
       'percentual_total': '% do Total',
@@ -443,66 +451,128 @@ export const RelatorioPorExibidor: React.FC = () => {
                 <div className="shadow-sm rounded-lg border border-[#c1c1c1] bg-white overflow-hidden flex flex-col" style={{ height: '600px' }}>
                   <div className="flex-1 overflow-y-auto overflow-x-auto" id="table-scroll-container">
                     {/* Cabeçalho */}
-                    <div className="bg-[#f7f7f7] border-b-2 border-[#c1c1c1] sticky top-0 z-10">
+                    <div className="bg-[#f7f7f7] border-b-2 border-[#c1c1c1] sticky top-0 z-50">
                       <table className="border-collapse" style={{ minWidth: '100%', width: 'max-content' }}>
                         <thead>
                           <tr>
-                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-left font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '150px' }} onClick={() => handleSort('ranking')}>
-                              <div className="flex items-center">
+                            <th 
+                              className="border-r border-[#c1c1c1] px-4 py-3 text-left font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" 
+                              style={{ width: '150px', userSelect: 'none', position: 'relative' }} 
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleSort('ranking');
+                              }}
+                            >
+                              <div className="flex items-center pointer-events-none">
                                 Ranking
                                 {getSortIcon('ranking')}
                               </div>
                             </th>
-                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-left font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '250px' }} onClick={() => handleSort('praca_nome')}>
-                              <div className="flex items-center">
-                                Praça/Cidade
+                            <th 
+                              className="border-r border-[#c1c1c1] px-4 py-3 text-left font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" 
+                              style={{ width: '200px', userSelect: 'none', position: 'relative' }} 
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleSort('praca_nome');
+                              }}
+                            >
+                              <div className="flex items-center pointer-events-none">
+                                Bairro
                                 {getSortIcon('praca_nome')}
                               </div>
                             </th>
-                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '150px' }} onClick={() => handleSort('pontos_indoor')}>
-                              <div className="flex items-center justify-end">
+                            <th 
+                              className="border-r border-[#c1c1c1] px-4 py-3 text-left font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" 
+                              style={{ width: '200px', userSelect: 'none', position: 'relative' }} 
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleSort('cidade');
+                              }}
+                            >
+                              <div className="flex items-center pointer-events-none">
+                                Cidade
+                                {getSortIcon('cidade')}
+                              </div>
+                            </th>
+                            <th 
+                              className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" 
+                              style={{ width: '150px', userSelect: 'none', position: 'relative' }} 
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSort('pontos_indoor'); }}
+                            >
+                              <div className="flex items-center justify-end pointer-events-none">
                                 Pts Indoor
                                 {getSortIcon('pontos_indoor')}
                               </div>
                             </th>
-                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '180px' }} onClick={() => handleSort('pontos_vias_publicas')}>
-                              <div className="flex items-center justify-end">
+                            <th 
+                              className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" 
+                              style={{ width: '180px', userSelect: 'none', position: 'relative' }} 
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSort('pontos_vias_publicas'); }}
+                            >
+                              <div className="flex items-center justify-end pointer-events-none">
                                 Pts Vias Púb.
                                 {getSortIcon('pontos_vias_publicas')}
                               </div>
                             </th>
-                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '150px' }} onClick={() => handleSort('total')}>
-                              <div className="flex items-center justify-end">
+                            <th 
+                              className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" 
+                              style={{ width: '150px', userSelect: 'none', position: 'relative' }} 
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSort('total'); }}
+                            >
+                              <div className="flex items-center justify-end pointer-events-none">
                                 Total
                                 {getSortIcon('total')}
                               </div>
                             </th>
-                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '150px' }} onClick={() => handleSort('percentual_total')}>
-                              <div className="flex items-center justify-end">
+                            <th 
+                              className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" 
+                              style={{ width: '150px', userSelect: 'none', position: 'relative' }} 
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSort('percentual_total'); }}
+                            >
+                              <div className="flex items-center justify-end pointer-events-none">
                                 % Total
                                 {getSortIcon('percentual_total')}
                               </div>
                             </th>
-                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '150px' }} onClick={() => handleSort('tipos_midia_unicos')}>
-                              <div className="flex items-center justify-end">
+                            <th 
+                              className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" 
+                              style={{ width: '150px', userSelect: 'none', position: 'relative' }} 
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSort('tipos_midia_unicos'); }}
+                            >
+                              <div className="flex items-center justify-end pointer-events-none">
                                 Tipos Mídia
                                 {getSortIcon('tipos_midia_unicos')}
                               </div>
                             </th>
-                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '180px' }} onClick={() => handleSort('fluxo_medio_passantes')}>
-                              <div className="flex items-center justify-end">
+                            <th 
+                              className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" 
+                              style={{ width: '180px', userSelect: 'none', position: 'relative' }} 
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSort('fluxo_medio_passantes'); }}
+                            >
+                              <div className="flex items-center justify-end pointer-events-none">
                                 Fluxo Médio
                                 {getSortIcon('fluxo_medio_passantes')}
                               </div>
                             </th>
-                            <th className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '180px' }} onClick={() => handleSort('total_impacto_ipv')}>
-                              <div className="flex items-center justify-end">
+                            <th 
+                              className="border-r border-[#c1c1c1] px-4 py-3 text-right font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" 
+                              style={{ width: '180px', userSelect: 'none', position: 'relative' }} 
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSort('total_impacto_ipv'); }}
+                            >
+                              <div className="flex items-center justify-end pointer-events-none">
                                 Impacto IPV
                                 {getSortIcon('total_impacto_ipv')}
                               </div>
                             </th>
-                            <th className="px-4 py-3 text-left font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" style={{ width: '180px' }} onClick={() => handleSort('classe_social_predominante')}>
-                              <div className="flex items-center">
+                            <th 
+                              className="px-4 py-3 text-left font-semibold text-[#3a3a3a] cursor-pointer hover:bg-[#ededed] transition-colors select-none whitespace-nowrap bg-[#f7f7f7]" 
+                              style={{ width: '180px', userSelect: 'none', position: 'relative' }} 
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSort('classe_social_predominante'); }}
+                            >
+                              <div className="flex items-center pointer-events-none">
                                 Classe Social
                                 {getSortIcon('classe_social_predominante')}
                               </div>
@@ -520,8 +590,11 @@ export const RelatorioPorExibidor: React.FC = () => {
                             <td className="border-r border-[#c1c1c1] px-4 py-3 text-center text-[#3a3a3a] font-bold" style={{ width: '150px' }}>
                               #{item.ranking || index + 1}
                             </td>
-                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-[#3a3a3a] font-medium" style={{ width: '250px' }}>
-                              {item.praca_nome || item.cidade || '-'}
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-[#3a3a3a] font-medium" style={{ width: '200px' }}>
+                              {item.praca_nome || '-'}
+                            </td>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-[#3a3a3a] font-medium" style={{ width: '200px' }}>
+                              {item.cidade || '-'}
                             </td>
                             <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a]" style={{ width: '150px' }}>
                               {formatarNumero(item.pontos_indoor || 0)}
@@ -560,7 +633,10 @@ export const RelatorioPorExibidor: React.FC = () => {
                             <td className="border-r border-[#c1c1c1] px-4 py-3 text-center text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '150px' }}>
                               TOTAL
                             </td>
-                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '250px' }}>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '200px' }}>
+                              -
+                            </td>
+                            <td className="border-r border-[#c1c1c1] px-4 py-3 text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '200px' }}>
                               -
                             </td>
                             <td className="border-r border-[#c1c1c1] px-4 py-3 text-right text-[#3a3a3a] bg-[#f7f7f7]" style={{ width: '150px' }}>
