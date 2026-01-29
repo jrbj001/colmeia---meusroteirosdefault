@@ -9,6 +9,7 @@ import { useRoteiroStatusPolling } from "../../hooks/useRoteiroStatusPolling";
 import { ProcessingResultsLoader } from "../../components/ProcessingResultsLoader/ProcessingResultsLoader";
 import { AppleSaveLoader } from "../../components/AppleSaveLoader/AppleSaveLoader";
 import { Modal } from "../../components/Modal/Modal";
+import { ModalAdicionarMarca } from "../../components/ModalAdicionarMarca/ModalAdicionarMarca";
 
 interface Agencia {
   id_agencia: number;
@@ -122,6 +123,28 @@ export const CriarRoteiro: React.FC = () => {
   const mostrarModal = (message: string, type: 'info' | 'warning' | 'error' | 'success' = 'warning', title?: string) => {
     setModalConfig({ message, type, title });
     setModalAberto(true);
+  };
+  
+  // Estado para Modal de Adicionar Marca
+  const [modalMarcaAberto, setModalMarcaAberto] = useState(false);
+  
+  // Função para lidar com sucesso ao adicionar marca
+  const handleMarcaAdicionada = (novaMarca: { id_marca: number; nome_marca: string }) => {
+    console.log('✅ Nova marca adicionada:', novaMarca);
+    
+    // Adicionar a nova marca à lista existente
+    setMarcas(prev => {
+      const novaLista = [...prev, novaMarca].sort((a, b) => 
+        a.nome_marca.localeCompare(b.nome_marca)
+      );
+      return novaLista;
+    });
+    
+    // Selecionar automaticamente a marca recém-criada
+    setMarca(novaMarca.nome_marca);
+    
+    // Mostrar mensagem de sucesso
+    mostrarModal(`Marca "${novaMarca.nome_marca}" adicionada com sucesso!`, 'success');
   };
   
   // Estados para controle de processamento em background
@@ -2879,7 +2902,10 @@ export const CriarRoteiro: React.FC = () => {
                             
                             <button
                               type="button"
-                              className="w-[50px] h-[50px] bg-[#ff4600] text-white rounded-lg hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 flex items-center justify-center"
+                              onClick={() => setModalMarcaAberto(true)}
+                              disabled={modoVisualizacao}
+                              className={`w-[50px] h-[50px] bg-[#ff4600] text-white rounded-lg hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 flex items-center justify-center transition-colors ${modoVisualizacao ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              title="Adicionar nova marca"
                             >
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -4812,6 +4838,13 @@ export const CriarRoteiro: React.FC = () => {
         title={modalConfig.title}
         message={modalConfig.message}
         type={modalConfig.type}
+      />
+      
+      {/* Modal para adicionar marca */}
+      <ModalAdicionarMarca
+        isOpen={modalMarcaAberto}
+        onClose={() => setModalMarcaAberto(false)}
+        onSuccess={handleMarcaAdicionada}
       />
     </>
   );

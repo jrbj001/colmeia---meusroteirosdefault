@@ -1,0 +1,1 @@
+export { ModalAdicionarMarca } from './ModalAdicionarMarca';
