@@ -2297,7 +2297,8 @@ export const CriarRoteiro: React.FC = () => {
             const [ambiente_midia, coords] = (localizacao || '').split(' (');
             const [ambiente, midia] = (ambiente_midia || '').split('-');
             const coordenadas = coords ? coords.replace(')', '') : '';
-            const [lat, lng] = coordenadas ? coordenadas.split(',') : ['', ''];
+            // ✅ CORREÇÃO: Inverter ordem - coordenadas vêm como lng,lat (padrão GeoJSON)
+            const [lng, lat] = coordenadas ? coordenadas.split(',') : ['', ''];
             
             dadosExport.push({
               'Ambiente': ambiente || '',
@@ -2320,7 +2321,8 @@ export const CriarRoteiro: React.FC = () => {
             const [ambiente_midia, coords] = (localizacao || '').split(' (');
             const [ambiente, midia] = (ambiente_midia || '').split('-');
             const coordenadas = coords ? coords.replace(')', '') : '';
-            const [lat, lng] = coordenadas ? coordenadas.split(',') : ['', ''];
+            // ✅ CORREÇÃO: Inverter ordem - coordenadas vêm como lng,lat (padrão GeoJSON)
+            const [lng, lat] = coordenadas ? coordenadas.split(',') : ['', ''];
             
             dadosExport.push({
               'Ambiente': ambiente || '',
@@ -2336,19 +2338,30 @@ export const CriarRoteiro: React.FC = () => {
           });
         }
 
+        // ✅ CORREÇÃO: Remover duplicadas baseado em Latitude + Longitude + Tipo de Mídia
+        const dadosUnicos = dadosExport.filter((item, index, self) => {
+          const chave = `${item.Latitude},${item.Longitude},${item['Tipo de Mídia']}`;
+          return index === self.findIndex(i => 
+            `${i.Latitude},${i.Longitude},${i['Tipo de Mídia']}` === chave
+          );
+        });
+
+        console.log(`📊 Registros antes de remover duplicadas: ${dadosExport.length}`);
+        console.log(`📊 Registros após remover duplicadas: ${dadosUnicos.length}`);
+
         // Converter para CSV (compatível com Excel)
-        if (dadosExport.length === 0) {
+        if (dadosUnicos.length === 0) {
           alert('Nenhum dado para exportar.');
           return;
         }
 
-        const headers = Object.keys(dadosExport[0]);
+        const headers = Object.keys(dadosUnicos[0]);
         
         // Adicionar BOM para UTF-8 (compatibilidade com Excel)
         const BOM = '\\uFEFF';
         const csvContent = BOM + [
           headers.join(';'), // Usar ponto e vírgula para compatibilidade com Excel brasileiro
-          ...dadosExport.map(row => 
+          ...dadosUnicos.map(row => 
             headers.map(header => `"${(row[header] || '').toString().replace(/"/g, '""')}"`).join(';')
           )
         ].join('\\r\\n');
