@@ -2425,6 +2425,35 @@ export const CriarRoteiro: React.FC = () => {
   };
 
   // Função para gerar o string do plano mídia grupo
+  // Função para converter nome da agência em ID
+  const getAgenciaIdByNome = (nomeAgencia: string): number | null => {
+    const agenciaEncontrada = agencias.find(ag => ag.nome_agencia === nomeAgencia);
+    return agenciaEncontrada ? agenciaEncontrada.id_agencia : null;
+  };
+
+  // Função para converter nome da marca em ID
+  const getMarcaIdByNome = (nomeMarca: string): number | null => {
+    const marcaEncontrada = marcas.find(m => m.nome_marca === nomeMarca);
+    return marcaEncontrada ? marcaEncontrada.id_marca : null;
+  };
+
+  // Função para converter nome da categoria em ID
+  const getCategoriaIdByNome = (nomeCategoria: string): number | null => {
+    const categoriaEncontrada = categorias.find(c => c.nome_categoria === nomeCategoria);
+    return categoriaEncontrada ? categoriaEncontrada.id_categoria : null;
+  };
+
+  // Função para converter valor formatado (R$ 10.000,00) em número
+  const parseValorCampanha = (valorFormatado: string): number => {
+    // Remove "R$", pontos e substitui vírgula por ponto
+    const valorLimpo = valorFormatado
+      .replace('R$', '')
+      .replace(/\./g, '')
+      .replace(',', '.')
+      .trim();
+    return parseFloat(valorLimpo);
+  };
+
   const gerarPlanoMidiaGrupoString = () => {
     const hoje = new Date();
     const ano = hoje.getFullYear();
@@ -2442,8 +2471,29 @@ export const CriarRoteiro: React.FC = () => {
 
   // Função para salvar Aba 1 - Criar Plano Mídia Grupo
   const salvarAba1 = async () => {
+    // Validações
     if (!nomeRoteiro.trim()) {
       mostrarModal('Dê um nome para o seu roteiro antes de salvar.', 'warning', 'Nome obrigatório');
+      return;
+    }
+
+    if (!agencia) {
+      mostrarModal('Selecione uma agência antes de salvar.', 'warning', 'Agência obrigatória');
+      return;
+    }
+
+    if (!marca) {
+      mostrarModal('Selecione uma marca antes de salvar.', 'warning', 'Marca obrigatória');
+      return;
+    }
+
+    if (!categoria) {
+      mostrarModal('Selecione uma categoria antes de salvar.', 'warning', 'Categoria obrigatória');
+      return;
+    }
+
+    if (!valorCampanha || valorCampanha.trim() === '' || valorCampanha === 'R$ 0,00') {
+      mostrarModal('Informe o valor da campanha antes de salvar.', 'warning', 'Valor da campanha obrigatório');
       return;
     }
 
@@ -2451,8 +2501,31 @@ export const CriarRoteiro: React.FC = () => {
     try {
       const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
       
+      // Converter nomes em IDs
+      const agencia_pk = getAgenciaIdByNome(agencia);
+      const marca_pk = getMarcaIdByNome(marca);
+      const categoria_pk = getCategoriaIdByNome(categoria);
+
+      // Validar se os IDs foram encontrados
+      if (!agencia_pk) {
+        throw new Error('Agência selecionada não encontrada');
+      }
+      if (!marca_pk) {
+        throw new Error('Marca selecionada não encontrada');
+      }
+      if (!categoria_pk) {
+        throw new Error('Categoria selecionada não encontrada');
+      }
+
+      // Converter valor formatado para número
+      const valorCampanha_vl = parseValorCampanha(valorCampanha);
+
       const response = await axios.post('/plano-midia-grupo', {
-        planoMidiaGrupo_st
+        planoMidiaGrupo_st,
+        agencia_pk,
+        marca_pk,
+        categoria_pk,
+        valorCampanha_vl
       });
 
       if (response.data && response.data[0]?.new_pk) {
@@ -2954,9 +3027,9 @@ export const CriarRoteiro: React.FC = () => {
                         <button
                           type="button"
                           onClick={salvarAba1}
-                          disabled={salvandoAba1 || !nomeRoteiro.trim()}
+                          disabled={salvandoAba1 || !nomeRoteiro.trim() || !agencia || !marca || !categoria || !valorCampanha || valorCampanha === 'R$ 0,00'}
                           className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base ${
-                            salvandoAba1 || !nomeRoteiro.trim()
+                            salvandoAba1 || !nomeRoteiro.trim() || !agencia || !marca || !categoria || !valorCampanha || valorCampanha === 'R$ 0,00'
                               ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
                               : planoMidiaGrupo_pk
                               ? 'bg-green-500 text-white border-green-500 hover:bg-green-600'
@@ -3769,7 +3842,7 @@ export const CriarRoteiro: React.FC = () => {
                                       <tbody>
                                         {tabelaDaPraca.map((linha, index) => (
                                           <tr key={index} className={`border-b border-gray-200 transition-colors ${index % 2 === 0 ? 'bg-white hover:bg-blue-50' : 'bg-gray-50 hover:bg-blue-50'}`}>
-                                            <td className="px-4 py-3 text-sm font-bold text-gray-800">{linha.grupo_st}</td>
+                                            <td className="px-4 py-3 text-sm font-bold text-gray-800">{linha.grupoSub_st}</td>
                                             <td className="px-4 py-3 text-sm text-gray-700">{linha.grupoDesc_st}</td>
                                             <td className="px-4 py-3">
                                               {/* Visibilidade só aparece para Estático */}
