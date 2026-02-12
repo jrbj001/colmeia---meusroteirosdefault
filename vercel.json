@@ -282,6 +282,10 @@
     {
       "source": "/roteiro-status",
       "destination": "/api/roteiro-status.js"
+    },
+    {
+      "source": "/investigar-usuarios-db",
+      "destination": "/api/investigar-usuarios-db.js"
     }
   ]
 } 
