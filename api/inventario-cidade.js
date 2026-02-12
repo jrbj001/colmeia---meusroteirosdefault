@@ -21,7 +21,12 @@ module.exports = async (req, res) => {
           inv.grupo_st,
           inv.grupoSub_st,
           inv.count_vl,
-          g.grupoDesc_st as descricao
+          g.grupoDesc_st as descricao,
+          CASE 
+            WHEN inv.grupoSub_st LIKE '%D%' OR inv.grupoSub_st LIKE '%Digital%' 
+            THEN 'D'
+            ELSE 'E'
+          END as estaticoDigital_st
         FROM serv_product_be180.baseAtivosJoinGrupoSubCount_ft_vw inv
         LEFT JOIN serv_product_be180.grupoSubDistinct_dm_vw g 
           ON inv.grupoSub_st = g.grupoSub_st
@@ -49,7 +54,8 @@ module.exports = async (req, res) => {
       inventario[grupo].subgrupos.push({
         codigo: subGrupo,
         descricao: descricao,
-        quantidade: quantidade
+        quantidade: quantidade,
+        estaticoDigital_st: item.estaticoDigital_st || 'E'
       });
       
       inventario[grupo].total += quantidade;

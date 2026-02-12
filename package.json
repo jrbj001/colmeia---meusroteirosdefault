@@ -9,6 +9,7 @@
   "dependencies": {
     "@auth0/auth0-react": "^2.8.0",
     "@azure/msal-node": "^2.6.0",
+    "@notionhq/client": "^5.9.0",
     "@types/leaflet.markercluster": "^1.5.6",
     "axios": "^1.6.7",
     "csv-parser": "^3.2.0",

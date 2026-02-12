@@ -9,6 +9,7 @@ import { useRoteiroStatusPolling } from "../../hooks/useRoteiroStatusPolling";
 import { ProcessingResultsLoader } from "../../components/ProcessingResultsLoader/ProcessingResultsLoader";
 import { AppleSaveLoader } from "../../components/AppleSaveLoader/AppleSaveLoader";
 import { Modal } from "../../components/Modal/Modal";
+import { ModalAdicionarMarca } from "../../components/ModalAdicionarMarca/ModalAdicionarMarca";
 
 interface Agencia {
   id_agencia: number;
@@ -122,6 +123,28 @@ export const CriarRoteiro: React.FC = () => {
   const mostrarModal = (message: string, type: 'info' | 'warning' | 'error' | 'success' = 'warning', title?: string) => {
     setModalConfig({ message, type, title });
     setModalAberto(true);
+  };
+  
+  // Estado para Modal de Adicionar Marca
+  const [modalMarcaAberto, setModalMarcaAberto] = useState(false);
+  
+  // Função para lidar com sucesso ao adicionar marca
+  const handleMarcaAdicionada = (novaMarca: { id_marca: number; nome_marca: string }) => {
+    console.log('✅ Nova marca adicionada:', novaMarca);
+    
+    // Adicionar a nova marca à lista existente
+    setMarcas(prev => {
+      const novaLista = [...prev, novaMarca].sort((a, b) => 
+        a.nome_marca.localeCompare(b.nome_marca)
+      );
+      return novaLista;
+    });
+    
+    // Selecionar automaticamente a marca recém-criada
+    setMarca(novaMarca.nome_marca);
+    
+    // Mostrar mensagem de sucesso
+    mostrarModal(`Marca "${novaMarca.nome_marca}" adicionada com sucesso!`, 'success');
   };
   
   // Estados para controle de processamento em background
@@ -516,10 +539,12 @@ export const CriarRoteiro: React.FC = () => {
                 grupo_st: grupoKey,
                 grupoSub_st: subgrupo.codigo,
                 grupoDesc_st: subgrupo.descricao,
+                estaticoDigital_st: subgrupo.estaticoDigital_st || 'E', // 'D' = Digital, 'E' = Estático
                 visibilidade: '100', // Valor padrão - Alta
                 // Campos da BaseCalculadora para configuração geral
                 seDigitalInsercoes_vl: 0, // Digital Inserções
                 seDigitalMaximoInsercoes_vl: 0, // Digital Máx. Inserções
+                quantidade: subgrupo.quantidade || 0, // Total de Ativos
                 // Array de semanas
                 semanas: semanasArray
               });
@@ -2273,7 +2298,8 @@ export const CriarRoteiro: React.FC = () => {
             const [ambiente_midia, coords] = (localizacao || '').split(' (');
             const [ambiente, midia] = (ambiente_midia || '').split('-');
             const coordenadas = coords ? coords.replace(')', '') : '';
-            const [lat, lng] = coordenadas ? coordenadas.split(',') : ['', ''];
+            // ✅ CORREÇÃO: Inverter ordem - coordenadas vêm como lng,lat (padrão GeoJSON)
+            const [lng, lat] = coordenadas ? coordenadas.split(',') : ['', ''];
             
             dadosExport.push({
               'Ambiente': ambiente || '',
@@ -2296,7 +2322,8 @@ export const CriarRoteiro: React.FC = () => {
             const [ambiente_midia, coords] = (localizacao || '').split(' (');
             const [ambiente, midia] = (ambiente_midia || '').split('-');
             const coordenadas = coords ? coords.replace(')', '') : '';
-            const [lat, lng] = coordenadas ? coordenadas.split(',') : ['', ''];
+            // ✅ CORREÇÃO: Inverter ordem - coordenadas vêm como lng,lat (padrão GeoJSON)
+            const [lng, lat] = coordenadas ? coordenadas.split(',') : ['', ''];
             
             dadosExport.push({
               'Ambiente': ambiente || '',
@@ -2312,19 +2339,30 @@ export const CriarRoteiro: React.FC = () => {
           });
         }
 
+        // ✅ CORREÇÃO: Remover duplicadas baseado em Latitude + Longitude + Tipo de Mídia
+        const dadosUnicos = dadosExport.filter((item, index, self) => {
+          const chave = `${item.Latitude},${item.Longitude},${item['Tipo de Mídia']}`;
+          return index === self.findIndex(i => 
+            `${i.Latitude},${i.Longitude},${i['Tipo de Mídia']}` === chave
+          );
+        });
+
+        console.log(`📊 Registros antes de remover duplicadas: ${dadosExport.length}`);
+        console.log(`📊 Registros após remover duplicadas: ${dadosUnicos.length}`);
+
         // Converter para CSV (compatível com Excel)
-        if (dadosExport.length === 0) {
+        if (dadosUnicos.length === 0) {
           alert('Nenhum dado para exportar.');
           return;
         }
 
-        const headers = Object.keys(dadosExport[0]);
+        const headers = Object.keys(dadosUnicos[0]);
         
         // Adicionar BOM para UTF-8 (compatibilidade com Excel)
         const BOM = '\\uFEFF';
         const csvContent = BOM + [
           headers.join(';'), // Usar ponto e vírgula para compatibilidade com Excel brasileiro
-          ...dadosExport.map(row => 
+          ...dadosUnicos.map(row => 
             headers.map(header => `"${(row[header] || '').toString().replace(/"/g, '""')}"`).join(';')
           )
         ].join('\\r\\n');
@@ -2387,6 +2425,35 @@ export const CriarRoteiro: React.FC = () => {
   };
 
   // Função para gerar o string do plano mídia grupo
+  // Função para converter nome da agência em ID
+  const getAgenciaIdByNome = (nomeAgencia: string): number | null => {
+    const agenciaEncontrada = agencias.find(ag => ag.nome_agencia === nomeAgencia);
+    return agenciaEncontrada ? agenciaEncontrada.id_agencia : null;
+  };
+
+  // Função para converter nome da marca em ID
+  const getMarcaIdByNome = (nomeMarca: string): number | null => {
+    const marcaEncontrada = marcas.find(m => m.nome_marca === nomeMarca);
+    return marcaEncontrada ? marcaEncontrada.id_marca : null;
+  };
+
+  // Função para converter nome da categoria em ID
+  const getCategoriaIdByNome = (nomeCategoria: string): number | null => {
+    const categoriaEncontrada = categorias.find(c => c.nome_categoria === nomeCategoria);
+    return categoriaEncontrada ? categoriaEncontrada.id_categoria : null;
+  };
+
+  // Função para converter valor formatado (R$ 10.000,00) em número
+  const parseValorCampanha = (valorFormatado: string): number => {
+    // Remove "R$", pontos e substitui vírgula por ponto
+    const valorLimpo = valorFormatado
+      .replace('R$', '')
+      .replace(/\./g, '')
+      .replace(',', '.')
+      .trim();
+    return parseFloat(valorLimpo);
+  };
+
   const gerarPlanoMidiaGrupoString = () => {
     const hoje = new Date();
     const ano = hoje.getFullYear();
@@ -2404,8 +2471,29 @@ export const CriarRoteiro: React.FC = () => {
 
   // Função para salvar Aba 1 - Criar Plano Mídia Grupo
   const salvarAba1 = async () => {
+    // Validações
     if (!nomeRoteiro.trim()) {
       mostrarModal('Dê um nome para o seu roteiro antes de salvar.', 'warning', 'Nome obrigatório');
+      return;
+    }
+
+    if (!agencia) {
+      mostrarModal('Selecione uma agência antes de salvar.', 'warning', 'Agência obrigatória');
+      return;
+    }
+
+    if (!marca) {
+      mostrarModal('Selecione uma marca antes de salvar.', 'warning', 'Marca obrigatória');
+      return;
+    }
+
+    if (!categoria) {
+      mostrarModal('Selecione uma categoria antes de salvar.', 'warning', 'Categoria obrigatória');
+      return;
+    }
+
+    if (!valorCampanha || valorCampanha.trim() === '' || valorCampanha === 'R$ 0,00') {
+      mostrarModal('Informe o valor da campanha antes de salvar.', 'warning', 'Valor da campanha obrigatório');
       return;
     }
 
@@ -2413,8 +2501,31 @@ export const CriarRoteiro: React.FC = () => {
     try {
       const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
       
+      // Converter nomes em IDs
+      const agencia_pk = getAgenciaIdByNome(agencia);
+      const marca_pk = getMarcaIdByNome(marca);
+      const categoria_pk = getCategoriaIdByNome(categoria);
+
+      // Validar se os IDs foram encontrados
+      if (!agencia_pk) {
+        throw new Error('Agência selecionada não encontrada');
+      }
+      if (!marca_pk) {
+        throw new Error('Marca selecionada não encontrada');
+      }
+      if (!categoria_pk) {
+        throw new Error('Categoria selecionada não encontrada');
+      }
+
+      // Converter valor formatado para número
+      const valorCampanha_vl = parseValorCampanha(valorCampanha);
+
       const response = await axios.post('/plano-midia-grupo', {
-        planoMidiaGrupo_st
+        planoMidiaGrupo_st,
+        agencia_pk,
+        marca_pk,
+        categoria_pk,
+        valorCampanha_vl
       });
 
       if (response.data && response.data[0]?.new_pk) {
@@ -2765,42 +2876,31 @@ export const CriarRoteiro: React.FC = () => {
                         </div>
 
                         {/* Agência */}
-                        <div className="w-[430px]">
+                        <div className="w-[500px]">
                           <label className="block text-base text-[#3a3a3a] mb-2">
                             Agência
                           </label>
-                          <div className="flex gap-2">
-                            <div className="relative flex-1">
-                              <select
-                                value={agencia}
-                                onChange={(e) => setAgencia(e.target.value)}
-                                className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
-                                disabled={loadingAgencias || modoVisualizacao}
-                              >
-                                <option value="">
-                                  {loadingAgencias ? "Carregando..." : "Ex.: Agência GUT"}
-                                </option>
-                                {agencias.map((ag) => (
-                                  <option key={ag.id_agencia} value={ag.nome_agencia}>
-                                    {ag.nome_agencia}
-                                  </option>
-                                ))}
-                              </select>
-                              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                <svg className="w-4 h-4 text-[#3A3A3A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                              </div>
-                            </div>
-                            
-                            <button
-                              type="button"
-                              className="w-[50px] h-[50px] bg-[#ff4600] text-white rounded-lg hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 flex items-center justify-center"
+                          <div className="relative">
+                            <select
+                              value={agencia}
+                              onChange={(e) => setAgencia(e.target.value)}
+                              className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                              disabled={loadingAgencias || modoVisualizacao}
                             >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              <option value="">
+                                {loadingAgencias ? "Carregando..." : "Ex.: Agência GUT"}
+                              </option>
+                              {agencias.map((ag) => (
+                                <option key={ag.id_agencia} value={ag.nome_agencia}>
+                                  {ag.nome_agencia}
+                                </option>
+                              ))}
+                            </select>
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                              <svg className="w-4 h-4 text-[#3A3A3A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
-                            </button>
+                            </div>
                           </div>
                         </div>
 
@@ -2878,7 +2978,10 @@ export const CriarRoteiro: React.FC = () => {
                             
                             <button
                               type="button"
-                              className="w-[50px] h-[50px] bg-[#ff4600] text-white rounded-lg hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 flex items-center justify-center"
+                              onClick={() => setModalMarcaAberto(true)}
+                              disabled={modoVisualizacao}
+                              className={`w-[50px] h-[50px] bg-[#ff4600] text-white rounded-lg hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 flex items-center justify-center transition-colors ${modoVisualizacao ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              title="Adicionar nova marca"
                             >
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -2888,42 +2991,31 @@ export const CriarRoteiro: React.FC = () => {
                         </div>
 
                         {/* Categoria */}
-                        <div className="w-[430px]">
+                        <div className="w-[500px]">
                           <label className="block text-base text-[#3a3a3a] mb-2">
                             Categoria
                           </label>
-                          <div className="flex gap-2">
-                            <div className="relative flex-1">
-                              <select
-                                value={categoria}
-                                onChange={(e) => setCategoria(e.target.value)}
-                                className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
-                                disabled={loadingCategorias || modoVisualizacao}
-                              >
-                                <option value="">
-                                  {loadingCategorias ? "Carregando..." : "Ex.: Bebidas"}
-                                </option>
-                                {categorias.map((c) => (
-                                  <option key={c.id_categoria} value={c.nome_categoria}>
-                                    {c.nome_categoria}
-                                  </option>
-                                ))}
-                              </select>
-                              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                <svg className="w-4 h-4 text-[#3A3A3A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                              </div>
-                            </div>
-                            
-                            <button
-                              type="button"
-                              className="w-[50px] h-[50px] bg-[#ff4600] text-white rounded-lg hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 flex items-center justify-center"
+                          <div className="relative">
+                            <select
+                              value={categoria}
+                              onChange={(e) => setCategoria(e.target.value)}
+                              className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                              disabled={loadingCategorias || modoVisualizacao}
                             >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              <option value="">
+                                {loadingCategorias ? "Carregando..." : "Ex.: Bebidas"}
+                              </option>
+                              {categorias.map((c) => (
+                                <option key={c.id_categoria} value={c.nome_categoria}>
+                                  {c.nome_categoria}
+                                </option>
+                              ))}
+                            </select>
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                              <svg className="w-4 h-4 text-[#3A3A3A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
-                            </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -2935,9 +3027,9 @@ export const CriarRoteiro: React.FC = () => {
                         <button
                           type="button"
                           onClick={salvarAba1}
-                          disabled={salvandoAba1 || !nomeRoteiro.trim()}
+                          disabled={salvandoAba1 || !nomeRoteiro.trim() || !agencia || !marca || !categoria || !valorCampanha || valorCampanha === 'R$ 0,00'}
                           className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base ${
-                            salvandoAba1 || !nomeRoteiro.trim()
+                            salvandoAba1 || !nomeRoteiro.trim() || !agencia || !marca || !categoria || !valorCampanha || valorCampanha === 'R$ 0,00'
                               ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
                               : planoMidiaGrupo_pk
                               ? 'bg-green-500 text-white border-green-500 hover:bg-green-600'
@@ -3496,8 +3588,8 @@ export const CriarRoteiro: React.FC = () => {
                       {/* Botão de Download do Template */}
                       <div className="mb-4">
                         <a
-                          href="/Template importacao_NU_Roteiro 02.xlsx"
-                          download="Template_importacao_NU_Roteiro_02.xlsx"
+                          href="/template_plano_midia.xlsx"
+                          download="template_plano_midia.xlsx"
                           className="flex items-center gap-2 px-4 py-2 text-[#ff4600] hover:text-orange-600 font-medium border border-orange-300 rounded-lg hover:bg-white transition-colors inline-flex"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3738,6 +3830,7 @@ export const CriarRoteiro: React.FC = () => {
                                           <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Visibilidade</th>
                                           <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Digital Inserções</th>
                                           <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Digital Máx. Inserções</th>
+                                          <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Total de Ativos</th>
                                           {/* Colunas dinâmicas de semanas */}
                                           {tabelaDaPraca[0]?.semanas && tabelaDaPraca[0].semanas.map((semana: any, idx: number) => (
                                             <th key={idx} className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">
@@ -3749,24 +3842,31 @@ export const CriarRoteiro: React.FC = () => {
                                       <tbody>
                                         {tabelaDaPraca.map((linha, index) => (
                                           <tr key={index} className={`border-b border-gray-200 transition-colors ${index % 2 === 0 ? 'bg-white hover:bg-blue-50' : 'bg-gray-50 hover:bg-blue-50'}`}>
-                                            <td className="px-4 py-3 text-sm font-bold text-gray-800">{linha.grupo_st}</td>
+                                            <td className="px-4 py-3 text-sm font-bold text-gray-800">{linha.grupoSub_st}</td>
                                             <td className="px-4 py-3 text-sm text-gray-700">{linha.grupoDesc_st}</td>
                                             <td className="px-4 py-3">
-                                              <select 
-                                                value={linha.visibilidade}
-                                                onChange={(e) => {
-                                                  const novasTabelas = { ...tabelaSimulado };
-                                                  novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
-                                                  novasTabelas[idPracaNumero][index].visibilidade = e.target.value;
-                                                  setTabelaSimulado(novasTabelas);
-                                                }}
-                                                className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                                              >
-                                                <option value="25">Baixa</option>
-                                                <option value="50">Média</option>
-                                                <option value="75">Moderada</option>
-                                                <option value="100">Alta</option>
-                                              </select>
+                                              {/* Visibilidade só aparece para Estático */}
+                                              {linha.estaticoDigital_st === 'E' ? (
+                                                <select 
+                                                  value={linha.visibilidade}
+                                                  onChange={(e) => {
+                                                    const novasTabelas = { ...tabelaSimulado };
+                                                    novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
+                                                    novasTabelas[idPracaNumero][index].visibilidade = e.target.value;
+                                                    setTabelaSimulado(novasTabelas);
+                                                  }}
+                                                  className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                                >
+                                                  <option value="25">Baixa</option>
+                                                  <option value="50">Média</option>
+                                                  <option value="75">Moderada</option>
+                                                  <option value="100">Alta</option>
+                                                </select>
+                                              ) : (
+                                                <div className="w-full px-3 py-2 text-sm text-center text-gray-400 italic">
+                                                  N/A
+                                                </div>
+                                              )}
                                             </td>
                                             <td className="px-4 py-3">
                                               <input
@@ -3797,6 +3897,11 @@ export const CriarRoteiro: React.FC = () => {
                                                 className="w-full px-3 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                                                 placeholder="0"
                                               />
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                              <div className="px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg">
+                                                {linha.quantidade || 0}
+                                              </div>
                                             </td>
                                             {/* Células dinâmicas de semanas */}
                                             {linha.semanas && linha.semanas.map((semana: any, semanaIdx: number) => (
@@ -4805,6 +4910,13 @@ export const CriarRoteiro: React.FC = () => {
         title={modalConfig.title}
         message={modalConfig.message}
         type={modalConfig.type}
+      />
+      
+      {/* Modal para adicionar marca */}
+      <ModalAdicionarMarca
+        isOpen={modalMarcaAberto}
+        onClose={() => setModalMarcaAberto(false)}
+        onSuccess={handleMarcaAdicionada}
       />
     </>
   );
