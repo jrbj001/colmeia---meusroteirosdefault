@@ -16,7 +16,9 @@ IF OBJECT_ID('[serv_product_be180].[usuario_completo_vw]', 'V') IS NOT NULL
     DROP VIEW [serv_product_be180].[usuario_completo_vw];
 GO
 
-CREATE VIEW [serv_product_be180].[usuario_completo_vw] AS
+CREATE VIEW [serv_product_be180].[usuario_completo_vw]
+WITH SCHEMABINDING
+AS
 SELECT 
     u.pk as usuario_pk,
     u.pk2 as usuario_pk2,
@@ -48,7 +50,9 @@ IF OBJECT_ID('[serv_product_be180].[usuario_permissoes_vw]', 'V') IS NOT NULL
     DROP VIEW [serv_product_be180].[usuario_permissoes_vw];
 GO
 
-CREATE VIEW [serv_product_be180].[usuario_permissoes_vw] AS
+CREATE VIEW [serv_product_be180].[usuario_permissoes_vw]
+WITH SCHEMABINDING
+AS
 SELECT 
     u.pk as usuario_pk,
     u.nome_st as usuario_nome,
@@ -83,7 +87,9 @@ IF OBJECT_ID('[serv_product_be180].[area_sistema_hierarquia_vw]', 'V') IS NOT NU
     DROP VIEW [serv_product_be180].[area_sistema_hierarquia_vw];
 GO
 
-CREATE VIEW [serv_product_be180].[area_sistema_hierarquia_vw] AS
+CREATE VIEW [serv_product_be180].[area_sistema_hierarquia_vw]
+WITH SCHEMABINDING
+AS
 SELECT 
     a.area_pk,
     a.codigo_st,
@@ -114,7 +120,8 @@ IF OBJECT_ID('[serv_product_be180].[perfil_permissoes_resumo_vw]', 'V') IS NOT N
     DROP VIEW [serv_product_be180].[perfil_permissoes_resumo_vw];
 GO
 
-CREATE VIEW [serv_product_be180].[perfil_permissoes_resumo_vw] AS
+CREATE VIEW [serv_product_be180].[perfil_permissoes_resumo_vw]
+AS
 SELECT 
     p.perfil_pk,
     p.nome_st as perfil_nome,
