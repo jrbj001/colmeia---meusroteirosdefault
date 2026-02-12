@@ -1,9 +1,6 @@
 {
   "name": "colmeia-meusroteirosdefault",
   "version": "1.0.0",
-  "engines": {
-    "node": "24.x"
-  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
