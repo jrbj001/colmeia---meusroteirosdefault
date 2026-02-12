@@ -286,6 +286,30 @@
     {
       "source": "/investigar-usuarios-db",
       "destination": "/api/investigar-usuarios-db.js"
+    },
+    {
+      "source": "/usuarios",
+      "destination": "/api/usuarios.js"
+    },
+    {
+      "source": "/usuarios-permissoes",
+      "destination": "/api/usuarios-permissoes.js"
+    },
+    {
+      "source": "/perfis",
+      "destination": "/api/perfis.js"
+    },
+    {
+      "source": "/perfis-permissoes",
+      "destination": "/api/perfis-permissoes.js"
+    },
+    {
+      "source": "/areas",
+      "destination": "/api/areas.js"
+    },
+    {
+      "source": "/verificar-acesso",
+      "destination": "/api/verificar-acesso.js"
     }
   ]
 } 
