@@ -16,11 +16,12 @@ module.exports = async (req, res) => {
 
     const pool = await getPool();
     
-    // Buscar planoMidia_pks usando a mesma lógica da API de hexágonos
-    const planoMidiaResult = await pool.request().query(`
-      SELECT pk FROM serv_product_be180.planoMidia_dm_vw
-      WHERE planoMidiaDesc_vl = ${desc_pk}
-    `);
+    const planoMidiaResult = await pool.request()
+      .input('desc_pk', desc_pk)
+      .query(`
+        SELECT pk FROM serv_product_be180.planoMidia_dm_vw
+        WHERE planoMidiaDesc_vl = @desc_pk
+      `);
 
     if (!planoMidiaResult.recordset || planoMidiaResult.recordset.length === 0) {
       return res.status(200).json({ pontos: [] });
@@ -30,12 +31,16 @@ module.exports = async (req, res) => {
     
     console.log(`📍 [API pontos-midia] planoMidia_pks para desc_pk ${desc_pk}:`, planoMidiaPks);
     
-    // PRIMEIRO: Buscar os grupos únicos dos hexágonos para este desc_pk
-    // Isso garante que só retornaremos pontos que pertencem aos grupos dos hexágonos
-    const gruposHexagonosResult = await pool.request().query(`
+    const gruposRequest = pool.request();
+    const grupoPkParams = planoMidiaPks.map((pk, i) => {
+      gruposRequest.input(`pk${i}`, pk);
+      return `@pk${i}`;
+    }).join(',');
+
+    const gruposHexagonosResult = await gruposRequest.query(`
       SELECT DISTINCT grupo_st
       FROM serv_product_be180.BaseCalculadoraHexagonosJoin_dm
-      WHERE planoMidia_pk IN (${planoMidiaPks.join(',')})
+      WHERE planoMidia_pk IN (${grupoPkParams})
         AND grupo_st IS NOT NULL
         AND grupo_st != ''
     `);
@@ -48,17 +53,22 @@ module.exports = async (req, res) => {
       return res.status(200).json({ pontos: [] });
     }
     
-    // Buscar pontos de mídia da view, FILTRANDO pelos grupos dos hexágonos
-    // O subgrupo deve derivar do grupo, então filtramos por grupo_st
-    const gruposList = gruposHexagonos.map(g => `'${g.replace(/'/g, "''")}'`).join(',');
-    const query = `
+    const pontosRequest = pool.request();
+    const pontosPkParams = planoMidiaPks.map((pk, i) => {
+      pontosRequest.input(`pk${i}`, pk);
+      return `@pk${i}`;
+    }).join(',');
+    const gruposParams = gruposHexagonos.map((g, i) => {
+      pontosRequest.input(`grupo${i}`, g);
+      return `@grupo${i}`;
+    }).join(',');
+
+    const result = await pontosRequest.query(`
       SELECT *
       FROM serv_product_be180.baseCalculadoraLastPlanoMidia_ft_vw
-      WHERE planoMidia_pk IN (${planoMidiaPks.join(',')})
-        AND grupo_st IN (${gruposList})
-    `;
-
-    const result = await pool.request().query(query);
+      WHERE planoMidia_pk IN (${pontosPkParams})
+        AND grupo_st IN (${gruposParams})
+    `);
     
     console.log(`📍 [API pontos-midia] Total de pontos retornados (filtrados por grupos): ${result.recordset.length}`);
     

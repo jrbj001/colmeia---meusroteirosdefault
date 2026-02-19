@@ -36,32 +36,40 @@ module.exports = async function handler(req, res) {
       const { page = 1, limit = 10, search = '', perfil = '' } = req.query;
       const offset = (page - 1) * limit;
 
+      const countReq = pool.request();
+      const dataReq = pool.request();
       let whereClause = 'WHERE usuario_ativo = 1';
       
       if (search) {
-        whereClause += ` AND (usuario_nome LIKE '%${search}%' OR usuario_email LIKE '%${search}%')`;
+        whereClause += ` AND (usuario_nome LIKE @search OR usuario_email LIKE @search)`;
+        const searchPattern = `%${search}%`;
+        countReq.input('search', searchPattern);
+        dataReq.input('search', searchPattern);
       }
       
       if (perfil) {
-        whereClause += ` AND perfil_nome = '${perfil}'`;
+        whereClause += ` AND perfil_nome = @perfil`;
+        countReq.input('perfil', perfil);
+        dataReq.input('perfil', perfil);
       }
 
-      // Contar total
-      const countResult = await pool.request().query(`
+      const countResult = await countReq.query(`
         SELECT COUNT(*) as total 
         FROM [serv_product_be180].[usuario_completo_vw]
         ${whereClause}
       `);
 
-      // Buscar usuários
-      const result = await pool.request().query(`
-        SELECT *
-        FROM [serv_product_be180].[usuario_completo_vw]
-        ${whereClause}
-        ORDER BY usuario_pk
-        OFFSET ${offset} ROWS
-        FETCH NEXT ${limit} ROWS ONLY
-      `);
+      const result = await dataReq
+        .input('offset', parseInt(offset))
+        .input('limit', parseInt(limit))
+        .query(`
+          SELECT *
+          FROM [serv_product_be180].[usuario_completo_vw]
+          ${whereClause}
+          ORDER BY usuario_pk
+          OFFSET @offset ROWS
+          FETCH NEXT @limit ROWS ONLY
+        `);
 
       return res.status(200).json({
         usuarios: result.recordset,

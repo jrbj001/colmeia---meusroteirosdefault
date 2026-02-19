@@ -131,7 +131,9 @@ module.exports = async (req, res) => {
 
     // Permitir limite customizado via query param (default 1000, máximo 100000)
     const limiteReq = req.query.limite ? parseInt(req.query.limite) : 1000;
-    const limite = Math.min(limiteReq, 100000); // Máximo 100k para segurança
+    const limite = Math.min(limiteReq, 100000);
+    const limiteParamIndex = paramIndex;
+    params.push(limite);
 
     // Log para debug - mostrar filtros aplicados
     console.log(`📊 [Busca Pontos Mídia] Filtros aplicados:`, {
@@ -179,7 +181,7 @@ module.exports = async (req, res) => {
       LEFT JOIN media_groups mg ON mt.media_group_id = mg.id
       ${whereClause}
       ORDER BY mp.id
-      LIMIT ${limite}
+      LIMIT $${limiteParamIndex}
     `;
 
     console.log('📊 [Busca Pontos Mídia] Query SQL:', query);

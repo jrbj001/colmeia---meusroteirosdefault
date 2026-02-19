@@ -14,11 +14,13 @@ module.exports = async (req, res) => {
     
     console.log(`\n🔍 [pivot-descpks] Buscando descPks para grupo: ${grupo}`);
     
-    const result = await pool.request().query(`
-      SELECT cidadeUpper_st, planoMidiaDesc_pk
-      FROM serv_product_be180.planoMidiaGrupoPivot_dm_vw
-      WHERE planoMidiaGrupo_pk = ${grupo}
-    `);
+    const result = await pool.request()
+      .input('grupo', grupo)
+      .query(`
+        SELECT cidadeUpper_st, planoMidiaDesc_pk
+        FROM serv_product_be180.planoMidiaGrupoPivot_dm_vw
+        WHERE planoMidiaGrupo_pk = @grupo
+      `);
     
     console.log(`📊 [pivot-descpks] Registros encontrados: ${result.recordset.length}`);
     result.recordset.forEach(r => {

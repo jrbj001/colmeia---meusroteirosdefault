@@ -39,22 +39,25 @@ module.exports = async (req, res) => {
     } catch (spError) {
       console.error('⚠️ SP não encontrada, tentando UPDATE direto...');
       
-      // Fallback: tentar UPDATE direto (pode falhar por permissão)
-      await pool.request().query(`
-        UPDATE serv_product_be180.planoMidiaGrupo_dm
-        SET planoMidiaDescPk_st = '${pksString}'
-        WHERE pk = ${planoMidiaGrupo_pk}
-      `);
+      await pool.request()
+        .input('pksString', pksString)
+        .input('grupoPk', planoMidiaGrupo_pk)
+        .query(`
+          UPDATE serv_product_be180.planoMidiaGrupo_dm
+          SET planoMidiaDescPk_st = @pksString
+          WHERE pk = @grupoPk
+        `);
       
       console.log(`✅ Grupo ${planoMidiaGrupo_pk} atualizado com UPDATE direto!`);
     }
     
-    // Confirma a atualização
-    const result = await pool.request().query(`
-      SELECT pk, planoMidiaDescPk_st
-      FROM serv_product_be180.planoMidiaGrupo_dm
-      WHERE pk = ${planoMidiaGrupo_pk}
-    `);
+    const result = await pool.request()
+      .input('grupoPk', planoMidiaGrupo_pk)
+      .query(`
+        SELECT pk, planoMidiaDescPk_st
+        FROM serv_product_be180.planoMidiaGrupo_dm
+        WHERE pk = @grupoPk
+      `);
     
     if (result.recordset.length > 0) {
       console.log(`📊 Valor atualizado: ${result.recordset[0].planoMidiaDescPk_st}`);

@@ -11,11 +11,13 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: 'Parâmetro desc_pk é obrigatório' });
     }
     const pool = await getPool();
-    const result = await pool.request().query(`
-      SELECT semanaInicial_vl, semanaFinal_vl
-      FROM serv_product_be180.planoMidia_dm_vw
-      WHERE planoMidiaDesc_vl = ${desc_pk}
-    `);
+    const result = await pool.request()
+      .input('desc_pk', desc_pk)
+      .query(`
+        SELECT semanaInicial_vl, semanaFinal_vl
+        FROM serv_product_be180.planoMidia_dm_vw
+        WHERE planoMidiaDesc_vl = @desc_pk
+      `);
     res.json({ semanas: result.recordset });
   } catch (err) {
     console.error('Erro na API /api/semanas:', err);

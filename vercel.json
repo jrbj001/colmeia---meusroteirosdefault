@@ -108,16 +108,8 @@
       "destination": "/api/target-faixa-etaria.js"
     },
     {
-      "source": "/debug-grupo",
-      "destination": "/api/debug-grupo.js"
-    },
-    {
       "source": "/hexagonos",
       "destination": "/api/hexagonos.js"
-    },
-    {
-      "source": "/debug",
-      "destination": "/api/debug.js"
     },
     {
       "source": "/plano-midia-desc-cleanup",
@@ -180,42 +172,6 @@
       "destination": "/api/databricks-roteiro-simulado.js"
     },
     {
-      "source": "/teste-rapido",
-      "destination": "/api/teste-rapido.js"
-    },
-    {
-      "source": "/banco-ativos-controle",
-      "destination": "/api/banco-ativos-controle.js"
-    },
-    {
-      "source": "/debug-roteiro-simulado",
-      "destination": "/api/debug-roteiro-simulado.js"
-    },
-    {
-      "source": "/descobrir-tabelas",
-      "destination": "/api/descobrir-tabelas.js"
-    },
-    {
-      "source": "/teste-view-resultados",
-      "destination": "/api/teste-view-resultados.js"
-    },
-    {
-      "source": "/ver-sp-codigo",
-      "destination": "/api/ver-sp-codigo.js"
-    },
-    {
-      "source": "/verificar-desc-salvos",
-      "destination": "/api/verificar-desc-salvos.js"
-    },
-    {
-      "source": "/verificar-dados-para-databricks",
-      "destination": "/api/verificar-dados-para-databricks.js"
-    },
-    {
-      "source": "/ver-sp-planomidiadesc",
-      "destination": "/api/ver-sp-planomidiadesc.js"
-    },
-    {
       "source": "/atualizar-grupo-desc-pks",
       "destination": "/api/atualizar-grupo-desc-pks.js"
     },
@@ -260,10 +216,6 @@
       "destination": "/api/grupos-midia.js"
     },
     {
-      "source": "/teste-cidades",
-      "destination": "/api/teste-cidades.js"
-    },
-    {
       "source": "/banco-ativos-mapa",
       "destination": "/api/banco-ativos-mapa.js"
     },
@@ -282,10 +234,6 @@
     {
       "source": "/roteiro-status",
       "destination": "/api/roteiro-status.js"
-    },
-    {
-      "source": "/investigar-usuarios-db",
-      "destination": "/api/investigar-usuarios-db.js"
     },
     {
       "source": "/usuarios",

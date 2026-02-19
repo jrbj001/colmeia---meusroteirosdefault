@@ -11,12 +11,14 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: 'Parâmetro grupo é obrigatório' });
     }
     const pool = await getPool();
-    const result = await pool.request().query(`
-      SELECT DISTINCT cidadeUpper_st, planoMidiaGrupo_st
-      FROM serv_product_be180.planoMidiaGrupoPivot_dm_vw
-      WHERE planoMidiaGrupo_pk = ${grupo}
-      ORDER BY cidadeUpper_st
-    `);
+    const result = await pool.request()
+      .input('grupo', grupo)
+      .query(`
+        SELECT DISTINCT cidadeUpper_st, planoMidiaGrupo_st
+        FROM serv_product_be180.planoMidiaGrupoPivot_dm_vw
+        WHERE planoMidiaGrupo_pk = @grupo
+        ORDER BY cidadeUpper_st
+      `);
     const cidades = result.recordset.map(r => r.cidadeUpper_st);
     const nomeGrupo = result.recordset.length > 0 ? result.recordset[0].planoMidiaGrupo_st : null;
     res.json({ cidades, nomeGrupo });
