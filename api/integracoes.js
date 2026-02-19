@@ -1,6 +1,7 @@
 const handlers = {
   'sharepoint': require('../handlers/sharepoint-download'),
   'consulta-endereco': require('../handlers/consulta-endereco'),
+  'busca-coordenada': require('../handlers/busca-coordenada'),
   'user-profile': require('../handlers/user-profile'),
 };
 

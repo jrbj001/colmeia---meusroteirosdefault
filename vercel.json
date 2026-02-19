@@ -92,6 +92,7 @@
 
     { "source": "/api/sharepoint-download", "destination": "/api/integracoes?action=sharepoint" },
     { "source": "/api/consulta-endereco", "destination": "/api/integracoes?action=consulta-endereco" },
+    { "source": "/api/busca-coordenada", "destination": "/api/integracoes?action=busca-coordenada" },
     { "source": "/api/user-profile", "destination": "/api/integracoes?action=user-profile" }
   ]
 }
