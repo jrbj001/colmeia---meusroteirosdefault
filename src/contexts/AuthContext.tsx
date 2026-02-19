@@ -1,19 +1,33 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
+import axios from 'axios';
 
 interface User {
   id: string;
   email: string;
   name: string;
   picture?: string;
+  usuario_pk?: number; // PK do banco de dados
+  perfil_pk?: number;
+  perfil_nome?: string;
+}
+
+interface Permissao {
+  area_codigo: string;
+  area_nome: string;
+  ler: boolean;
+  escrever: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
+  permissoes: Permissao[];
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
   isAuthenticated: boolean;
+  carregarPermissoes: () => Promise<void>;
+  temPermissao: (area_codigo: string, tipo?: 'leitura' | 'escrita') => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,6 +38,7 @@ interface AuthProviderProps {
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [permissoes, setPermissoes] = useState<Permissao[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { user: auth0User, isAuthenticated: auth0IsAuthenticated, isLoading: auth0IsLoading } = useAuth0();
 
@@ -72,22 +87,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (email: string, password: string): Promise<void> => {
     try {
-      // Simulação de login - em produção, isso seria uma chamada para a API
+      // Simulação de login - em produção, isso seria uma chamada para a API de autenticação
       if (email === 'teste@be180.com.br' && password === '12345678') {
-        const userData: User = {
-          id: '1',
-          email: email,
-          name: 'Usuário Teste'
-        };
-        
-        // Simular token JWT
-        const token = 'fake-jwt-token-' + Date.now();
-        
-        // Salvar no localStorage
-        localStorage.setItem('auth_token', token);
-        localStorage.setItem('user_data', JSON.stringify(userData));
-        
-        setUser(userData);
+        // Buscar usuário no banco pelo email
+        try {
+          const response = await axios.get(`/usuarios?search=${encodeURIComponent(email)}&limit=1`);
+          
+          if (response.data.usuarios && response.data.usuarios.length > 0) {
+            const usuarioDb = response.data.usuarios[0];
+            
+            const userData: User = {
+              id: usuarioDb.usuario_pk.toString(),
+              email: usuarioDb.usuario_email || email,
+              name: usuarioDb.usuario_nome || 'Usuário',
+              usuario_pk: usuarioDb.usuario_pk,
+              perfil_pk: usuarioDb.perfil_pk,
+              perfil_nome: usuarioDb.perfil_nome
+            };
+            
+            // Simular token JWT
+            const token = 'fake-jwt-token-' + Date.now();
+            
+            // Salvar no localStorage
+            localStorage.setItem('auth_token', token);
+            localStorage.setItem('user_data', JSON.stringify(userData));
+            
+            setUser(userData);
+          } else {
+            throw new Error('Usuário não encontrado no banco de dados');
+          }
+        } catch (apiError) {
+          console.error('Erro ao buscar usuário no banco:', apiError);
+          throw new Error('Erro ao carregar dados do usuário');
+        }
       } else {
         throw new Error('Email ou senha incorretos');
       }
@@ -101,7 +133,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Limpar dados locais
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_data');
+    localStorage.removeItem('user_permissoes');
     setUser(null);
+    setPermissoes([]);
     
     // Se estiver usando Auth0, redirecionar para logout do Auth0
     if (auth0IsAuthenticated) {
@@ -113,12 +147,96 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  // Carregar permissões do usuário
+  const carregarPermissoes = async (): Promise<void> => {
+    if (!user || !user.usuario_pk) {
+      console.log('Usuário sem PK, não é possível carregar permissões');
+      return;
+    }
+
+    try {
+      const response = await axios.get(`/usuarios-permissoes?usuario_pk=${user.usuario_pk}`);
+      
+      // Transformar permissões em formato flat
+      const permissoesFlat: Permissao[] = [];
+      
+      response.data.permissoes.forEach((area: any) => {
+        // Adicionar área principal
+        if (area.area_codigo) {
+          permissoesFlat.push({
+            area_codigo: area.area_codigo,
+            area_nome: area.area_nome,
+            ler: area.ler || false,
+            escrever: area.escrever || false
+          });
+        }
+        
+        // Adicionar subáreas
+        if (area.subareas && Array.isArray(area.subareas)) {
+          area.subareas.forEach((sub: any) => {
+            permissoesFlat.push({
+              area_codigo: sub.area_codigo,
+              area_nome: sub.area_nome,
+              ler: sub.ler || false,
+              escrever: sub.escrever || false
+            });
+          });
+        }
+      });
+      
+      setPermissoes(permissoesFlat);
+      
+      // Salvar no localStorage para cache
+      localStorage.setItem('user_permissoes', JSON.stringify(permissoesFlat));
+      
+      console.log(`✅ ${permissoesFlat.length} permissões carregadas para o usuário`);
+    } catch (error) {
+      console.error('Erro ao carregar permissões:', error);
+      
+      // Tentar carregar do cache
+      const cachedPermissoes = localStorage.getItem('user_permissoes');
+      if (cachedPermissoes) {
+        try {
+          setPermissoes(JSON.parse(cachedPermissoes));
+          console.log('⚠️ Permissões carregadas do cache');
+        } catch (e) {
+          console.error('Erro ao carregar permissões do cache:', e);
+        }
+      }
+    }
+  };
+
+  // Verificar se usuário tem permissão
+  const temPermissao = (area_codigo: string, tipo: 'leitura' | 'escrita' = 'leitura'): boolean => {
+    if (!permissoes || permissoes.length === 0) {
+      return false;
+    }
+
+    const permissao = permissoes.find(p => p.area_codigo === area_codigo);
+    
+    if (!permissao) {
+      return false;
+    }
+
+    return tipo === 'leitura' ? permissao.ler : permissao.escrever;
+  };
+
+  // Carregar permissões quando usuário fizer login
+  useEffect(() => {
+    if (user && user.usuario_pk) {
+      carregarPermissoes();
+    }
+  }, [user?.usuario_pk]);
+
   const value: AuthContextType = {
     user,
+    permissoes,
     login,
     logout,
     isLoading,
     isAuthenticated: !!user,
+    carregarPermissoes,
+    temPermissao,
   };
 
   return (

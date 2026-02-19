@@ -14,6 +14,7 @@ import { VisualizarResultados } from "./screens/VisualizarResultados";
 import { BancoDeAtivos } from "./screens/BancoDeAtivos";
 import { RelatorioPorPraca } from "./screens/RelatorioPorPraca";
 import { RelatorioPorExibidor } from "./screens/RelatorioPorExibidor";
+import { AdminUsuarios, AdminPerfis } from "./screens/Admin";
 import { PaginaEmDesenvolvimento } from "./components/PaginaEmDesenvolvimento";
 import '../tailwind.css';
 import 'leaflet/dist/leaflet.css';
@@ -155,6 +156,22 @@ createRoot(document.getElementById("app") as HTMLElement).render(
                       { label: "Importar Arquivo" }
                     ]}
                   />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/usuarios" 
+              element={
+                <ProtectedRoute>
+                  <AdminUsuarios />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/perfis" 
+              element={
+                <ProtectedRoute>
+                  <AdminPerfis />
                 </ProtectedRoute>
               } 
             />
