@@ -1,38 +1,16 @@
-const { getPool } = require('./db');
+const handlers = {
+  'list': require('../handlers/roteiros'),
+  'search': require('../handlers/roteiros-search'),
+  'delete': require('../handlers/roteiros-delete'),
+  'status': require('../handlers/roteiro-status'),
+  'check-update': require('../handlers/roteiros-check-update'),
+  'simulado': require('../handlers/roteiro-simulado'),
+  'completo': require('../handlers/roteiro-completo'),
+};
 
 module.exports = async (req, res) => {
-  if (req.method !== 'GET') {
-    res.status(405).json({ error: 'Método não permitido' });
-    return;
-  }
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = 50;
-    const offset = (page - 1) * pageSize;
-    const pool = await getPool();
-    const countResult = await pool.request().query('SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaGrupo_dm_vw WHERE delete_bl = 0');
-    const total = countResult.recordset[0].total;
-    const result = await pool.request()
-      .input('offset', offset)
-      .input('pageSize', pageSize)
-      .query(`
-        SELECT * FROM serv_product_be180.planoMidiaGrupo_dm_vw
-        WHERE delete_bl = 0
-        ORDER BY date_dh DESC
-        OFFSET @offset ROWS
-        FETCH NEXT @pageSize ROWS ONLY
-      `);
-    res.json({
-      data: result.recordset,
-      pagination: {
-        currentPage: page,
-        totalPages: Math.ceil(total / pageSize),
-        totalItems: total,
-        pageSize: pageSize
-      }
-    });
-  } catch (err) {
-    console.error('Erro na API /api/roteiros:', err);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-}; 
+  const action = req.query.action || 'list';
+  const handler = handlers[action];
+  if (!handler) return res.status(400).json({ error: `Action '${action}' not found` });
+  return handler(req, res);
+};
