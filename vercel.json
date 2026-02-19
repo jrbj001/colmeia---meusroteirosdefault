@@ -58,6 +58,7 @@
 
     { "source": "/api/banco-ativos-dashboard", "destination": "/api/banco-ativos?action=dashboard" },
     { "source": "/api/banco-ativos-mapa", "destination": "/api/banco-ativos?action=mapa" },
+    { "source": "/banco-ativos-mapa", "destination": "/api/banco-ativos?action=mapa" },
     { "source": "/api/busca-pontos-midia", "destination": "/api/banco-ativos?action=busca" },
     { "source": "/api/banco-ativos-relatorio-praca", "destination": "/api/banco-ativos?action=relatorio-praca" },
     { "source": "/api/banco-ativos-relatorio-exibidor", "destination": "/api/banco-ativos?action=relatorio-exibidor" },
