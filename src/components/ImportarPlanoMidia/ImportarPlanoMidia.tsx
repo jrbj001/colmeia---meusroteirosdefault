@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import * as XLSX from 'xlsx';
 import api from '../../config/axios';
 import type { ParsedPlanoRow } from '../../utils/parsePlanoOohExcel';
 import { parsePlanoOohExcel } from '../../utils/parsePlanoOohExcel';
@@ -77,6 +78,21 @@ export const ImportarPlanoMidia: React.FC<ImportarPlanoMidiaProps> = ({
     onClear?.();
   }, [onClear]);
 
+  const handleExportarIgnoradas = useCallback(() => {
+    const ignoradas = parsedRows
+      .filter((r) => !r._willInsert)
+      .map(({ _index, _willInsert, ...rest }) => ({ linha_excel: _index, ...rest }));
+
+    if (ignoradas.length === 0) return;
+
+    const ws = XLSX.utils.json_to_sheet(ignoradas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Linhas Ignoradas');
+
+    const baseName = filename.replace(/\.[^.]+$/, '');
+    XLSX.writeFile(wb, `${baseName}_linhas_ignoradas.xlsx`);
+  }, [parsedRows, filename]);
+
   // ── Parse do Excel ────────────────────────────────────────────────────────
   const handleFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -112,8 +128,9 @@ export const ImportarPlanoMidia: React.FC<ImportarPlanoMidiaProps> = ({
     setErrorMessage(null);
 
     try {
+      // Envia todas as linhas para a SP — ela mesma aplica o filtro definitivo.
+      // Não filtramos por _willInsert aqui para não excluir linhas válidas.
       const records = parsedRows
-        .filter((r) => r._willInsert)
         .map(({ _index, _willInsert, ...rest }) => rest);
 
       const payload: Record<string, unknown> = {
@@ -360,9 +377,21 @@ export const ImportarPlanoMidia: React.FC<ImportarPlanoMidiaProps> = ({
                 </button>
 
                 {willSkipCount > 0 && (
-                  <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
-                    {willSkipCount} linha(s) sem os campos mínimos (job/campanha/produto + datas/semanas + grupo/exibidor/formato) serão ignoradas pela SP.
-                  </p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
+                      {willSkipCount} linha(s) sem os campos mínimos serão ignoradas pela SP.
+                    </p>
+                    <button
+                      onClick={handleExportarIgnoradas}
+                      disabled={isImporting}
+                      className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-300 rounded-lg hover:bg-amber-100 transition-colors disabled:cursor-not-allowed"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      Exportar {willSkipCount} ignorada(s)
+                    </button>
+                  </div>
                 )}
               </div>
             </>
