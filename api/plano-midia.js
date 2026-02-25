@@ -5,6 +5,7 @@ const handlers = {
   'desc-cleanup': require('../handlers/plano-midia-desc-cleanup'),
   'atualizar-desc-pks': require('../handlers/atualizar-grupo-desc-pks'),
   'sp-insert': require('../handlers/sp-plano-midia-insert'),
+  'sp-ooh-insert': require('../handlers/sp-plano-midia-ooh-insert'),
 };
 
 module.exports = async (req, res) => {

@@ -28,6 +28,7 @@
     { "source": "/api/plano-midia-desc-cleanup", "destination": "/api/plano-midia?action=desc-cleanup" },
     { "source": "/api/atualizar-grupo-desc-pks", "destination": "/api/plano-midia?action=atualizar-desc-pks" },
     { "source": "/api/sp-plano-midia-insert", "destination": "/api/plano-midia?action=sp-insert" },
+    { "source": "/api/sp-plano-midia-ooh-insert", "destination": "/api/plano-midia?action=sp-ooh-insert" },
 
     { "source": "/api/upload-roteiros", "destination": "/api/uploads?action=roteiros" },
     { "source": "/api/upload-roteiros-plano-midia", "destination": "/api/uploads?action=plano-midia" },

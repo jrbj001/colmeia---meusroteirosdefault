@@ -10,6 +10,9 @@ import { ProcessingResultsLoader } from "../../components/ProcessingResultsLoade
 import { AppleSaveLoader } from "../../components/AppleSaveLoader/AppleSaveLoader";
 import { Modal } from "../../components/Modal/Modal";
 import { ModalAdicionarMarca } from "../../components/ModalAdicionarMarca/ModalAdicionarMarca";
+import { ImportarPlanoMidia } from "../../components/ImportarPlanoMidia";
+import { ImportarPlanoAba1 } from "../../components/ImportarPlanoAba1";
+import type { ParsedPlanoRow } from "../../utils/parsePlanoOohExcel";
 
 interface Agencia {
   id_agencia: number;
@@ -328,6 +331,8 @@ export const CriarRoteiro: React.FC = () => {
   const [mensagemProcessamento, setMensagemProcessamento] = useState<string>('');
   
   // Estados para Roteiro Simulado
+  const [modoSimulado, setModoSimulado] = useState<'manual' | 'importar'>('manual');
+  const [importPlanoData, setImportPlanoData] = useState<{ records: ParsedPlanoRow[]; filename: string } | null>(null);
   const [pracasSelecionadasSimulado, setPracasSelecionadasSimulado] = useState<any[]>([]);
   const [quantidadeSemanas, setQuantidadeSemanas] = useState<number>(12);
   const [tabelaSimulado, setTabelaSimulado] = useState<Record<number, any[]>>({}); // Objeto: id_cidade -> array de linhas
@@ -574,6 +579,67 @@ export const CriarRoteiro: React.FC = () => {
       console.error('❌ Erro ao gerar tabelas simuladas:', error);
       alert('Erro ao gerar estrutura das tabelas. Tente novamente.');
     }
+  };
+
+  // Nomes de praça pendentes de match (salvos ao fazer upload antes de cidades carregar)
+  const [pendingPracaNomes, setPendingPracaNomes] = React.useState<string[]>([]);
+
+  // Quando cidades carrega (ou muda) e há nomes pendentes, resolve o match
+  React.useEffect(() => {
+    if (!pendingPracaNomes.length || !cidades.length) return;
+    const normalizeName = (s: string) =>
+      s.toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const detectadas = pendingPracaNomes
+      .map((nome) => cidades.find((c) => normalizeName(c.nome_cidade) === normalizeName(nome)))
+      .filter((c): c is typeof cidades[0] => c !== undefined);
+    if (detectadas.length > 0) {
+      setCidadesSelecionadas(detectadas);
+      setCidadesSalvas(detectadas);
+      setAba3Preenchida(true);
+    }
+    setPendingPracaNomes([]);
+  }, [cidades, pendingPracaNomes]);
+
+  // Callback do ImportarPlanoMidia/ImportarPlanoAba1: popula Aba 3 com as praças detectadas no Excel
+  const handlePracasDetectadas = (pracaNomes: string[]) => {
+    if (!pracaNomes.length) return;
+    if (!cidades.length) {
+      setPendingPracaNomes(pracaNomes);
+      return;
+    }
+    const normalizeName = (s: string) =>
+      s.toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const detectadas = pracaNomes
+      .map((nome) => cidades.find((c) => normalizeName(c.nome_cidade) === normalizeName(nome)))
+      .filter((c): c is typeof cidades[0] => c !== undefined);
+    if (detectadas.length > 0) {
+      setCidadesSelecionadas(detectadas);
+      setCidadesSalvas(detectadas);
+      setAba3Preenchida(true);
+    }
+  };
+
+  // Callback do ImportarPlanoAba1: armazena dados parseados e preenche Aba 1/3
+  const handleDataParsedImport = (data: {
+    records: ParsedPlanoRow[];
+    filename: string;
+    campanhaSuggestion: string;
+    valorTotalSuggestion: number;
+  }) => {
+    setImportPlanoData({ records: data.records, filename: data.filename });
+    setModoSimulado('importar');
+    if (!nomeRoteiro.trim() && data.campanhaSuggestion) setNomeRoteiro(data.campanhaSuggestion);
+    if ((!valorCampanha || valorCampanha === 'R$ 0,00') && data.valorTotalSuggestion > 0) {
+      setValorCampanha(
+        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(data.valorTotalSuggestion)
+      );
+    }
+  };
+
+  // Callback do ImportarPlanoMidia: navega para Aba 6 após importação
+  const handleImportacaoCompleta = (_planoMidiaImportFile_pk: number | null) => {
+    setAba6Habilitada(true);
+    setAbaAtiva(6);
   };
 
   // Função para salvar roteiro simulado
@@ -2741,7 +2807,11 @@ export const CriarRoteiro: React.FC = () => {
                 <div className="relative">
                   <select
                     value={tipoRoteiro}
-                    onChange={(e) => setTipoRoteiro(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setTipoRoteiro(v);
+                      if (v === 'completo') setImportPlanoData(null);
+                    }}
                     className="w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal"
                   >
                     <option value="">Selecione qual tipo do roteiro irá criar</option>
@@ -2855,6 +2925,21 @@ export const CriarRoteiro: React.FC = () => {
                       {modoVisualizacao ? 'Dados do roteiro' : 'Cadastre os dados do seu novo roteiro'}
                     </h3>
                   </div>
+
+                  {/* Importar Plano OOH (apenas para Roteiro Simulado) - preenche praças e sugere nome/valor */}
+                  {tipoRoteiro === 'simulado' && !modoVisualizacao && (
+                    <ImportarPlanoAba1
+                      existingData={importPlanoData}
+                      onPracasDetectadas={handlePracasDetectadas}
+                      onDataParsed={handleDataParsedImport}
+                      onClear={() => {
+                        setImportPlanoData(null);
+                        setCidadesSelecionadas([]);
+                        setCidadesSalvas([]);
+                        setAba3Preenchida(false);
+                      }}
+                    />
+                  )}
                   
                   <form onSubmit={handleSubmit}>
                     <div className="grid grid-cols-2 gap-8">
@@ -3686,9 +3771,56 @@ export const CriarRoteiro: React.FC = () => {
                       </>
                     )}
 
-                    {/* Roteiro Simulado - Seleção manual */}
+                    {/* Roteiro Simulado */}
                     {tipoRoteiro === 'simulado' && (
                       <>
+                        {/* Toggle: Manual | Importar Plano */}
+                        {!modoVisualizacao && (
+                          <div className="mb-8 flex gap-2 p-1 bg-[#f0f0f0] rounded-xl w-fit">
+                            <button
+                              type="button"
+                              onClick={() => setModoSimulado('manual')}
+                              className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                                modoSimulado === 'manual'
+                                  ? 'bg-white text-[#ff4600] shadow-sm border border-orange-200'
+                                  : 'text-[#666] hover:text-[#333]'
+                              }`}
+                            >
+                              Configurar manualmente
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setModoSimulado('importar')}
+                              disabled={!planoMidiaGrupo_pk}
+                              title={!planoMidiaGrupo_pk ? 'Salve a Aba 1 primeiro para habilitar a importação' : undefined}
+                              className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                                modoSimulado === 'importar'
+                                  ? 'bg-white text-indigo-600 shadow-sm border border-indigo-200'
+                                  : !planoMidiaGrupo_pk
+                                  ? 'text-[#aaa] cursor-not-allowed'
+                                  : 'text-[#666] hover:text-[#333]'
+                              }`}
+                            >
+                              Importar Plano de Mídia OOH
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Modo Importar */}
+                        {modoSimulado === 'importar' && planoMidiaGrupo_pk && !modoVisualizacao && (
+                          <ImportarPlanoMidia
+                            planoMidiaGrupo_pk={planoMidiaGrupo_pk}
+                            nomeRoteiro={nomeRoteiro}
+                            initialData={importPlanoData}
+                            onPracasDetectadas={handlePracasDetectadas}
+                            onImportacaoCompleta={handleImportacaoCompleta}
+                            onClear={() => setImportPlanoData(null)}
+                          />
+                        )}
+
+                        {/* Modo Manual */}
+                        {(modoSimulado === 'manual' || modoVisualizacao) && (
+                        <>
                         {/* Praças da Aba 3 */}
                         <div className="mb-8">
                           <label className="block text-base font-bold text-[#3a3a3a] mb-4">
@@ -3970,6 +4102,8 @@ export const CriarRoteiro: React.FC = () => {
                               )}
                             </button>
                           </div>
+                        )}
+                        </>
                         )}
                       </>
                     )}
