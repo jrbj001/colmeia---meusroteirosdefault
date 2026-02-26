@@ -1,10 +1,12 @@
 const { getPool } = require('./db');
+const { requireInternalUser } = require('./auth-middleware');
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método não permitido' });
   }
-  
+  if (!requireInternalUser(req, res)) return;
+
   try {
     const { pk } = req.body;
     

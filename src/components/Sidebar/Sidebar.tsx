@@ -8,6 +8,7 @@ import { PinDrop } from "../../icons/PinDrop";
 import { Difference4 } from "../../icons/Difference4";
 import { KeyboardArrowDown } from "../../icons/KeyboardArrowDown";
 import { usePermissions } from "../../hooks";
+import { useAuth } from "../../contexts/AuthContext";
 
 interface SidebarProps {
   menuReduzido: boolean;
@@ -17,6 +18,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido }) => {
   const location = useLocation();
   const { isAdmin } = usePermissions();
+  const { isAgencia } = useAuth();
   const [bancoAtivosAberto, setBancoAtivosAberto] = useState(false);
   const [adminAberto, setAdminAberto] = useState(false);
   
@@ -54,8 +56,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
       </div>
 
       <nav className={`space-y-4 w-full ${menuReduzido ? "flex flex-col items-center" : ""}`}>
-        {/* Call to Action - Administração (visível para todos) */}
-        {!menuReduzido && (
+        {/* Call to Action - Administração (oculto para agências) */}
+        {!menuReduzido && !isAgencia && (
           <Link to="/admin/usuarios" className="block mb-6">
             <div className="bg-gradient-to-r from-[#ff4600] to-[#ff6b35] rounded-lg p-4 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 cursor-pointer">
               <div className="flex items-center gap-3 mb-2">
@@ -86,21 +88,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
           </div>
         </Link>
         
-        <Link to="/criar-roteiro" className="block">
-          <div className={`flex items-center gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
-            location.pathname === "/criar-roteiro" ? "bg-[#ededed] text-[#222]" : ""
-          }`}>
-            <AddBox className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" color="#757575" />
-            {!menuReduzido && (
-              <span className="font-medium text-sm text-[#757575] tracking-[0.50px] group-hover:text-[#222] transition-colors duration-200">
-                Criar roteiro
-              </span>
-            )}
-          </div>
-        </Link>
+        {!isAgencia && (
+          <Link to="/criar-roteiro" className="block">
+            <div className={`flex items-center gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
+              location.pathname === "/criar-roteiro" ? "bg-[#ededed] text-[#222]" : ""
+            }`}>
+              <AddBox className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" color="#757575" />
+              {!menuReduzido && (
+                <span className="font-medium text-sm text-[#757575] tracking-[0.50px] group-hover:text-[#222] transition-colors duration-200">
+                  Criar roteiro
+                </span>
+              )}
+            </div>
+          </Link>
+        )}
         
-        {/* Banco de ativos com submenu */}
-        {!menuReduzido ? (
+        {/* Banco de ativos com submenu (oculto para agências) */}
+        {isAgencia ? null : !menuReduzido ? (
           <div className="w-full">
             <button
               onClick={() => setBancoAtivosAberto(!bancoAtivosAberto)}
@@ -232,21 +236,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
           </Link>
         )}
 
-        <Link to="/consulta-endereco" className="block">
-          <div className={`flex items-center gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
-            location.pathname === "/consulta-endereco" ? "bg-[#ededed] text-[#222]" : ""
-          }`}>
-            <Difference4 className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" color="#757575" />
-            {!menuReduzido && (
-              <span className="font-medium text-sm text-[#757575] tracking-[0.50px] group-hover:text-[#222] transition-colors duration-200">
-                Consulta endereço
-              </span>
-            )}
-          </div>
-        </Link>
+        {!isAgencia && (
+          <Link to="/consulta-endereco" className="block">
+            <div className={`flex items-center gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
+              location.pathname === "/consulta-endereco" ? "bg-[#ededed] text-[#222]" : ""
+            }`}>
+              <Difference4 className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" color="#757575" />
+              {!menuReduzido && (
+                <span className="font-medium text-sm text-[#757575] tracking-[0.50px] group-hover:text-[#222] transition-colors duration-200">
+                  Consulta endereço
+                </span>
+              )}
+            </div>
+          </Link>
+        )}
 
-        {/* Administração - Apenas para Admin */}
-        {isAdmin && !menuReduzido && (
+        {/* Administração - Apenas para Admin e não agência */}
+        {isAdmin && !isAgencia && !menuReduzido && (
           <div className="w-full mt-8">
             <button
               onClick={() => setAdminAberto(!adminAberto)}

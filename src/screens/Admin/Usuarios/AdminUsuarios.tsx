@@ -12,6 +12,7 @@ interface Usuario {
   perfil_pk: number;
   perfil_nome: string;
   perfil_descricao: string;
+  empresa_pk: number | null;
 }
 
 interface Perfil {
@@ -20,10 +21,16 @@ interface Perfil {
   perfil_descricao: string;
 }
 
+interface Agencia {
+  id_agencia: number;
+  nome_agencia: string;
+}
+
 export const AdminUsuarios: React.FC = () => {
   const { isAdmin } = usePermissions();
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [perfis, setPerfis] = useState<Perfil[]>([]);
+  const [agencias, setAgencias] = useState<Agencia[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroPerfil, setFiltroPerfil] = useState('');
@@ -31,12 +38,12 @@ export const AdminUsuarios: React.FC = () => {
   const [modoEdicao, setModoEdicao] = useState(false);
   const [usuarioSelecionado, setUsuarioSelecionado] = useState<Usuario | null>(null);
   
-  // Form state
   const [formData, setFormData] = useState({
     nome_st: '',
     email_st: '',
     telefone_st: '',
-    perfil_pk: 0
+    perfil_pk: 0,
+    empresa_pk: null as number | null,
   });
 
   // Carregar usuários e perfis
@@ -58,10 +65,14 @@ export const AdminUsuarios: React.FC = () => {
       });
       setUsuarios(usuariosResponse.data.usuarios || []);
 
-      // Carregar perfis (apenas uma vez)
+      // Carregar perfis e agências (apenas uma vez)
       if (perfis.length === 0) {
         const perfisResponse = await axios.get('/perfis');
         setPerfis(perfisResponse.data.perfis || []);
+      }
+      if (agencias.length === 0) {
+        const agenciasResponse = await axios.get('/referencia?action=agencia');
+        setAgencias(agenciasResponse.data || []);
       }
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -77,7 +88,8 @@ export const AdminUsuarios: React.FC = () => {
       nome_st: '',
       email_st: '',
       telefone_st: '',
-      perfil_pk: perfis.length > 0 ? perfis[0].perfil_pk : 0
+      perfil_pk: perfis.length > 0 ? perfis[0].perfil_pk : 0,
+      empresa_pk: null,
     });
     setShowModal(true);
   };
@@ -89,7 +101,8 @@ export const AdminUsuarios: React.FC = () => {
       nome_st: usuario.usuario_nome,
       email_st: usuario.usuario_email || '',
       telefone_st: usuario.usuario_telefone || '',
-      perfil_pk: usuario.perfil_pk
+      perfil_pk: usuario.perfil_pk,
+      empresa_pk: usuario.empresa_pk ?? null,
     });
     setShowModal(true);
   };
@@ -221,6 +234,9 @@ export const AdminUsuarios: React.FC = () => {
                       Perfil
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Agência
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -245,6 +261,14 @@ export const AdminUsuarios: React.FC = () => {
                         <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getBadgeColor(usuario.perfil_nome)}`}>
                           {usuario.perfil_nome}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">
+                          {usuario.empresa_pk
+                            ? agencias.find(a => a.id_agencia === usuario.empresa_pk)?.nome_agencia || `ID ${usuario.empresa_pk}`
+                            : <span className="text-gray-300">Be (interno)</span>
+                          }
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -342,6 +366,32 @@ export const AdminUsuarios: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Agência
+                  </label>
+                  <select
+                    value={formData.empresa_pk ?? ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        empresa_pk: e.target.value ? parseInt(e.target.value) : null,
+                      })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  >
+                    <option value="">Nenhuma (usuário interno Be)</option>
+                    {agencias.map((ag) => (
+                      <option key={ag.id_agencia} value={ag.id_agencia}>
+                        {ag.nome_agencia}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Vincule a uma agência para acesso externo
+                  </p>
                 </div>
               </div>
 

@@ -4,16 +4,18 @@ import { useAuth } from '../../contexts/AuthContext';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredArea?: string; // Código da área necessária (ex: 'admin', 'criar_roteiro')
-  requiredPermission?: 'leitura' | 'escrita'; // Tipo de permissão (default: leitura)
+  requiredArea?: string;
+  requiredPermission?: 'leitura' | 'escrita';
+  internalOnly?: boolean;
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
   children, 
   requiredArea,
-  requiredPermission = 'leitura'
+  requiredPermission = 'leitura',
+  internalOnly = false,
 }) => {
-  const { isAuthenticated, isLoading, temPermissao } = useAuth();
+  const { isAuthenticated, isLoading, temPermissao, isAgencia } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -28,8 +30,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   if (!isAuthenticated) {
-    // Redirecionar para login, mas salvar a localização atual
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (internalOnly && isAgencia) {
+    return <Navigate to="/" replace />;
   }
 
   // Verificar permissão de acesso à área específica

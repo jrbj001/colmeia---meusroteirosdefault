@@ -54,7 +54,7 @@ createRoot(document.getElementById("app") as HTMLElement).render(
             <Route 
               path="/criar-roteiro" 
               element={
-                <ProtectedRoute>
+                <ProtectedRoute internalOnly>
                   <CriarRoteiro />
                 </ProtectedRoute>
               } 
@@ -70,7 +70,7 @@ createRoot(document.getElementById("app") as HTMLElement).render(
             <Route 
               path="/consulta-endereco" 
               element={
-                <ProtectedRoute>
+                <ProtectedRoute internalOnly>
                   <ConsultaEndereco />
                 </ProtectedRoute>
               } 
@@ -78,7 +78,7 @@ createRoot(document.getElementById("app") as HTMLElement).render(
             <Route 
               path="/banco-de-ativos" 
               element={
-                <ProtectedRoute>
+                <ProtectedRoute internalOnly>
                   <BancoDeAtivos />
                 </ProtectedRoute>
               } 
@@ -162,7 +162,7 @@ createRoot(document.getElementById("app") as HTMLElement).render(
             <Route 
               path="/admin/usuarios" 
               element={
-                <ProtectedRoute>
+                <ProtectedRoute internalOnly>
                   <AdminUsuarios />
                 </ProtectedRoute>
               } 
@@ -170,7 +170,7 @@ createRoot(document.getElementById("app") as HTMLElement).render(
             <Route 
               path="/admin/perfis" 
               element={
-                <ProtectedRoute>
+                <ProtectedRoute internalOnly>
                   <AdminPerfis />
                 </ProtectedRoute>
               } 

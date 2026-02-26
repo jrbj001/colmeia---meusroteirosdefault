@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const jwksClient = require('jwks-rsa');
+const { getPool } = require('./db');
 
 // Configuração do cliente JWKS para validar tokens do Auth0
 const client = jwksClient({
@@ -8,8 +9,35 @@ const client = jwksClient({
   cacheMaxAge: 600000, // 10 minutos
   rateLimit: true,
   jwksRequestsPerMinute: 5,
-  jwksUri: `https://${process.env.AUTH0_DOMAIN}/.well-known/jwks.json`
 });
+
+// Cache simples de usuario_dm (email → dados) — TTL 5 min
+const userDbCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000;
+
+async function enrichUserFromDb(email) {
+  if (!email) return {};
+
+  const cached = userDbCache.get(email);
+  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
+
+  try {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input('email', email)
+      .query(`
+        SELECT usuario_pk, empresa_pk, perfil_pk, perfil_nome
+        FROM [serv_product_be180].[usuario_completo_vw]
+        WHERE usuario_email = @email AND usuario_ativo = 1
+      `);
+    const data = r.recordset[0] || {};
+    userDbCache.set(email, { data, ts: Date.now() });
+    return data;
+  } catch (err) {
+    console.error('Erro ao enriquecer usuario do banco:', err.message);
+    return {};
+  }
+}
 
 // Função para obter a chave pública do Auth0
 function getKey(header, callback) {
@@ -33,17 +61,23 @@ function authMiddleware(req, res, next) {
     });
   }
 
-  const token = authHeader.substring(7); // Remove "Bearer " do início
+  const token = authHeader.substring(7);
 
   // Verificar se é um token local (fallback)
   if (token.startsWith('fake-jwt-token-')) {
-    // Token local válido para desenvolvimento/teste
-    req.user = {
-      id: 'local-user',
-      email: 'teste@be180.com.br',
-      name: 'Usuário Teste'
-    };
-    return next();
+    enrichUserFromDb('teste@be180.com.br').then((dbData) => {
+      req.user = {
+        id: 'local-user',
+        email: 'teste@be180.com.br',
+        name: 'Usuário Teste',
+        usuario_pk: dbData.usuario_pk ?? null,
+        empresa_pk: dbData.empresa_pk ?? null,
+        perfil_pk: dbData.perfil_pk ?? null,
+        perfil_nome: dbData.perfil_nome ?? null,
+      };
+      next();
+    });
+    return;
   }
 
   // Validar token JWT do Auth0
@@ -59,14 +93,20 @@ function authMiddleware(req, res, next) {
       });
     }
 
-    // Adicionar informações do usuário ao request
-    req.user = {
-      id: decoded.sub,
-      email: decoded.email,
-      name: decoded.name || decoded.nickname
-    };
+    const email = decoded.email;
 
-    next();
+    enrichUserFromDb(email).then((dbData) => {
+      req.user = {
+        id: decoded.sub,
+        email,
+        name: decoded.name || decoded.nickname,
+        usuario_pk: dbData.usuario_pk ?? null,
+        empresa_pk: dbData.empresa_pk ?? null,
+        perfil_pk: dbData.perfil_pk ?? null,
+        perfil_nome: dbData.perfil_nome ?? null,
+      };
+      next();
+    });
   });
 }
 
@@ -97,8 +137,17 @@ function isAuthenticated(req) {
   return true;
 }
 
+function requireInternalUser(req, res) {
+  if (req.user?.empresa_pk) {
+    res.status(403).json({ error: 'Acesso restrito a usuários internos' });
+    return false;
+  }
+  return true;
+}
+
 module.exports = {
   authMiddleware,
   extractToken,
-  isAuthenticated
+  isAuthenticated,
+  requireInternalUser
 };

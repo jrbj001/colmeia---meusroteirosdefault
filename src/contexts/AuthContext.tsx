@@ -7,9 +7,10 @@ interface User {
   email: string;
   name: string;
   picture?: string;
-  usuario_pk?: number; // PK do banco de dados
+  usuario_pk?: number;
   perfil_pk?: number;
   perfil_nome?: string;
+  empresa_pk?: number | null;
 }
 
 interface Permissao {
@@ -26,6 +27,7 @@ interface AuthContextType {
   logout: () => void;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isAgencia: boolean;
   carregarPermissoes: () => Promise<void>;
   temPermissao: (area_codigo: string, tipo?: 'leitura' | 'escrita') => boolean;
 }
@@ -42,7 +44,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const { user: auth0User, isAuthenticated: auth0IsAuthenticated, isLoading: auth0IsLoading } = useAuth0();
 
-  // Sincronizar Auth0 com o estado local
+  // Sincronizar Auth0 com o estado local e buscar dados do banco
   useEffect(() => {
     if (auth0IsLoading) {
       setIsLoading(true);
@@ -50,20 +52,44 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     if (auth0IsAuthenticated && auth0User) {
-      // Converter usuário do Auth0 para o formato local
+      const email = auth0User.email || '';
       const localUser: User = {
         id: auth0User.sub || '',
-        email: auth0User.email || '',
+        email,
         name: auth0User.name || auth0User.nickname || '',
         picture: auth0User.picture || undefined,
       };
-      
-      setUser(localUser);
+
+      // Buscar dados complementares do banco (usuario_pk, empresa_pk, perfil)
+      if (email) {
+        axios.get(`/usuarios?search=${encodeURIComponent(email)}&limit=1`)
+          .then((response) => {
+            const usuarios = response.data.usuarios || [];
+            const match = usuarios.find(
+              (u: { usuario_email: string }) =>
+                u.usuario_email?.toLowerCase() === email.toLowerCase()
+            );
+            if (match) {
+              localUser.usuario_pk = match.usuario_pk;
+              localUser.perfil_pk = match.perfil_pk;
+              localUser.perfil_nome = match.perfil_nome;
+              localUser.empresa_pk = match.empresa_pk ?? null;
+            }
+            setUser({ ...localUser });
+            setIsLoading(false);
+          })
+          .catch(() => {
+            setUser(localUser);
+            setIsLoading(false);
+          });
+      } else {
+        setUser(localUser);
+        setIsLoading(false);
+      }
     } else {
       setUser(null);
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   }, [auth0User, auth0IsAuthenticated, auth0IsLoading]);
 
   // Fallback: verificar localStorage para login local
@@ -228,6 +254,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, [user?.usuario_pk]);
 
+  const isAgencia = !!user?.empresa_pk;
+
   const value: AuthContextType = {
     user,
     permissoes,
@@ -235,6 +263,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     logout,
     isLoading,
     isAuthenticated: !!user,
+    isAgencia,
     carregarPermissoes,
     temPermissao,
   };
