@@ -4,7 +4,7 @@ import { Topbar } from "../../components/Topbar/Topbar";
 import { Pagination } from "../MeusRoteiros/sections/Pagination";
 import { useSearchParams, useLocation } from "react-router-dom";
 import api from "../../config/axios";
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap, Polygon } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, useMap, Polygon, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import { useDebounce } from '../../hooks/useDebounce';
 import { SkeletonLoader } from '../../components/SkeletonLoader';
@@ -162,8 +162,44 @@ export const Mapa: React.FC = () => {
   const [mostrarSugestoes, setMostrarSugestoes] = React.useState(false);
   const [mostrarModalDetalhes, setMostrarModalDetalhes] = React.useState(false);
   
-  // Estado para controlar visualização dos pontos (tamanho uniforme vs variável)
   const [tamanhoUniforme, setTamanhoUniforme] = React.useState(false);
+  const [pontoSelecionado, setPontoSelecionado] = React.useState<PontoMidia | null>(null);
+  const [painelColapsado, setPainelColapsado] = React.useState(false);
+
+  // Drag do painel flutuante
+  const painelRef = React.useRef<HTMLDivElement>(null);
+  const painelPos = React.useRef({ x: 16, y: 16 });
+  const dragState = React.useRef<{ dragging: boolean; startX: number; startY: number; origX: number; origY: number }>({
+    dragging: false, startX: 0, startY: 0, origX: 16, origY: 16
+  });
+
+  const onDragHandleMouseDown = React.useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragState.current = {
+      dragging: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: painelPos.current.x,
+      origY: painelPos.current.y,
+    };
+    const onMove = (ev: MouseEvent) => {
+      if (!dragState.current.dragging || !painelRef.current) return;
+      const dx = ev.clientX - dragState.current.startX;
+      const dy = ev.clientY - dragState.current.startY;
+      const newX = Math.max(0, dragState.current.origX + dx);
+      const newY = Math.max(0, dragState.current.origY + dy);
+      painelPos.current = { x: newX, y: newY };
+      painelRef.current.style.left = `${newX}px`;
+      painelRef.current.style.top = `${newY}px`;
+    };
+    const onUp = () => {
+      dragState.current.dragging = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, []);
   
   // Hook de otimização do plano
   const { analise, isAnalyzing, analisar, temDados } = usePlanoOptimizer(hexagonos);
@@ -1001,309 +1037,417 @@ export const Mapa: React.FC = () => {
           }}
         />
         <div className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`} />
-        <div className="w-full overflow-x-auto pt-20 flex-1 overflow-auto">
-          <h1 className="text-lg font-bold text-[#222] tracking-wide mb-4 uppercase font-sans mt-4 pl-6">
-            {nomeGrupo ? `Roteiro: ${nomeGrupo}` : 'Roteiro'}
-          </h1>
-          <div className="w-full flex flex-row gap-8 mt-8 px-8 flex-1 min-h-[500px]" style={{height: 'calc(100vh - 220px)'}}>
-            {/* Coluna dos filtros */}
-            <div className="flex flex-col flex-1 max-w-[420px] justify-start">
-              <table className="w-full border-separate border-spacing-0 font-sans mb-6">
-                <thead>
-                  <tr className="bg-[#393939] h-10">
-                    <th className="text-white text-xs font-bold uppercase text-left px-6 py-2 tracking-wider font-sans">Nome</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="text-[#222] text-sm font-bold px-6 py-4 whitespace-nowrap font-sans border-b border-[#c1c1c1]">
-                      {nomeGrupo || <span className="italic text-[#b0b0b0]">Carregando...</span>} <span className="ml-2">→</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <p className="mb-6 text-[#222] text-base">Selecione a praça e a semana do roteiro para visualizar o mapa em html.</p>
-              
-              {/* Componente de Status */}
-              <StatusMessage />
-              
-              {erro && (
-                <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded">
-                  Erro: {erro}
+        {/* Mapa fullscreen — ocupa toda a área após o topbar */}
+        <div className="relative flex-1 overflow-hidden" style={{ marginTop: 72 }}>
+            {/* Painel lateral flutuante sobre o mapa */}
+            <div
+              ref={painelRef}
+              className="absolute z-[500] flex flex-col w-[300px] rounded-2xl shadow-2xl"
+              style={{ background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(8px)', top: 16, left: 16 }}
+            >
+              {/* Handle de drag + botão colapso */}
+              <div
+                onMouseDown={onDragHandleMouseDown}
+                className="flex items-center justify-between px-3 py-2 rounded-t-2xl cursor-grab active:cursor-grabbing select-none"
+                style={{ background: 'rgba(240,240,240,0.95)', borderBottom: '1px solid rgba(0,0,0,0.06)' }}
+              >
+                <div className="flex items-center gap-1.5">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <circle cx="4" cy="4" r="1.2" fill="#aaa"/>
+                    <circle cx="10" cy="4" r="1.2" fill="#aaa"/>
+                    <circle cx="4" cy="9" r="1.2" fill="#aaa"/>
+                    <circle cx="10" cy="9" r="1.2" fill="#aaa"/>
+                  </svg>
+                  <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Painel</span>
                 </div>
-              )}
-              
-              {/* Remover ou desabilitar selects de cidade e semana temporariamente */}
-              <div className="mb-4">
-                <label className="block text-[#222] mb-2 font-semibold">
-                  Praça {loading && <span className="text-blue-500">(Carregando...)</span>}
-                </label>
-                <select
-                  className="w-full border border-[#c1c1c1] rounded px-4 py-2 text-[#b0b0b0] bg-[#f7f7f7] text-base"
-                  value={cidadeSelecionada}
-                  onChange={e => setCidadeSelecionada(e.target.value)}
-                  disabled={!cidades.length || loading}
+                <button
+                  onMouseDown={e => e.stopPropagation()}
+                  onClick={() => setPainelColapsado(v => !v)}
+                  className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-200 transition-colors"
+                  title={painelColapsado ? 'Expandir painel' : 'Minimizar painel'}
                 >
-                  <option value="">{loading ? "Carregando..." : "Ex.: São Paulo"}</option>
-                  {cidades.map((cidade) => (
-                    <option key={cidade} value={cidade}>{cidade}</option>
-                  ))}
-                </select>
-                {cidades.length > 0 && (
-                  <p className="text-xs text-green-600 mt-1">{cidades.length} cidade(s) carregada(s)</p>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    {painelColapsado
+                      ? <path d="M2 4l4 4 4-4" stroke="#555" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                      : <path d="M2 8l4-4 4 4" stroke="#555" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    }
+                  </svg>
+                </button>
+              </div>
+
+              {/* Conteúdo colapsável */}
+              <div
+                className="flex flex-col overflow-y-auto p-3"
+                style={{
+                  maxHeight: painelColapsado ? 0 : 'calc(100vh - 120px)',
+                  overflow: painelColapsado ? 'hidden' : 'auto',
+                  transition: 'max-height 0.25s ease',
+                  gap: 0,
+                }}
+              >
+
+              {/* Cabeçalho da campanha */}
+              <div className="mb-4 rounded-xl border-2 border-gray-800 bg-white px-4 py-3">
+                <div className="text-[10px] text-[#ff4600] uppercase tracking-wide font-semibold mb-0.5">● Campanha</div>
+                <div className="text-sm font-bold text-gray-900 leading-tight break-all">
+                  {nomeGrupo || <span className="italic text-gray-400">Carregando...</span>}
+                </div>
+                {hexagonos.length > 0 && (
+                  <div className="mt-2 flex gap-3 text-[10px] text-gray-400">
+                    <span><strong className="text-gray-600">{formatNumber(hexagonos.length)}</strong> hex</span>
+                    <span>·</span>
+                    <span><strong className="text-gray-600">{formatNumber(pontosValidados.length)}</strong> pontos</span>
+                    <span>·</span>
+                    <span>~{formatNumber(hexagonos.length * 0.36)} km²</span>
+                  </div>
                 )}
               </div>
-              <div className="mb-6">
-                <label className="block text-[#222] mb-2 font-semibold">Semana</label>
-                <select
-                  className="w-full border border-[#c1c1c1] rounded px-4 py-2 text-[#b0b0b0] bg-[#f7f7f7] text-base"
-                  value={semanaSelecionada}
-                  onChange={e => setSemanaSelecionada(e.target.value)}
-                  disabled={!semanas.length}
-                >
-                  <option value="">Ex.: Semana 1 - 1</option>
-                  {semanas.map((semana, idx) => (
-                    <option key={idx} value={semana.semanaInicial_vl}>{`Semana ${semana.semanaInicial_vl} - ${semana.semanaFinal_vl}`}</option>
+
+              {/* Status e erros */}
+              <StatusMessage />
+              {erro && (
+                <div className="mb-3 p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg text-xs">
+                  {erro}
+                </div>
+              )}
+
+              {/* Resultados por praça — cards clicáveis substituem o combo */}
+              {loadingResultados ? (
+                <div className="flex items-center gap-3 py-6 justify-center text-gray-400">
+                  <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-[#ff4600] border-solid flex-shrink-0" />
+                  <span className="text-sm">Carregando resultados...</span>
+                </div>
+              ) : dadosPorPraca.length > 0 ? (
+                <div className="space-y-2 mb-3">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                    Praças — período completo
+                  </p>
+                  {dadosPorPraca.map((item, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => { setCidadeSelecionada(item.cidade_st); setPontoSelecionado(null); }}
+                      className={`w-full text-left rounded-xl border-2 p-3 transition-all ${
+                        cidadeSelecionada === item.cidade_st
+                          ? 'border-[#ff4600] bg-orange-50'
+                          : 'border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-bold text-[#222]">{item.cidade_st}</span>
+                        {cidadeSelecionada === item.cidade_st ? (
+                          <span className="text-[10px] text-[#ff4600] font-semibold">● selecionada</span>
+                        ) : (
+                          <span className="text-[10px] text-gray-400">Ver mapa →</span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase">Impactos</div>
+                          <div className="text-xs font-semibold text-gray-700">
+                            {Math.round(item.impactosTotal_vl ?? 0).toLocaleString('pt-BR')}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase">Cobertura</div>
+                          <div className="text-xs font-semibold text-gray-700">
+                            {item.coberturaProp_vl?.toFixed(1) ?? '—'}%
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase">Freq.</div>
+                          <div className="text-xs font-semibold text-gray-700">
+                            {item.frequencia_vl?.toFixed(1) ?? '—'}x
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Semana — só aparece dentro da praça selecionada */}
+                      {cidadeSelecionada === item.cidade_st && semanas.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-orange-200" onClick={e => e.stopPropagation()}>
+                          <div className="text-[10px] text-gray-400 uppercase mb-1.5">Filtrar semana</div>
+                          <select
+                            className="w-full border border-orange-200 rounded-lg px-3 py-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#ff4600]/30"
+                            value={semanaSelecionada}
+                            onChange={e => setSemanaSelecionada(e.target.value)}
+                          >
+                            <option value="">Período completo</option>
+                            {semanas.map((semana, i) => (
+                              <option key={i} value={semana.semanaInicial_vl}>
+                                Semana {semana.semanaInicial_vl} – {semana.semanaFinal_vl}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </button>
                   ))}
-                </select>
-              </div>
-              
-              {/* Botão de Otimização - Low Profile */}
+
+                  {/* Total da campanha */}
+                  {totaisGerais && (
+                    <div className="mt-1 p-3 bg-gray-50 border-2 border-gray-200 rounded-xl">
+                      <p className="text-[10px] text-gray-500 uppercase font-semibold mb-2 flex items-center gap-1.5">
+                        <span className="inline-block w-4 h-[2px] bg-gray-400 rounded" />
+                        Total da campanha
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase">Impactos</div>
+                          <div className="text-xs font-bold text-gray-800">
+                            {Math.round(totaisGerais.impactosTotal_vl ?? 0).toLocaleString('pt-BR')}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase">Cobertura</div>
+                          <div className="text-xs font-bold text-gray-800">
+                            {totaisGerais.coberturaProp_vl?.toFixed(1) ?? '—'}%
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase">GRP</div>
+                          <div className="text-xs font-bold text-gray-800">
+                            {totaisGerais.grp_vl?.toFixed(1) ?? '—'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : grupo ? (
+                <div className="py-4 text-center text-xs text-gray-400">
+                  Nenhum resultado disponível para esta campanha.
+                </div>
+              ) : null}
+
+              {/* Painel de detalhes do ponto selecionado */}
+              {pontoSelecionado && (() => {
+                const corGrupo = pontoSelecionado.hexColor_st || `rgb(${pontoSelecionado.rgbColorR_vl},${pontoSelecionado.rgbColorG_vl},${pontoSelecionado.rgbColorB_vl})`;
+                const isDigital = pontoSelecionado.estaticoDigital_st === 'D';
+                const pontosDoGrupo = pontosValidados.filter(({ ponto }) => ponto.grupoSub_st === pontoSelecionado.grupoSub_st);
+                const fluxoTotalGrupo = pontosDoGrupo.reduce((acc, { ponto }) => acc + getFluxoRealPonto(ponto), 0);
+                const fluxoMedioGrupo = pontosDoGrupo.length > 0 ? fluxoTotalGrupo / pontosDoGrupo.length : 0;
+                const nDigital = pontosDoGrupo.filter(({ ponto }) => ponto.estaticoDigital_st === 'D').length;
+                const nEstatico = pontosDoGrupo.filter(({ ponto }) => ponto.estaticoDigital_st === 'E').length;
+                const cidadesGrupo = [...new Set(pontosDoGrupo.map(({ ponto }) => ponto.cidade_st).filter(Boolean))];
+
+                // grupoDesc_st vem dos hexagonos — descrição legível do grupo
+                const hexDoGrupo = hexagonos.find(h => h.grupo_st === pontoSelecionado.grupo_st);
+                const grupoDesc = hexDoGrupo?.grupoDesc_st;
+
+                // Campos extras que chegam via SELECT * — filtra técnicos/internos e mapeia labels legíveis
+                const camposConhecidos = new Set(['planoMidia_pk','latitude_vl','longitude_vl','fluxoEstimado_vl',
+                  'calculatedFluxoEstimado_vl','estaticoDigital_st','grupoSub_st','grupo_st','hexColor_st',
+                  'rgbColorR_vl','rgbColorG_vl','rgbColorB_vl','nome_st','tipo_st','formato_st',
+                  'cidade_st','estado_st','bairro_st']);
+                const camposInternos = /^(pk|ativo|filtrado|deleted|ativogrupo|is_|date|createdAt|updatedAt)/i;
+                const labelExtras: Record<string, string> = {
+                  tipomidia: 'Tipo de Mídia', tipomidia_st: 'Tipo de Mídia',
+                  ipv: 'IPV', ipv_vl: 'IPV',
+                  exibidor: 'Exibidor', exibidor_st: 'Exibidor',
+                  operadora: 'Operadora', operadora_st: 'Operadora',
+                  faces_vl: 'Faces', faces: 'Faces',
+                  iluminacao_st: 'Iluminação', iluminacao: 'Iluminação',
+                  logradouro_st: 'Logradouro', logradouro: 'Logradouro',
+                  cep_st: 'CEP', cep: 'CEP',
+                  dimensao_st: 'Dimensão', dimensao: 'Dimensão',
+                  area_vl: 'Área (m²)', area: 'Área (m²)',
+                };
+                const camposExtras = Object.entries(pontoSelecionado)
+                  .filter(([k, v]) =>
+                    !camposConhecidos.has(k) &&
+                    !camposInternos.test(k) &&
+                    !k.endsWith('_pk') &&
+                    !k.toLowerCase().includes('date') &&
+                    !k.toLowerCase().includes('color') &&
+                    v != null && v !== '' && v !== 0 && v !== 1 && v !== false
+                  )
+                  .map(([k, v]) => ({
+                    chave: k,
+                    label: labelExtras[k.toLowerCase()] || k.replace(/_st$|_vl$|_bl$|_dt$|_dh$/g, '').replace(/_/g, ' '),
+                    valor: v
+                  }));
+
+                return (
+                  <div className="mb-3 space-y-2">
+
+                    {/* Card do GRUPO */}
+                    <div className="rounded-xl border-2 bg-white p-3" style={{ borderColor: corGrupo }}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: corGrupo }} />
+                          <span className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Grupo</span>
+                          <span className="text-sm font-bold text-[#222]">{pontoSelecionado.grupoSub_st}</span>
+                        </div>
+                        <button
+                          onClick={() => setPontoSelecionado(null)}
+                          className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      {/* Descrição legível do grupo (grupoDesc_st dos hexagonos) */}
+                      {grupoDesc && (
+                        <div className="text-xs font-medium text-gray-600 mb-1">{grupoDesc}</div>
+                      )}
+                      {pontoSelecionado.grupo_st && (
+                        <div className="text-[10px] text-gray-400 mb-2">{pontoSelecionado.grupo_st}</div>
+                      )}
+
+                      <div className="grid grid-cols-3 gap-2 mb-2">
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase">Pontos</div>
+                          <div className="text-xs font-semibold text-gray-700">{pontosDoGrupo.length}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase">Fluxo total</div>
+                          <div className="text-xs font-semibold text-gray-700">{formatNumber(fluxoTotalGrupo)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase">Média/ponto</div>
+                          <div className="text-xs font-semibold text-gray-700">{formatNumber(Math.round(fluxoMedioGrupo))}</div>
+                        </div>
+                      </div>
+
+                      {/* Chips de tipo */}
+                      <div className="flex gap-1.5 flex-wrap mb-2">
+                        {nDigital > 0 && <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-medium">{nDigital} digital{nDigital > 1 ? 'is' : ''}</span>}
+                        {nEstatico > 0 && <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full font-medium">{nEstatico} estático{nEstatico > 1 ? 's' : ''}</span>}
+                      </div>
+
+                      {/* Cidades cobertas pelo grupo */}
+                      {cidadesGrupo.length > 0 && (
+                        <div className="text-[10px] text-gray-400">
+                          <span className="font-medium text-gray-500">Praças: </span>
+                          {cidadesGrupo.join(' · ')}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Card do PONTO INDIVIDUAL */}
+                    <div className={`rounded-xl border-2 bg-white p-3 ${isDigital ? 'border-blue-400' : 'border-emerald-400'}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${isDigital ? 'bg-blue-500' : 'bg-emerald-500'}`} />
+                          <span className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Ponto</span>
+                          <span className="text-[10px] text-gray-400">#{pontoSelecionado.planoMidia_pk}</span>
+                        </div>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isDigital ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                          {isDigital ? 'Digital' : 'Estático'}
+                        </span>
+                      </div>
+
+                      {/* Tipo de mídia */}
+                      {pontoSelecionado.tipo_st && (
+                        <div className="text-xs font-semibold text-gray-800 mb-0.5">{pontoSelecionado.tipo_st}</div>
+                      )}
+
+                      {/* Localização */}
+                      {(pontoSelecionado.cidade_st || pontoSelecionado.bairro_st) && (
+                        <div className="text-[10px] text-gray-400 mb-2">
+                          {[pontoSelecionado.bairro_st, pontoSelecionado.cidade_st, pontoSelecionado.estado_st].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
+
+                      {/* Fluxo — dois valores lado a lado */}
+                      <div className="grid grid-cols-2 gap-2 mb-2">
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase">Fluxo estimado</div>
+                          <div className="text-xs font-semibold text-gray-700">
+                            {pontoSelecionado.fluxoEstimado_vl != null ? formatNumber(pontoSelecionado.fluxoEstimado_vl) : '—'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase">Fluxo calculado</div>
+                          <div className="text-xs font-semibold text-gray-700">
+                            {pontoSelecionado.calculatedFluxoEstimado_vl != null ? formatNumber(pontoSelecionado.calculatedFluxoEstimado_vl) : '—'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Formato + Coordenadas */}
+                      <div className="grid grid-cols-2 gap-2">
+                        {pontoSelecionado.formato_st && (
+                          <div>
+                            <div className="text-[10px] text-gray-400 uppercase">Formato</div>
+                            <div className="text-xs font-semibold text-gray-700">{pontoSelecionado.formato_st}</div>
+                          </div>
+                        )}
+                        <div>
+                          <div className="text-[10px] text-gray-400 uppercase">Coordenadas</div>
+                          <div className="text-[10px] font-medium text-gray-500 font-mono">
+                            {pontoSelecionado.latitude_vl.toFixed(5)}, {pontoSelecionado.longitude_vl.toFixed(5)}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Campos extras vindos do SELECT * — filtrados e com labels legíveis */}
+                      {camposExtras.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-gray-100">
+                          <div className="text-[10px] text-gray-400 uppercase mb-1.5">Dados adicionais</div>
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                            {camposExtras.map(({ chave, label, valor }) => (
+                              <div key={chave}>
+                                <div className="text-[9px] text-gray-400 uppercase leading-tight tracking-wide">{label}</div>
+                                <div className="text-[10px] font-medium text-gray-700 break-words leading-snug">{String(valor)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                );
+              })()}
+
+              {/* Dica contextual quando praça selecionada mas nenhum ponto */}
+              {cidadeSelecionada && !pontoSelecionado && hexagonos.length > 0 && (
+                <div className="mt-1 p-3 border-2 border-gray-200 rounded-xl text-[10px] text-gray-400 text-center">
+                  Clique em um ponto no mapa para ver os detalhes.
+                </div>
+              )}
+
+              {/* Otimizador */}
               {hexagonos.length > 0 && temDados && (
-                <div className="mb-6">
+                <div className="mt-3">
                   <button
-                    onClick={() => {
-                      analisar();
-                      setMostrarSugestoes(true);
-                      console.log('🎯 Análise:', analise);
-                    }}
+                    onClick={() => { analisar(); setMostrarSugestoes(true); }}
                     disabled={isAnalyzing}
-                    className="w-full bg-gradient-to-r from-[#ff4600] to-orange-600 text-white rounded-xl px-6 py-4 text-base font-bold hover:from-[#e03700] hover:to-orange-500 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-gradient-to-r from-[#ff4600] to-orange-500 text-white rounded-xl px-4 py-3 text-xs font-bold hover:from-[#e03700] hover:to-orange-400 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     {isAnalyzing ? (
-                      <>
-                        <div className="animate-spin rounded-full h-5 w-5 border-3 border-white border-t-transparent"></div>
-                        <span>Analisando mapa...</span>
-                      </>
+                      <><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" /><span>Analisando...</span></>
                     ) : (
-                      <>
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                        <span>Otimizar Plano</span>
-                        <span className="bg-white/20 px-2 py-1 rounded-lg text-xs font-bold">BETA</span>
-                      </>
+                      <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg><span>Otimizar Plano</span><span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px]">BETA</span></>
                     )}
                   </button>
-                  <p className="text-xs text-gray-500 mt-2 text-center">
-                    Sugestões inteligentes para melhorar seu plano de mídia
-                  </p>
-                  
-                  {/* Preview rápido dos insights quando disponível */}
                   {analise && mostrarSugestoes && (
-                    <div className="mt-4 p-4 bg-gradient-to-br from-purple-50 via-indigo-50 to-pink-50 border-2 border-purple-300 rounded-xl shadow-md">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center shadow-md">
-                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                          </svg>
-                        </div>
-                        <span className="font-bold text-purple-900 text-sm uppercase tracking-wide">Quick Insights</span>
-                      </div>
-                      <div className="space-y-2 mb-3">
-                        <div className="bg-white p-2 rounded-lg border border-purple-200">
-                          <span className="text-purple-800 text-xs font-medium">{analise.planoAtual.totalHexagonos} hexágonos analisados</span>
-                        </div>
-                        <div className="bg-white p-2 rounded-lg border border-purple-200">
-                          <span className="text-purple-800 text-xs font-medium">{analise.planoOtimizado.sugestoes.length} sugestões de melhoria</span>
-                        </div>
-                        <div className="bg-gradient-to-r from-green-100 to-emerald-100 p-2 rounded-lg border border-green-300">
-                          <span className="text-green-800 text-xs font-bold">
-                            Ganho estimado: <span className="text-green-600 font-black">+{analise.planoOtimizado.ganhoPercentual.toFixed(1)}%</span>
-                          </span>
-                        </div>
-                      </div>
+                    <div className="mt-2 p-3 border-2 border-gray-200 rounded-xl bg-white space-y-1.5">
+                      <div className="text-[10px] text-gray-400 uppercase font-semibold">Quick Insights</div>
+                      <div className="text-xs text-gray-700">{analise.planoAtual.totalHexagonos} hexágonos · {analise.planoOtimizado.sugestoes.length} sugestões</div>
+                      <div className="text-xs font-bold text-green-600">+{analise.planoOtimizado.ganhoPercentual.toFixed(1)}% ganho estimado</div>
                       <button
-                        onClick={() => {
-                          setMostrarModalDetalhes(true);
-                          setMostrarSugestoes(false);
-                        }}
-                        className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-2 rounded-lg text-xs font-bold hover:from-purple-700 hover:to-indigo-700 transition-all shadow-sm hover:shadow-md"
+                        onClick={() => { setMostrarModalDetalhes(true); setMostrarSugestoes(false); }}
+                        className="w-full text-[10px] text-[#ff4600] font-semibold hover:underline text-left"
                       >
-                        Ver detalhes completos →
+                        Ver detalhes →
                       </button>
                     </div>
                   )}
                 </div>
               )}
-              
-              {/* Informações dos hexágonos */}
-              {hexagonos.length > 0 && (
-                (() => {
-                  const totalFluxo = hexagonos.reduce((sum, hex) => sum + hex.calculatedFluxoEstimado_vl, 0);
-                  const fluxoMedio = totalFluxo / hexagonos.length;
-                  const maxHex = hexagonos.reduce((a, b) => (a.calculatedFluxoEstimado_vl > b.calculatedFluxoEstimado_vl ? a : b));
-                  const minHex = hexagonos.reduce((a, b) => (a.calculatedFluxoEstimado_vl < b.calculatedFluxoEstimado_vl ? a : b));
-                  const grupos = Array.from(new Set(hexagonos.map(h => h.grupoDesc_st))).filter(Boolean);
-                  const areaCoberta = hexagonos.length * 0.36; // Aproximação: cada hexágono ~0.36 km²
-                  
-                  return (
-                    <div className="mb-4 p-5 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 border-2 border-orange-200 rounded-xl shadow-lg">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-500 rounded-xl flex items-center justify-center shadow-md">
-                          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                          </svg>
-                        </div>
-                        <h4 className="text-sm font-bold text-orange-900 uppercase tracking-wide">Resumo dos Dados</h4>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-3 mb-4">
-                        <div className="bg-white p-3 rounded-lg border-2 border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Pontos no mapa</div>
-                          <div className="text-green-600 font-bold text-lg">{formatNumber(hexagonos.length)}</div>
-                        </div>
-                        <div className="bg-white p-3 rounded-lg border-2 border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Área coberta</div>
-                          <div className="text-blue-600 font-bold text-lg">~{formatNumber(areaCoberta)} km²</div>
-                        </div>
-                        <div className="bg-white p-3 rounded-lg border-2 border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Fluxo total</div>
-                          <div className="text-purple-600 font-bold text-lg">{formatNumber(totalFluxo)}</div>
-                        </div>
-                        <div className="bg-white p-3 rounded-lg border-2 border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Fluxo médio</div>
-                          <div className="text-orange-600 font-bold text-lg">{formatNumber(fluxoMedio)}</div>
-                        </div>
-                      </div>
-                      
-                      <div className="p-3 bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-                        <div className="text-xs text-gray-700 mb-2">
-                          <strong className="text-gray-900">📈 Extremos de Fluxo:</strong> 
-                          <div className="mt-1">
-                            {formatNumber(minHex.calculatedFluxoEstimado_vl)} (mín) → {formatNumber(maxHex.calculatedFluxoEstimado_vl)} (máx)
-                          </div>
-                        </div>
-                        <div className="text-xs text-gray-700 border-t border-gray-200 pt-2 mt-2">
-                          <strong className="text-gray-900">🎨 Grupos:</strong> 
-                          <div className="mt-1 text-gray-600">
-                            {grupos.length > 0 ? grupos.join(', ') : 'Nenhum grupo definido'}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {lastSearchInfo && (
-                        <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
-                          <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
-                          <span className="italic">Última atualização: {getTimeAgo(lastSearchInfo.timestamp)}</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()
-              )}
-              
-              {/* Painel de resultados por praça */}
-              <div className="mt-2">
-                {loadingResultados ? (
-                  <div className="flex items-center gap-3 py-6 justify-center text-gray-400">
-                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-[#ff4600] border-solid flex-shrink-0"></div>
-                    <span className="text-sm">Carregando resultados...</span>
-                  </div>
-                ) : dadosPorPraca.length > 0 ? (
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                      Resultados por praça — período completo
-                    </p>
-                    <div className="space-y-2">
-                      {dadosPorPraca.map((item, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => setCidadeSelecionada(item.cidade_st)}
-                          className={`w-full text-left rounded-xl border-2 p-3 transition-all ${
-                            cidadeSelecionada === item.cidade_st
-                              ? 'border-[#ff4600] bg-orange-50'
-                              : 'border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-bold text-[#222]">{item.cidade_st}</span>
-                            <span className="text-xs text-[#ff4600] font-semibold flex items-center gap-1">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                              </svg>
-                              Ver mapa
-                            </span>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2">
-                            <div>
-                              <div className="text-[10px] text-gray-400 uppercase">Impactos</div>
-                              <div className="text-xs font-semibold text-gray-700">
-                                {Math.round(item.impactosTotal_vl ?? 0).toLocaleString('pt-BR')}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="text-[10px] text-gray-400 uppercase">Cobertura</div>
-                              <div className="text-xs font-semibold text-gray-700">
-                                {item.coberturaProp_vl?.toFixed(1) ?? '—'}%
-                              </div>
-                            </div>
-                            <div>
-                              <div className="text-[10px] text-gray-400 uppercase">Freq.</div>
-                              <div className="text-xs font-semibold text-gray-700">
-                                {item.frequencia_vl?.toFixed(1) ?? '—'}x
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                    {/* Totais gerais */}
-                    {totaisGerais && (
-                      <div className="mt-3 p-3 bg-[#393939] rounded-xl">
-                        <p className="text-[10px] text-gray-400 uppercase font-semibold mb-2">Total da campanha</p>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div>
-                            <div className="text-[10px] text-gray-400 uppercase">Impactos</div>
-                            <div className="text-xs font-bold text-white">
-                              {Math.round(totaisGerais.impactosTotal_vl ?? 0).toLocaleString('pt-BR')}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[10px] text-gray-400 uppercase">Cobertura</div>
-                            <div className="text-xs font-bold text-white">
-                              {totaisGerais.coberturaProp_vl?.toFixed(1) ?? '—'}%
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[10px] text-gray-400 uppercase">GRP</div>
-                            <div className="text-xs font-bold text-white">
-                              {totaisGerais.grp_vl?.toFixed(1) ?? '—'}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : grupo ? (
-                  <div className="py-4 text-center text-xs text-gray-400">
-                    Nenhum resultado disponível para esta campanha.
-                  </div>
-                ) : null}
 
-                {/* Nota quando praça já está selecionada */}
-                {cidadeSelecionada && (
-                  <div className="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-500">
-                    Clique nos pontos do mapa para ver detalhes. Use o filtro de semana para explorar períodos específicos.
-                  </div>
-                )}
-              </div>
+              </div>{/* fim conteúdo colapsável */}
             </div>
-            {/* Coluna do mapa */}
-            <div className="flex-1 h-full w-full" style={{ minHeight: 320, background: '#fff', borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e5e5', marginBottom: 48, position: 'relative' }}>
-              {/* Overlay simples enquanto nenhuma praça está selecionada */}
+
+            {/* Mapa — ocupa 100% da area */}
+            <style>{`.leaflet-top.leaflet-left .leaflet-control-zoom { display: none !important; }`}</style>
+            <div className="absolute inset-0" style={{ zIndex: 1 }}>
+              {/* Overlay enquanto nenhuma praça está selecionada */}
               {showOverlay && (
-                <div className="absolute inset-0 bg-gradient-to-br from-gray-50 via-white to-orange-50 z-50 flex items-center justify-center p-8">
+                <div className="absolute inset-0 bg-gradient-to-br from-gray-50 via-white to-orange-50 flex items-center justify-center p-8" style={{ zIndex: 10 }}>
                   <div className="text-center max-w-sm">
                     <div className="w-16 h-16 bg-gradient-to-br from-orange-400 to-amber-400 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
                       <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1321,7 +1465,9 @@ export const Mapa: React.FC = () => {
                 center={hexagonos.length > 0 ? [hexagonos[0].hex_centroid_lat, hexagonos[0].hex_centroid_lon] : [-15.7801, -47.9292]}
                 zoom={12}
                 style={{ height: '100%', width: '100%' }}
+                zoomControl={false}
               >
+                <ZoomControl position="topright" />
                 <TileLayer
                   url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
@@ -1350,540 +1496,87 @@ export const Mapa: React.FC = () => {
                 })}
 
                 {/* Pontos de midia — usa pontosValidados (pre-processado via useMemo) */}
-                {pontosValidados.map(({ ponto, cor, radius, hexagonoAssociado, fluxoAgregado, totalPontosNoHex }, idx) => (
+                {pontosValidados.map(({ ponto, cor, radius }, idx) => {
+                      const isSelected = pontoSelecionado?.planoMidia_pk === ponto.planoMidia_pk;
+                      const isInGroup = !isSelected && pontoSelecionado != null && ponto.grupoSub_st === pontoSelecionado.grupoSub_st;
+                      return (
                       <CircleMarker
                         key={`ponto-${ponto.planoMidia_pk}-${idx}`}
                         center={[ponto.latitude_vl, ponto.longitude_vl]}
                         pathOptions={{ 
-                          color: '#ffffff',
+                          color: isSelected ? '#ff4600' : isInGroup ? '#ff8c00' : '#ffffff',
                           fillColor: cor,
-                          fillOpacity: 0.85,
-                          weight: 1.5,
-                          opacity: 1,
+                          fillOpacity: isSelected ? 1 : isInGroup ? 0.95 : pontoSelecionado ? 0.3 : 0.85,
+                          weight: isSelected ? 3 : isInGroup ? 2 : 1.5,
+                          opacity: pontoSelecionado && !isSelected && !isInGroup ? 0.4 : 1,
                           dashArray: ponto.estaticoDigital_st === 'E' ? '3, 3' : undefined
                         }}
-                        radius={radius}
-                      >
-                    <Popup maxWidth={350}>
-                      <div style={{ 
-                        minWidth: 280, 
-                        maxWidth: 350,
-                        fontFamily: 'system-ui, -apple-system, sans-serif'
-                      }}>
-                        {/* Header com tipo */}
-                        <div style={{ 
-                          background: ponto.estaticoDigital_st === 'D' ? '#3b82f6' : '#10b981',
-                          color: 'white',
-                          padding: '12px',
-                          marginBottom: '12px',
-                          borderRadius: '6px',
-                          fontWeight: 600,
-                          fontSize: '14px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px'
-                        }}>
-                          {ponto.estaticoDigital_st === 'D' ? '📱' : '🏢'}
-                          {ponto.estaticoDigital_st === 'D' ? 'Mídia Digital' : 'Mídia Estática'}
-                        </div>
-
-                        {/* Informações principais */}
-                        <div style={{ 
-                          background: '#f9fafb',
-                          padding: '12px',
-                          borderRadius: '6px',
-                          marginBottom: '8px'
-                        }}>
-                          <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.6 }}>
-                            {/* Grupo e SubGrupo */}
-                            <div style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #e5e7eb' }}>
-                              <div style={{ marginBottom: 6 }}>
-                              <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>Grupo</div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <span style={{ 
-                                  display: 'inline-block', 
-                                    width: 16, 
-                                    height: 16, 
-                                  borderRadius: '50%', 
-                                  background: cor,
-                                  border: '2px solid #fff',
-                                  boxShadow: '0 0 0 1px rgba(0,0,0,0.1)'
-                                }}></span>
-                                  <span style={{ fontWeight: 600, color: '#111827', fontSize: 13 }}>{ponto.grupo_st || 'N/A'}</span>
-                                </div>
-                              </div>
-                              <div>
-                                <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>SubGrupo</div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                  <span style={{ fontWeight: 600, color: '#111827', fontSize: 13 }}>{ponto.grupoSub_st || 'N/A'}</span>
-                                  {ponto.grupo_st && ponto.grupoSub_st && (
-                                    ponto.grupoSub_st.startsWith(ponto.grupo_st) ? (
-                                      <span style={{ fontSize: 9, color: '#10b981', fontWeight: 600, padding: '2px 6px', background: '#d1fae5', borderRadius: '4px' }}>
-                                        ✓ Derivado de {ponto.grupo_st}
-                                      </span>
-                                    ) : (
-                                      <span style={{ fontSize: 9, color: '#ef4444', fontWeight: 600, padding: '2px 6px', background: '#fee2e2', borderRadius: '4px' }}>
-                                        ⚠ Não deriva de {ponto.grupo_st}
-                                      </span>
-                                    )
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Hexágono associado */}
-                            {(() => {
-                              const hexAssociado = hexagonoAssociado;
-                              if (hexAssociado) {
-                                return (
-                                  <div style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #e5e7eb' }}>
-                                    <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>Hexágono</div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                      <span style={{ fontWeight: 500, color: '#111827', fontSize: 11 }}>
-                                        #{hexAssociado.hexagon_pk}
-                                      </span>
-                                      <span style={{ fontSize: 9, color: '#6b7280' }}>
-                                        ({hexAssociado.grupo_st})
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              }
-                              return null;
-                            })()}
-                            
-                            {/* Informações do ponto */}
-                            {ponto.nome_st && (
-                              <div style={{ marginBottom: 6 }}>
-                                <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2 }}>Nome do Ponto</div>
-                                <div style={{ fontWeight: 500, color: '#111827', fontSize: 11 }}>{ponto.nome_st}</div>
-                              </div>
-                            )}
-                            
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-                              {ponto.tipo_st && (
-                                <div>
-                                  <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2 }}>Tipo</div>
-                                  <div style={{ fontWeight: 500, color: '#111827', fontSize: 11 }}>{ponto.tipo_st}</div>
-                                </div>
-                              )}
-                              {ponto.formato_st && (
-                                <div>
-                                  <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2 }}>Formato</div>
-                                  <div style={{ fontWeight: 500, color: '#111827', fontSize: 11 }}>{ponto.formato_st}</div>
-                                </div>
-                              )}
-                            </div>
-                            
-                            {ponto.planoMidia_pk && (
-                              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #e5e7eb', fontSize: 10, color: '#9ca3af' }}>
-                                ID do Ponto: {ponto.planoMidia_pk}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Fluxo - Usar o fluxo real do ponto */}
-                        <div style={{ 
-                          background: '#eff6ff',
-                          padding: '10px',
-                          borderRadius: '6px',
-                          marginBottom: '8px',
-                          border: '1px solid #dbeafe'
-                        }}>
-                          <div style={{ fontSize: 11, color: '#1e40af', fontWeight: 600, marginBottom: 4 }}>
-                            👥 Fluxo do Ponto
-                          </div>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: '#1e3a8a' }}>
-                            {(() => {
-                              // CRÍTICO: Garantir que estamos usando o fluxo INDIVIDUAL do ponto
-                              // Não usar valores do hexágono aqui - apenas campos do próprio ponto
-                              const fluxoReal = getFluxoRealPonto(ponto);
-                              
-                              return fluxoReal.toLocaleString('pt-BR');
-                            })()}
-                          </div>
-                          {/* Mostrar fonte do fluxo */}
-                          {(() => {
-                            const fonteTexto = (ponto.fluxoEstimado_vl != null && ponto.fluxoEstimado_vl > 0)
-                              ? 'Fluxo estimado (fluxoEstimado_vl)'
-                              : (ponto.calculatedFluxoEstimado_vl != null && ponto.calculatedFluxoEstimado_vl > 0)
-                                ? 'Fluxo calculado (calculatedFluxoEstimado_vl)'
-                                : '';
-                            return fonteTexto ? (
-                              <div style={{ fontSize: 9, color: '#64748b', marginTop: 4, fontStyle: 'italic' }}>
-                                {fonteTexto}
-                              </div>
-                            ) : null;
-                          })()}
-                        </div>
-
-                        {/* Informacoes do Hexagono */}
-                        {hexagonoAssociado && (() => {
-                          const hex = hexagonoAssociado;
-                          const fluxoPonto = getFluxoRealPonto(ponto);
-                          const fluxoAgregadoPontos = fluxoAgregado;
-                          const totalPontosNoHexagono = totalPontosNoHex || 1;
-                          // Este é o fluxo da área geográfica do hexágono
-                          const fluxoHexagonoBanco = (hex.fluxoEstimado_vl !== null && hex.fluxoEstimado_vl !== undefined && hex.fluxoEstimado_vl > 0) 
-                            ? hex.fluxoEstimado_vl 
-                            : (hex.calculatedFluxoEstimado_vl || 0);
-                          
-                          // Usar o fluxo agregado se disponível, senão usar o do banco
-                          const fluxoHexagono = fluxoAgregadoPontos || fluxoHexagonoBanco;
-                          const usandoFluxoAgregado = !!fluxoAgregadoPontos;
-                          
-                          // Identificar qual campo está sendo usado
-                          const campoHexagono = usandoFluxoAgregado 
-                            ? `${totalPontosNoHexagono} ponto${totalPontosNoHexagono > 1 ? 's' : ''} renderizado${totalPontosNoHexagono > 1 ? 's' : ''} no hexágono`
-                            : ((hex.fluxoEstimado_vl !== null && hex.fluxoEstimado_vl !== undefined && hex.fluxoEstimado_vl > 0)
-                              ? 'fluxoEstimado_vl (banco)'
-                              : 'calculatedFluxoEstimado_vl (banco)');
-                          
-                          const campoPonto = (ponto.fluxoEstimado_vl != null && ponto.fluxoEstimado_vl > 0)
-                            ? 'fluxoEstimado_vl'
-                            : 'calculatedFluxoEstimado_vl';
-                          
-                          const diferenca = fluxoHexagono - fluxoPonto;
-                          const percentualDiferenca = fluxoPonto > 0 ? ((diferenca / fluxoPonto) * 100) : 0;
-                          
-                          // Verificar se estão usando campos compatíveis
-                          const camposCompatíveis = campoPonto === 'fluxoEstimado_vl' && campoHexagono.includes('fluxoEstimado_vl');
-                          
-                          return (
-                            <div style={{ 
-                              background: '#f0f9ff',
-                              padding: '10px',
-                              borderRadius: '6px',
-                              marginBottom: '8px',
-                              border: '1px solid #bae6fd'
-                            }}>
-                              <div style={{ fontSize: 11, color: '#0369a1', fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-                                <svg style={{ width: 14, height: 14 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                                </svg>
-                                Hexágono Associado
-                              </div>
-                              <div style={{ fontSize: 10, color: '#0c4a6e', lineHeight: 1.5 }}>
-                                <div style={{ marginBottom: 4 }}>
-                                  <strong>ID:</strong> #{hex.hexagon_pk}
-                                </div>
-                                <div style={{ marginBottom: 4 }}>
-                                  <strong>Grupo:</strong> {hex.grupo_st} ({hex.grupoDesc_st || 'N/A'})
-                                </div>
-                                
-                                {/* Comparação de Fluxos */}
-                                <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #bae6fd' }}>
-                                  <div style={{ fontSize: 9, color: '#0369a1', marginBottom: 4, fontWeight: 600 }}>
-                                    📊 Comparação de Fluxos
-                                  </div>
-                                  <div style={{ marginBottom: 3 }}>
-                                    <div style={{ fontSize: 9, color: '#64748b' }}>Fluxo do Ponto ({campoPonto}):</div>
-                                    <div style={{ fontWeight: 600, color: '#059669' }}>
-                                      {formatNumber(fluxoPonto)}
-                                    </div>
-                                  </div>
-                                  <div style={{ marginBottom: 3 }}>
-                                    <div style={{ fontSize: 9, color: '#64748b' }}>
-                                      Fluxo do Hexágono ({campoHexagono}):
-                                      {usandoFluxoAgregado && totalPontosNoHexagono > 1 && (
-                                        <span style={{ fontSize: 8, color: '#059669', marginLeft: 4, fontWeight: 600 }}>
-                                          ({totalPontosNoHexagono} ponto{totalPontosNoHexagono > 1 ? 's' : ''} renderizado{totalPontosNoHexagono > 1 ? 's' : ''})
-                                        </span>
-                                      )}
-                                      {usandoFluxoAgregado && totalPontosNoHexagono === 1 && (
-                                        <span style={{ fontSize: 8, color: '#64748b', marginLeft: 4, fontStyle: 'italic' }}>
-                                          (1 ponto renderizado)
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div style={{ fontWeight: 600, color: '#3b82f6' }}>
-                                      {formatNumber(fluxoHexagono)}
-                                    </div>
-                                    {usandoFluxoAgregado && (
-                                      <div style={{ fontSize: 8, color: '#64748b', marginTop: 2, fontStyle: 'italic' }}>
-                                        {totalPontosNoHexagono > 1 
-                                          ? `Soma dos fluxos dos ${totalPontosNoHexagono} pontos renderizados dentro do hexágono`
-                                          : 'Fluxo do único ponto renderizado dentro do hexágono'}
-                                      </div>
-                                    )}
-                                    {!usandoFluxoAgregado && fluxoHexagonoBanco > 0 && (
-                                      <div style={{ fontSize: 8, color: '#64748b', marginTop: 2, fontStyle: 'italic' }}>
-                                        Fluxo da área geográfica (do banco de dados)
-                                      </div>
-                                    )}
-                                  </div>
-                                  {!camposCompatíveis && !usandoFluxoAgregado && (
-                                    <div style={{ 
-                                      marginTop: 4, 
-                                      padding: '4px 6px', 
-                                      background: '#fef3c7',
-                                      borderRadius: '4px',
-                                      fontSize: 8,
-                                      color: '#92400e'
-                                    }}>
-                                      ⚠️ Campos diferentes: Ponto usa {campoPonto}, Hexágono usa {campoHexagono}
-                                    </div>
-                                  )}
-                                  {diferenca !== 0 && (
-                                    <div style={{ 
-                                      marginTop: 4, 
-                                      padding: '4px 6px', 
-                                      background: diferenca > 0 ? '#dbeafe' : '#fee2e2',
-                                      borderRadius: '4px',
-                                      fontSize: 9
-                                    }}>
-                                      <div style={{ color: diferenca > 0 ? '#1e40af' : '#991b1b' }}>
-                                        {diferenca > 0 ? '✓' : '⚠️'} Diferença: {diferenca > 0 ? '+' : ''}{formatNumber(diferenca)}
-                                        {Math.abs(percentualDiferenca) > 10 && (
-                                          <span> ({percentualDiferenca > 0 ? '+' : ''}{percentualDiferenca.toFixed(1)}%)</span>
-                                        )}
-                                      </div>
-                                      <div style={{ fontSize: 8, color: '#64748b', marginTop: 2 }}>
-                                        {diferenca > 0 
-                                          ? 'Hexágono contém fluxo agregado da área' 
-                                          : 'Verificar dados - hexágono menor que ponto'}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })()}
-
-                        {/* Localização */}
-                        {(ponto.cidade_st || ponto.estado_st || ponto.bairro_st) && (
-                          <div style={{ 
-                            fontSize: 11, 
-                            color: '#6b7280',
-                            marginBottom: 8,
-                            paddingTop: 8,
-                            borderTop: '1px solid #e5e7eb'
-                          }}>
-                            <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4, fontWeight: 600 }}>Localização</div>
-                            {ponto.cidade_st && ponto.estado_st && (
-                              <div style={{ marginBottom: 3 }}>📍 {ponto.cidade_st}/{ponto.estado_st}</div>
-                            )}
-                            {ponto.bairro_st && (
-                              <div>🏘️ {ponto.bairro_st}</div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Coordenadas (colapsadas) */}
-                        <details style={{ fontSize: 10, color: '#9ca3af' }}>
-                          <summary style={{ cursor: 'pointer', marginBottom: 4 }}>
-                            📐 Coordenadas
-                          </summary>
-                          <div style={{ marginTop: 4, padding: 6, background: '#f3f4f6', borderRadius: 4 }}>
-                            <div><strong>Lat:</strong> {ponto.latitude_vl.toFixed(6)}</div>
-                            <div><strong>Lon:</strong> {ponto.longitude_vl.toFixed(6)}</div>
-                          </div>
-                        </details>
-                      </div>
-                    </Popup>
-                  </CircleMarker>
-                ))}
+                        radius={isSelected ? radius + 3 : isInGroup ? radius + 1 : radius}
+                        eventHandlers={{ click: () => setPontoSelecionado(ponto) }}
+                      />
+                      );
+                })}
               </MapContainer>
             </div>
-            {/* Legendas agrupadas no canto inferior direito */}
-            {hexagonos.length > 0 && (
-              <div style={{ position: 'absolute', bottom: 96, right: 64, display: 'flex', gap: 24, flexWrap: 'wrap', zIndex: 1000 }}>
-                {/* Controle de Visualização dos Pontos */}
-                {pontosMidia.length > 0 && (
-                  <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 180 }}>
-                    <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 8 }}>👁️ Modo de Visualização</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <button
-                        onClick={() => setTamanhoUniforme(false)}
-                        style={{
-                          padding: '8px 12px',
-                          borderRadius: 6,
-                          border: '2px solid',
-                          borderColor: !tamanhoUniforme ? '#ff4600' : '#e5e7eb',
-                          background: !tamanhoUniforme ? 'linear-gradient(135deg, #ff4600 0%, #ff6b3d 100%)' : 'white',
-                          color: !tamanhoUniforme ? 'white' : '#666',
-                          fontSize: 11,
-                          fontWeight: !tamanhoUniforme ? 600 : 500,
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 6
-                        }}
-                      >
-                        <span>📊</span>
-                        <span>Tamanho Variável</span>
-                        {!tamanhoUniforme && <span>✓</span>}
-                      </button>
-                      <button
-                        onClick={() => setTamanhoUniforme(true)}
-                        style={{
-                          padding: '8px 12px',
-                          borderRadius: 6,
-                          border: '2px solid',
-                          borderColor: tamanhoUniforme ? '#ff4600' : '#e5e7eb',
-                          background: tamanhoUniforme ? 'linear-gradient(135deg, #ff4600 0%, #ff6b3d 100%)' : 'white',
-                          color: tamanhoUniforme ? 'white' : '#666',
-                          fontSize: 11,
-                          fontWeight: tamanhoUniforme ? 600 : 500,
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 6
-                        }}
-                      >
-                        <span>⚪</span>
-                        <span>Tamanho Uniforme</span>
-                        {tamanhoUniforme && <span>✓</span>}
-                      </button>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Legenda do tamanho - usando fluxo real dos pontos */}
-                {pontosMidia.length > 0 && (() => {
-                  const fluxosReais = pontosMidia.map(getFluxoRealPonto);
-                  const minFluxoReal = Math.min(...fluxosReais);
-                  const maxFluxoReal = Math.max(...fluxosReais);
-                  
-                  return (
-                    <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
-                      <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>📏 Tamanho dos Pontos</div>
-                      <div style={{ fontSize: 9, color: '#666', marginBottom: 6, fontStyle: 'italic' }}>
-                        {tamanhoUniforme ? 'Todos os pontos iguais' : 'Baseado no fluxo real'}
-                      </div>
-                      {tamanhoUniforme ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <svg width={28} height={28} style={{ display: 'block' }}>
-                            <circle cx={14} cy={14} r={10} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
-                          </svg>
-                          <span style={{ fontSize: 11, color: '#444' }}>
-                            Tamanho uniforme<br/>
-                            <span style={{ fontSize: 9, color: '#666' }}>para todos os pontos</span>
-                          </span>
-                        </div>
-                      ) : (
-                        <>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <svg width={24} height={24} style={{ display: 'block' }}>
-                          <circle cx={12} cy={12} r={6} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
-                        </svg>
-                        <span style={{ fontSize: 11, color: '#444' }}>Menor fluxo<br/><strong>{formatNumber(minFluxoReal)}</strong></span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <svg width={40} height={40} style={{ display: 'block' }}>
-                          <circle cx={20} cy={20} r={20} fill="#a78bfa" stroke="#6d28d9" strokeWidth={2} />
-                        </svg>
-                        <span style={{ fontSize: 11, color: '#444' }}>Maior fluxo<br/><strong>{formatNumber(maxFluxoReal)}</strong></span>
-                      </div>
-                        </>
-                      )}
-                    </div>
-                  );
-                })()}
-                
-                {/* Legenda de Grupos (Pontos) */}
+            {/* Mini-legenda compacta */}
+            {hexagonos.length > 0 && pontosValidados.length > 0 && (
+              <div style={{
+                position: 'absolute', bottom: 48, right: 16, zIndex: 500,
+                background: 'rgba(255,255,255,0.95)', borderRadius: 8,
+                padding: '8px 12px', boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+                display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap'
+              }}>
+                {/* Toggle tamanho */}
+                <button
+                  onClick={() => setTamanhoUniforme(!tamanhoUniforme)}
+                  title={tamanhoUniforme ? 'Tamanho uniforme (clique para variável)' : 'Tamanho por fluxo (clique para uniforme)'}
+                  style={{
+                    width: 28, height: 28, borderRadius: 6, border: '1.5px solid #d1d5db',
+                    background: tamanhoUniforme ? '#f3f4f6' : '#fff7ed',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 14, padding: 0
+                  }}
+                >
+                  {tamanhoUniforme ? '⚪' : '📊'}
+                </button>
+
+                <span style={{ width: 1, height: 20, background: '#e5e7eb' }} />
+
+                {/* Grupos em linha */}
                 {(() => {
-                  if (pontosValidados.length === 0) return null;
-                  
                   const gruposUnicos = new Map<string, { subgrupo: string; ponto: PontoMidia }>();
-                  
                   for (const { ponto } of pontosValidados) {
                     if (!gruposUnicos.has(ponto.grupoSub_st)) {
                       gruposUnicos.set(ponto.grupoSub_st, { subgrupo: ponto.grupoSub_st, ponto });
                     }
                   }
-                  
-                  // Ordenar grupos
-                  const gruposOrdenados = Array.from(gruposUnicos.values()).sort((a, b) => 
-                    a.subgrupo.localeCompare(b.subgrupo)
-                  );
-                  
-                  return (
-                    <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 160 }}>
-                      <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 8 }}>📍 Grupos (Pontos)</div>
-                      {gruposOrdenados.map(({ subgrupo, ponto }) => {
-                        // Usar a cor própria do ponto vinda da view/banco
-                        const corPonto = ponto.hexColor_st || `rgb(${ponto.rgbColorR_vl},${ponto.rgbColorG_vl},${ponto.rgbColorB_vl})`;
-                        
-                        const isDigital = ponto.estaticoDigital_st === 'D';
-                        
-                        return (
-                          <div key={subgrupo} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                            <svg width={18} height={18} style={{ display: 'block' }}>
-                              <circle 
-                                cx={9} 
-                                cy={9} 
-                                r={7} 
-                                fill={corPonto}
-                                stroke="#ffffff" 
-                                strokeWidth={1.5}
-                                strokeDasharray={isDigital ? undefined : '3,3'}
-                              />
-                            </svg>
-                            <span style={{ fontSize: 11, color: '#444' }}>
-                              {subgrupo}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
+                  return Array.from(gruposUnicos.values())
+                    .sort((a, b) => a.subgrupo.localeCompare(b.subgrupo))
+                    .map(({ subgrupo, ponto }) => (
+                      <div key={subgrupo} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <svg width={12} height={12}>
+                          <circle cx={6} cy={6} r={5}
+                            fill={ponto.hexColor_st || `rgb(${ponto.rgbColorR_vl},${ponto.rgbColorG_vl},${ponto.rgbColorB_vl})`}
+                            stroke="#fff" strokeWidth={1}
+                            strokeDasharray={ponto.estaticoDigital_st === 'E' ? '2,2' : undefined}
+                          />
+                        </svg>
+                        <span style={{ fontSize: 10, color: '#555', fontWeight: 500 }}>{subgrupo}</span>
+                      </div>
+                    ));
                 })()}
 
-                {/* Legenda de tipos de mídia */}
-                {pontosMidia.length > 0 && (
-                  <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 140 }}>
-                    <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>🔵 Tipos de Mídia</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <svg width={18} height={18} style={{ display: 'block' }}>
-                        <circle cx={9} cy={9} r={7} fill="#3b82f6" stroke="#ffffff" strokeWidth={1.5} />
-                      </svg>
-                      <span style={{ fontSize: 11, color: '#444' }}>Digital (borda sólida)</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <svg width={18} height={18} style={{ display: 'block' }}>
-                        <circle cx={9} cy={9} r={7} fill="#10b981" stroke="#ffffff" strokeWidth={1.5} strokeDasharray="3,3" />
-                      </svg>
-                      <span style={{ fontSize: 11, color: '#444' }}>Estático (borda tracejada)</span>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Informações rápidas */}
-                <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', minWidth: 160 }}>
-                  <div style={{ fontWeight: 600, fontSize: 12, color: '#222', marginBottom: 6 }}>ℹ️ Informações</div>
-                  <div style={{ fontSize: 11, color: '#444', lineHeight: 1.4 }}>
-                    <div><strong>Hexágonos:</strong> {formatNumber(hexagonos.length)} áreas</div>
-                    {pontosMidia.length > 0 && (
-                      <div><strong>Pontos de Mídia:</strong> {formatNumber(pontosMidia.length)} unidades</div>
-                    )}
-                    <div><strong>Área:</strong> ~{formatNumber(hexagonos.length * 0.36)} km²</div>
-                    <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid #e5e7eb' }}>
-                      <strong>Última atualização:</strong>
-                    </div>
-                    <div style={{ fontSize: 10, color: '#666' }}>
-                      {lastSearchInfo ? getTimeAgo(lastSearchInfo.timestamp) : 'Agora'}
-                    </div>
-                  </div>
-                </div>
+                <span style={{ width: 1, height: 20, background: '#e5e7eb' }} />
+
+                {/* Tipo de midia compacto */}
+                <span style={{ fontSize: 10, color: '#888' }}>
+                  ● Digital &nbsp; ◌ Estático
+                </span>
               </div>
             )}
-          </div>
         </div>
-        <div className={`fixed bottom-0 z-30 flex flex-col items-center pointer-events-none transition-all duration-300 ${menuReduzido ? 'left-20 w-[calc(100%-5rem)]' : 'left-64 w-[calc(100%-16rem)]'}`}>
-          <div className="absolute left-0 top-0 h-full w-px bg-[#c1c1c1]" />
-          <div className="w-full bg-white py-4 border-t border-[#e5e5e5] flex justify-center pointer-events-auto">
-            {/* Remover qualquer renderização do componente Pagination e divs relacionadas */}
-          </div>
-          <footer className="w-full border-t border-[#c1c1c1] p-4 text-center text-[10px] italic text-[#b0b0b0] tracking-wide bg-white z-10 font-sans pointer-events-auto relative">
-            <div className="absolute left-0 top-0 h-full w-px bg-[#c1c1c1]" />
-            <div className="w-full h-[1px] bg-[#c1c1c1] absolute top-0 left-0" />
+        <div className={`fixed bottom-0 z-[600] pointer-events-none transition-all duration-300 ${menuReduzido ? 'left-20 w-[calc(100%-5rem)]' : 'left-64 w-[calc(100%-16rem)]'}`}>
+          <footer className="w-full border-t border-[#e5e5e5] px-4 py-2 text-center text-[10px] italic text-[#b0b0b0] tracking-wide bg-white pointer-events-none">
             © 2025 Colmeia. All rights are reserved to Be Mediatech OOH.
           </footer>
         </div>
