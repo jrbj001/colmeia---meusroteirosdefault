@@ -1,8 +1,9 @@
-import { StrictMode } from "react";
+import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Auth0Provider } from "@auth0/auth0-react";
 import { AuthProvider } from "./contexts/AuthContext";
+import { useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute/ProtectedRoute";
 import { Login } from "./screens/Login";
 import { Callback } from "./screens/Callback";
@@ -16,8 +17,15 @@ import { RelatorioPorPraca } from "./screens/RelatorioPorPraca";
 import { RelatorioPorExibidor } from "./screens/RelatorioPorExibidor";
 import { AdminUsuarios, AdminPerfis } from "./screens/Admin";
 import { PaginaEmDesenvolvimento } from "./components/PaginaEmDesenvolvimento";
+import { AcessoNegado } from "./screens/AcessoNegado/AcessoNegado";
 import '../tailwind.css';
 import 'leaflet/dist/leaflet.css';
+
+function AppGuard({ children }: { children: React.ReactNode }) {
+  const { acessoBloqueado } = useAuth();
+  if (acessoBloqueado) return <AcessoNegado />;
+  return <>{children}</>;
+}
 
 createRoot(document.getElementById("app") as HTMLElement).render(
   <StrictMode>
@@ -32,6 +40,7 @@ createRoot(document.getElementById("app") as HTMLElement).render(
     >
       <AuthProvider>
         <BrowserRouter>
+        <AppGuard>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/callback" element={<Callback />} />
@@ -162,7 +171,7 @@ createRoot(document.getElementById("app") as HTMLElement).render(
             <Route 
               path="/admin/usuarios" 
               element={
-                <ProtectedRoute internalOnly>
+                <ProtectedRoute internalOnly adminOnly>
                   <AdminUsuarios />
                 </ProtectedRoute>
               } 
@@ -170,13 +179,14 @@ createRoot(document.getElementById("app") as HTMLElement).render(
             <Route 
               path="/admin/perfis" 
               element={
-                <ProtectedRoute internalOnly>
+                <ProtectedRoute internalOnly adminOnly>
                   <AdminPerfis />
                 </ProtectedRoute>
               } 
             />
             <Route path="*" element={<div>Página não encontrada</div>} />
           </Routes>
+        </AppGuard>
         </BrowserRouter>
       </AuthProvider>
     </Auth0Provider>

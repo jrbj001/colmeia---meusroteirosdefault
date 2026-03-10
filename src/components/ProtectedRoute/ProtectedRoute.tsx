@@ -7,6 +7,7 @@ interface ProtectedRouteProps {
   requiredArea?: string;
   requiredPermission?: 'leitura' | 'escrita';
   internalOnly?: boolean;
+  adminOnly?: boolean;
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
@@ -14,8 +15,9 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   requiredArea,
   requiredPermission = 'leitura',
   internalOnly = false,
+  adminOnly = false,
 }) => {
-  const { isAuthenticated, isLoading, temPermissao, isAgencia } = useAuth();
+  const { isAuthenticated, isLoading, temPermissao, isAgencia, user } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -34,6 +36,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   if (internalOnly && isAgencia) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (adminOnly && user?.perfil_nome !== 'Admin') {
     return <Navigate to="/" replace />;
   }
 

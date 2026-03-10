@@ -33,12 +33,12 @@ module.exports = async function handler(req, res) {
 
     // GET /usuarios - Listar todos com paginação
     if (req.method === 'GET') {
-      const { page = 1, limit = 10, search = '', perfil = '' } = req.query;
+      const { page = 1, limit = 10, search = '', perfil = '', incluirInativos = '0' } = req.query;
       const offset = (page - 1) * limit;
 
       const countReq = pool.request();
       const dataReq = pool.request();
-      let whereClause = 'WHERE usuario_ativo = 1';
+      let whereClause = incluirInativos === '1' ? 'WHERE 1=1' : 'WHERE usuario_ativo = 1';
       
       if (search) {
         whereClause += ` AND (usuario_nome LIKE @search OR usuario_email LIKE @search)`;
@@ -201,6 +201,30 @@ module.exports = async function handler(req, res) {
         message: 'Usuário atualizado com sucesso',
         usuario: usuarioAtualizado.recordset[0]
       });
+    }
+
+    // PATCH /usuarios/:id - Reativar usuário
+    if (req.method === 'PATCH' && id) {
+      const usuarioExists = await pool.request()
+        .input('id', id)
+        .query(`
+          SELECT pk FROM [serv_product_be180].[usuario_dm]
+          WHERE pk = @id AND ativo_bl = 0
+        `);
+
+      if (usuarioExists.recordset.length === 0) {
+        return res.status(404).json({ error: 'Usuário inativo não encontrado' });
+      }
+
+      await pool.request()
+        .input('id', id)
+        .query(`
+          UPDATE [serv_product_be180].[usuario_dm]
+          SET ativo_bl = 1
+          WHERE pk = @id
+        `);
+
+      return res.status(200).json({ message: 'Usuário reativado com sucesso' });
     }
 
     // DELETE /usuarios/:id - Desativar usuário (soft delete)

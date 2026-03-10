@@ -28,8 +28,15 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   isAgencia: boolean;
+  acessoBloqueado: boolean;
   carregarPermissoes: () => Promise<void>;
   temPermissao: (area_codigo: string, tipo?: 'leitura' | 'escrita') => boolean;
+}
+
+const DOMINIO_INTERNO = '@be180.com.br';
+
+function isEmailInterno(email: string): boolean {
+  return email.toLowerCase().endsWith(DOMINIO_INTERNO);
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -42,9 +49,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [permissoes, setPermissoes] = useState<Permissao[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [acessoBloqueado, setAcessoBloqueado] = useState(false);
   const { user: auth0User, isAuthenticated: auth0IsAuthenticated, isLoading: auth0IsLoading } = useAuth0();
 
-  // Sincronizar Auth0 com o estado local e buscar dados do banco
+  // Sincronizar Auth0 com o estado local e validar acesso
   useEffect(() => {
     if (auth0IsLoading) {
       setIsLoading(true);
@@ -60,7 +68,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         picture: auth0User.picture || undefined,
       };
 
-      // Buscar dados complementares do banco (usuario_pk, empresa_pk, perfil)
       if (email) {
         axios.get(`/usuarios?search=${encodeURIComponent(email)}&limit=1`)
           .then((response) => {
@@ -69,89 +76,60 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               (u: { usuario_email: string }) =>
                 u.usuario_email?.toLowerCase() === email.toLowerCase()
             );
+
             if (match) {
+              // Usuário encontrado no banco — enriquecer dados
               localUser.usuario_pk = match.usuario_pk;
               localUser.perfil_pk = match.perfil_pk;
               localUser.perfil_nome = match.perfil_nome;
               localUser.empresa_pk = match.empresa_pk ?? null;
+              setAcessoBloqueado(false);
+              setUser({ ...localUser });
+            } else if (isEmailInterno(email)) {
+              // Email @be180.com.br sem cadastro no banco → acesso interno liberado
+              setAcessoBloqueado(false);
+              setUser({ ...localUser });
+            } else {
+              // Email externo não cadastrado → bloquear
+              setAcessoBloqueado(true);
+              setUser(null);
             }
-            setUser({ ...localUser });
+
             setIsLoading(false);
           })
           .catch(() => {
-            setUser(localUser);
+            // Em caso de falha na API, só libera se for domínio interno
+            if (isEmailInterno(email)) {
+              setUser(localUser);
+              setAcessoBloqueado(false);
+            } else {
+              setAcessoBloqueado(true);
+              setUser(null);
+            }
             setIsLoading(false);
           });
       } else {
-        setUser(localUser);
+        setAcessoBloqueado(true);
+        setUser(null);
         setIsLoading(false);
       }
     } else {
       setUser(null);
+      setAcessoBloqueado(false);
       setIsLoading(false);
     }
   }, [auth0User, auth0IsAuthenticated, auth0IsLoading]);
 
-  // Fallback: verificar localStorage para login local
+  // Limpar resíduos de sessões locais antigas ao inicializar
   useEffect(() => {
     if (!auth0IsAuthenticated && !auth0IsLoading) {
-      const token = localStorage.getItem('auth_token');
-      const userData = localStorage.getItem('user_data');
-      
-      if (token && userData) {
-        try {
-          const user = JSON.parse(userData);
-          setUser(user);
-        } catch (error) {
-          console.error('Erro ao carregar dados do usuário:', error);
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('user_data');
-        }
-      }
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_data');
     }
   }, [auth0IsAuthenticated, auth0IsLoading]);
 
-  const login = async (email: string, password: string): Promise<void> => {
-    try {
-      // Simulação de login - em produção, isso seria uma chamada para a API de autenticação
-      if (email === 'teste@be180.com.br' && password === '12345678') {
-        // Buscar usuário no banco pelo email
-        try {
-          const response = await axios.get(`/usuarios?search=${encodeURIComponent(email)}&limit=1`);
-          
-          if (response.data.usuarios && response.data.usuarios.length > 0) {
-            const usuarioDb = response.data.usuarios[0];
-            
-            const userData: User = {
-              id: usuarioDb.usuario_pk.toString(),
-              email: usuarioDb.usuario_email || email,
-              name: usuarioDb.usuario_nome || 'Usuário',
-              usuario_pk: usuarioDb.usuario_pk,
-              perfil_pk: usuarioDb.perfil_pk,
-              perfil_nome: usuarioDb.perfil_nome
-            };
-            
-            // Simular token JWT
-            const token = 'fake-jwt-token-' + Date.now();
-            
-            // Salvar no localStorage
-            localStorage.setItem('auth_token', token);
-            localStorage.setItem('user_data', JSON.stringify(userData));
-            
-            setUser(userData);
-          } else {
-            throw new Error('Usuário não encontrado no banco de dados');
-          }
-        } catch (apiError) {
-          console.error('Erro ao buscar usuário no banco:', apiError);
-          throw new Error('Erro ao carregar dados do usuário');
-        }
-      } else {
-        throw new Error('Email ou senha incorretos');
-      }
-    } catch (error) {
-      throw error;
-    }
+  const login = async (_email: string, _password: string): Promise<void> => {
+    throw new Error('Login por email/senha não suportado. Utilize o login via Auth0.');
   };
 
   const logout = (): void => {
@@ -264,6 +242,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isLoading,
     isAuthenticated: !!user,
     isAgencia,
+    acessoBloqueado,
     carregarPermissoes,
     temPermissao,
   };

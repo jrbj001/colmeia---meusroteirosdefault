@@ -27,13 +27,14 @@ interface Agencia {
 }
 
 export const AdminUsuarios: React.FC = () => {
-  const { isAdmin } = usePermissions();
+  usePermissions();
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [perfis, setPerfis] = useState<Perfil[]>([]);
   const [agencias, setAgencias] = useState<Agencia[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroPerfil, setFiltroPerfil] = useState('');
+  const [mostrarInativos, setMostrarInativos] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [modoEdicao, setModoEdicao] = useState(false);
   const [usuarioSelecionado, setUsuarioSelecionado] = useState<Usuario | null>(null);
@@ -49,7 +50,7 @@ export const AdminUsuarios: React.FC = () => {
   // Carregar usuários e perfis
   useEffect(() => {
     carregarDados();
-  }, [searchTerm, filtroPerfil]);
+  }, [searchTerm, filtroPerfil, mostrarInativos]);
 
   const carregarDados = async () => {
     setLoading(true);
@@ -60,7 +61,8 @@ export const AdminUsuarios: React.FC = () => {
           page: 1,
           limit: 100,
           search: searchTerm,
-          perfil: filtroPerfil
+          perfil: filtroPerfil,
+          incluirInativos: mostrarInativos ? '1' : '0',
         }
       });
       setUsuarios(usuariosResponse.data.usuarios || []);
@@ -72,7 +74,12 @@ export const AdminUsuarios: React.FC = () => {
       }
       if (agencias.length === 0) {
         const agenciasResponse = await axios.get('/referencia?action=agencia');
-        setAgencias(agenciasResponse.data || []);
+        const agenciasData = Array.isArray(agenciasResponse.data)
+          ? agenciasResponse.data
+          : Array.isArray(agenciasResponse.data?.agencias)
+            ? agenciasResponse.data.agencias
+            : [];
+        setAgencias(agenciasData);
       }
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -112,33 +119,41 @@ export const AdminUsuarios: React.FC = () => {
 
     try {
       if (modoEdicao && usuarioSelecionado) {
-        // Atualizar usuário
         await axios.put(`/usuarios?id=${usuarioSelecionado.usuario_pk}`, formData);
-        alert('Usuário atualizado com sucesso!');
       } else {
-        // Criar novo usuário
         await axios.post('/usuarios', formData);
-        alert('Usuário criado com sucesso!');
       }
 
       setShowModal(false);
       carregarDados();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Erro ao salvar usuário');
+      window.alert(error.response?.data?.error || 'Erro ao salvar usuário');
     }
   };
 
   const desativarUsuario = async (id: number) => {
-    if (!confirm('Tem certeza que deseja desativar este usuário?')) {
+    if (!window.confirm('Tem certeza que deseja desativar este usuário?')) {
       return;
     }
 
     try {
       await axios.delete(`/usuarios?id=${id}`);
-      alert('Usuário desativado com sucesso!');
       carregarDados();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Erro ao desativar usuário');
+      window.alert(error.response?.data?.error || 'Erro ao desativar usuário');
+    }
+  };
+
+  const reativarUsuario = async (id: number) => {
+    if (!window.confirm('Tem certeza que deseja reativar este usuário?')) {
+      return;
+    }
+
+    try {
+      await axios.patch(`/usuarios?id=${id}`);
+      carregarDados();
+    } catch (error: any) {
+      window.alert(error.response?.data?.error || 'Erro ao reativar usuário');
     }
   };
 
@@ -156,6 +171,8 @@ export const AdminUsuarios: React.FC = () => {
         return 'bg-gray-100 text-gray-800';
     }
   };
+
+  const agenciasSeguras = Array.isArray(agencias) ? agencias : [];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -198,13 +215,22 @@ export const AdminUsuarios: React.FC = () => {
             </div>
           </div>
           
-          <div className="mt-4">
+          <div className="mt-4 flex items-center justify-between">
             <button
               onClick={abrirModalCriar}
               className="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-6 rounded-lg transition-colors"
             >
               + Novo Usuário
             </button>
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={mostrarInativos}
+                onChange={(e) => setMostrarInativos(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+              />
+              Mostrar usuários inativos
+            </label>
           </div>
         </div>
 
@@ -265,7 +291,7 @@ export const AdminUsuarios: React.FC = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-500">
                           {usuario.empresa_pk
-                            ? agencias.find(a => a.id_agencia === usuario.empresa_pk)?.nome_agencia || `ID ${usuario.empresa_pk}`
+                            ? agenciasSeguras.find(a => a.id_agencia === usuario.empresa_pk)?.nome_agencia || `ID ${usuario.empresa_pk}`
                             : <span className="text-gray-300">Be (interno)</span>
                           }
                         </div>
@@ -278,18 +304,27 @@ export const AdminUsuarios: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => abrirModalEditar(usuario)}
-                          className="text-orange-600 hover:text-orange-900 mr-4"
-                        >
-                          Editar
-                        </button>
-                        {usuario.usuario_ativo && (
+                        {usuario.usuario_ativo ? (
+                          <>
+                            <button
+                              onClick={() => abrirModalEditar(usuario)}
+                              className="text-orange-600 hover:text-orange-900 mr-4"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => desativarUsuario(usuario.usuario_pk)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              Desativar
+                            </button>
+                          </>
+                        ) : (
                           <button
-                            onClick={() => desativarUsuario(usuario.usuario_pk)}
-                            className="text-red-600 hover:text-red-900"
+                            onClick={() => reativarUsuario(usuario.usuario_pk)}
+                            className="text-green-600 hover:text-green-900"
                           >
-                            Desativar
+                            Reativar
                           </button>
                         )}
                       </td>
@@ -383,7 +418,7 @@ export const AdminUsuarios: React.FC = () => {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   >
                     <option value="">Nenhuma (usuário interno Be)</option>
-                    {agencias.map((ag) => (
+                    {agenciasSeguras.map((ag) => (
                       <option key={ag.id_agencia} value={ag.id_agencia}>
                         {ag.nome_agencia}
                       </option>
