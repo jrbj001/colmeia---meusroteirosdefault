@@ -39,18 +39,21 @@ interface PontoMidia {
   planoMidia_pk: number;
   latitude_vl: number;
   longitude_vl: number;
-  calculatedFluxoEstimado_vl?: number; // Fluxo calculado (fallback)
-  fluxo_vl?: number; // Fluxo real do ponto (prioridade 1)
-  fluxoPassantes_vl?: number; // Fluxo de passantes real (prioridade 2)
-  fluxoEstimado_vl?: number; // Fluxo estimado (prioridade 3)
-  estaticoDigital_st: 'D' | 'E'; // Digital ou Estático
+  fluxoEstimado_vl?: number;
+  calculatedFluxoEstimado_vl?: number;
+  estaticoDigital_st: 'D' | 'E';
   grupoSub_st: string;
   grupo_st: string;
   hexColor_st: string;
   rgbColorR_vl: number;
   rgbColorG_vl: number;
   rgbColorB_vl: number;
-  // Outros campos disponíveis na view
+  nome_st?: string;
+  tipo_st?: string;
+  formato_st?: string;
+  cidade_st?: string;
+  estado_st?: string;
+  bairro_st?: string;
   [key: string]: any;
 }
 
@@ -114,92 +117,27 @@ function calcularDistancia(lat1: number, lon1: number, lat2: number, lon2: numbe
 // IMPORTANTE: Esta função permite MÚLTIPLOS pontos do mesmo grupo dentro do mesmo hexágono
 // Retorna true APENAS se o ponto estiver dentro de um hexágono do mesmo grupo
 // Retorna false se estiver dentro de hexágono de outro grupo ou não estiver dentro de nenhum
-function validarPontoNoHexagonoCorreto(
-  ponto: PontoMidia, 
-  hexagonos: Hexagono[]
-): boolean {
-  const pontoCoords: [number, number] = [ponto.latitude_vl, ponto.longitude_vl];
-  let estaDentroHexagonoMesmoGrupo = false;
-  let estaDentroHexagonoOutroGrupo = false;
-  let hexagonoConflitante: Hexagono | null = null;
-  let hexagonoValido: Hexagono | null = null; // Armazenar hexágono válido para debug
-  
-  // Verificar TODOS os hexágonos para ver se o ponto está dentro de algum
-  // NOTA: Um hexágono pode conter MÚLTIPLOS pontos do mesmo grupo
-  for (const hex of hexagonos) {
-    if (!hex.geometry_8) continue;
-    
-    const poligono = wktToLatLngs(hex.geometry_8);
-    if (poligono.length < 3) continue;
-    
-    const estaDentro = pontoDentroPoligono(pontoCoords, poligono);
-    
-    if (estaDentro) {
-      if (hex.grupo_st === ponto.grupo_st) {
-        // Está dentro de hexágono do mesmo grupo
-        // Múltiplos pontos podem estar no mesmo hexágono - isso é esperado e correto
-        estaDentroHexagonoMesmoGrupo = true;
-        hexagonoValido = hex;
-      } else {
-        // Está dentro de hexágono de OUTRO grupo - isso é um problema
-        estaDentroHexagonoOutroGrupo = true;
-        hexagonoConflitante = hex;
-      }
-    }
-  }
-  
-  // Se está dentro de hexágono de outro grupo, NÃO renderizar
-  if (estaDentroHexagonoOutroGrupo) {
-    console.warn(`🚫 [Mapa] Ponto ${ponto.planoMidia_pk} (grupo ${ponto.grupo_st}, subgrupo ${ponto.grupoSub_st}) está dentro de hexágono ${hexagonoConflitante?.hexagon_pk} do grupo ${hexagonoConflitante?.grupo_st} - BLOQUEADO`);
-    return false;
-  }
-  
-  // Se está dentro de hexágono do mesmo grupo, renderizar
-  // NOTA: Múltiplos pontos do mesmo grupo podem estar no mesmo hexágono
-  if (estaDentroHexagonoMesmoGrupo) {
-    if (hexagonoValido) {
-      console.log(`✅ [Mapa] Ponto ${ponto.planoMidia_pk} (grupo ${ponto.grupo_st}, subgrupo ${ponto.grupoSub_st}) está dentro de hexágono ${hexagonoValido.hexagon_pk} do mesmo grupo - permitindo renderizar (múltiplos pontos por hexágono são permitidos)`);
-    }
-    return true;
-  }
-  
-  // Ponto não está dentro de nenhum hexágono
-  // Verificar se está próximo de algum hexágono do mesmo grupo
-  const hexagonosMesmoGrupo = hexagonos.filter(h => h.grupo_st === ponto.grupo_st);
-  
-  if (hexagonosMesmoGrupo.length === 0) {
-    console.warn(`⚠️ [Mapa] Ponto ${ponto.planoMidia_pk} (grupo ${ponto.grupo_st}) não tem hexágonos do mesmo grupo disponíveis - não renderizando`);
-    return false;
-  }
-  
-  // Calcular distância para o hexágono mais próximo do mesmo grupo
-  let menorDistancia = Infinity;
-  let hexagonoMaisProximo: Hexagono | null = null;
-  
-  for (const hex of hexagonosMesmoGrupo) {
-    const distancia = calcularDistancia(
-      ponto.latitude_vl, 
-      ponto.longitude_vl,
-      hex.hex_centroid_lat,
-      hex.hex_centroid_lon
-    );
-    
-    if (distancia < menorDistancia) {
-      menorDistancia = distancia;
-      hexagonoMaisProximo = hex;
-    }
-  }
-  
-  // Se está próximo (dentro de 1km) de um hexágono do mesmo grupo, permitir renderizar
-  // Aumentamos a tolerância para 1km para considerar imprecisões de coordenadas
-  if (menorDistancia < 1000 && hexagonoMaisProximo) {
-    console.log(`✅ [Mapa] Ponto ${ponto.planoMidia_pk} (grupo ${ponto.grupo_st}) está próximo (${menorDistancia.toFixed(0)}m) de hexágono ${hexagonoMaisProximo.hexagon_pk} do mesmo grupo - permitindo renderizar`);
-    return true;
-  }
-  
-  // Ponto não está dentro nem próximo de hexágono do mesmo grupo - não renderizar
-  console.warn(`⚠️ [Mapa] Ponto ${ponto.planoMidia_pk} (grupo ${ponto.grupo_st}, subgrupo ${ponto.grupoSub_st}) não está dentro nem próximo (distância mínima: ${menorDistancia.toFixed(0)}m) de hexágono do mesmo grupo - não renderizando`);
-  return false;
+
+interface ResultadoPraca {
+  report_pk: number;
+  cidade_st: string;
+  impactosTotal_vl: number;
+  coberturaPessoasTotal_vl: number;
+  coberturaProp_vl: number;
+  frequencia_vl: number;
+  grp_vl: number;
+  pontosPracaTotal_vl: number;
+  pontosTotal_vl: number;
+}
+
+interface TotaisGerais {
+  impactosTotal_vl: number;
+  coberturaPessoasTotal_vl: number;
+  coberturaProp_vl: number;
+  frequencia_vl: number;
+  grp_vl: number;
+  pontosPracaTotal_vl: number;
+  pontosTotal_vl: number;
 }
 
 export const Mapa: React.FC = () => {
@@ -213,6 +151,9 @@ export const Mapa: React.FC = () => {
   const [semanas, setSemanas] = React.useState<{ semanaInicial_vl: number, semanaFinal_vl: number }[]>([]);
   const [semanaSelecionada, setSemanaSelecionada] = React.useState("");
   const [descPks, setDescPks] = React.useState<{ [cidade: string]: number }>({});
+  const [dadosPorPraca, setDadosPorPraca] = React.useState<ResultadoPraca[]>([]);
+  const [totaisGerais, setTotaisGerais] = React.useState<TotaisGerais | null>(null);
+  const [loadingResultados, setLoadingResultados] = React.useState(false);
   const [hexagonos, setHexagonos] = React.useState<Hexagono[]>([]);
   const [pontosMidia, setPontosMidia] = React.useState<PontoMidia[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -462,6 +403,21 @@ export const Mapa: React.FC = () => {
     }
   }, [grupo]);
 
+  // Carregar resultados gerais por praça ao abrir a tela
+  React.useEffect(() => {
+    if (!grupo) return;
+    setLoadingResultados(true);
+    api.post('report-indicadores-vias-publicas', { report_pk: Number(grupo) })
+      .then(res => {
+        if (res.data.success) {
+          setDadosPorPraca(res.data.data || []);
+          setTotaisGerais(res.data.totais || null);
+        }
+      })
+      .catch(err => console.error('Erro ao carregar resultados por praça:', err))
+      .finally(() => setLoadingResultados(false));
+  }, [grupo]);
+
   React.useEffect(() => {
     console.log("🗺️ [DEBOUNCE] cidadeSelecionada:", cidadeSelecionada, "debounced:", debouncedCidadeSelecionada);
     console.log("🗺️ [DEBOUNCE] descPks:", descPks);
@@ -639,79 +595,17 @@ export const Mapa: React.FC = () => {
     api.get(`pontos-midia?desc_pk=${descPk}`)
       .then(res => {
         const pontosData = res.data.pontos || [];
-        console.log(`🗺️ Pontos de mídia carregados (antes do filtro): ${pontosData.length}`);
-        
-        // Filtrar pontos pelos grupos dos hexágonos
-        // Garantir que apenas pontos dos grupos dos hexágonos sejam exibidos
         const gruposHexagonos = new Set(hexagonos.map(h => h.grupo_st).filter(Boolean));
         
-        // Processar e normalizar pontos para garantir que subgrupos derivem dos grupos
         const pontosFiltrados = pontosData
-          .filter((p: PontoMidia) => {
-            // O ponto deve pertencer a um dos grupos dos hexágonos
-            if (!p.grupo_st || !gruposHexagonos.has(p.grupo_st)) {
-              return false;
-            }
-            return true;
-          })
+          .filter((p: PontoMidia) => p.grupo_st && gruposHexagonos.has(p.grupo_st))
           .map((p: PontoMidia) => {
-            // Garantir que o subgrupo derive do grupo
-            // O subgrupo DEVE começar com o código do grupo (ex: G1D, G1E, G2D, etc)
-            if (!p.grupoSub_st) {
-              // Se não tem subgrupo, derivar do grupo + tipo
+            if (!p.grupoSub_st || !p.grupoSub_st.startsWith(p.grupo_st)) {
               const tipo = p.estaticoDigital_st || 'D';
-              const novoSubgrupo = `${p.grupo_st}${tipo}`;
-              console.log(`🔧 [Frontend] Derivando subgrupo para ponto ${p.planoMidia_pk}: ${novoSubgrupo}`);
-              return {
-                ...p,
-                grupoSub_st: novoSubgrupo
-              };
+              return { ...p, grupoSub_st: `${p.grupo_st}${tipo}` };
             }
-            
-            // Verificar se o subgrupo deriva do grupo
-            if (!p.grupoSub_st.startsWith(p.grupo_st)) {
-              console.warn(`⚠️ [Frontend] Ponto ${p.planoMidia_pk}: subgrupo "${p.grupoSub_st}" não deriva do grupo "${p.grupo_st}"`);
-              
-              // Corrigir derivando do grupo + tipo
-              const tipo = p.estaticoDigital_st || 'D';
-              const novoSubgrupo = `${p.grupo_st}${tipo}`;
-              console.log(`🔧 [Frontend] Corrigindo subgrupo: "${p.grupoSub_st}" → "${novoSubgrupo}"`);
-              
-              return {
-                ...p,
-                grupoSub_st: novoSubgrupo
-              };
-            }
-            
-            // Subgrupo válido, retornar como está
             return p;
           });
-        
-        console.log(`🗺️ Pontos de mídia após filtro por grupos: ${pontosFiltrados.length}`);
-        
-        // Debug: contar por Grupo (agora priorizando grupo sobre subgrupo)
-        const porGrupo = pontosFiltrados.reduce((acc: any, p: PontoMidia) => {
-          const grupo = p.grupo_st || 'Sem Grupo';
-          acc[grupo] = (acc[grupo] || 0) + 1;
-          return acc;
-        }, {});
-        console.log(`🗺️ [Frontend] Pontos por Grupo:`, porGrupo);
-        
-        // Debug: contar por SubGrupo (derivado do grupo)
-        const porSubGrupo = pontosFiltrados.reduce((acc: any, p: PontoMidia) => {
-          const sub = p.grupoSub_st || 'Sem SubGrupo';
-          acc[sub] = (acc[sub] || 0) + 1;
-          return acc;
-        }, {});
-        console.log(`🗺️ [Frontend] Pontos por SubGrupo:`, porSubGrupo);
-        
-        // Debug: contar por tipo
-        const porTipo = pontosFiltrados.reduce((acc: any, p: PontoMidia) => {
-          const tipo = p.estaticoDigital_st || 'Sem Tipo';
-          acc[tipo] = (acc[tipo] || 0) + 1;
-          return acc;
-        }, {});
-        console.log(`🗺️ [Frontend] Pontos por Tipo (D/E):`, porTipo);
         
         setPontosMidia(pontosFiltrados);
       })
@@ -724,54 +618,162 @@ export const Mapa: React.FC = () => {
       });
   }, [debouncedCidadeSelecionada, descPks, hexagonos]);
 
-  // Calcular o range de fluxo para normalizar o tamanho dos pontos
+  const getFluxoRealPonto = (p: PontoMidia) => {
+    if (p.fluxoEstimado_vl != null && p.fluxoEstimado_vl > 0) return p.fluxoEstimado_vl;
+    if (p.calculatedFluxoEstimado_vl != null && p.calculatedFluxoEstimado_vl > 0) return p.calculatedFluxoEstimado_vl;
+    return 0;
+  };
+
+  // Pre-converter todas as geometrias WKT UMA vez (elimina recalculo a cada render)
+  const geometriasConvertidas = React.useMemo(() => {
+    const mapa = new Map<number, [number, number][]>();
+    for (const hex of hexagonos) {
+      if (hex.geometry_8) {
+        mapa.set(hex.hexagon_pk, wktToLatLngs(hex.geometry_8));
+      }
+    }
+    return mapa;
+  }, [hexagonos]);
+
+  // Index espacial: agrupar hexagonos por grupo para reduzir loops
+  const hexagonosPorGrupo = React.useMemo(() => {
+    const mapa = new Map<string, Hexagono[]>();
+    for (const hex of hexagonos) {
+      if (!hex.grupo_st) continue;
+      const arr = mapa.get(hex.grupo_st);
+      if (arr) arr.push(hex);
+      else mapa.set(hex.grupo_st, [hex]);
+    }
+    return mapa;
+  }, [hexagonos]);
+
+  // Cores por grupo (pre-computado)
+  const coresPorGrupo = React.useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const hex of hexagonos) {
+      if (hex.grupo_st && !mapa.has(hex.grupo_st)) {
+        mapa.set(hex.grupo_st, hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`);
+      }
+    }
+    return mapa;
+  }, [hexagonos]);
+
+  // Pre-processar TODAS as validacoes de pontos FORA do render
+  // Elimina O(n*m) do JSX, roda apenas quando dados mudam
+  const pontosValidados = React.useMemo(() => {
+    if (hexagonos.length === 0 || pontosMidia.length === 0) return [];
+
+    const resultado: Array<{
+      ponto: PontoMidia;
+      cor: string;
+      radius: number;
+      hexagonoAssociado: Hexagono | null;
+      fluxoAgregado: number;
+      totalPontosNoHex: number;
+    }> = [];
+
+    const fluxoAgregadoPorHex = new Map<number, { total: number; count: number }>();
+
+    // Calcular min/max fluxo para raio
+    const fluxos = pontosMidia.map(getFluxoRealPonto);
+    const minF = Math.min(...fluxos);
+    const maxF = Math.max(...fluxos);
+
+    for (const ponto of pontosMidia) {
+      // Validacao 1: subgrupo deve derivar do grupo
+      if (ponto.grupoSub_st && !ponto.grupoSub_st.startsWith(ponto.grupo_st)) continue;
+
+      // Validacao 2: grupo do ponto deve existir nos hexagonos
+      const corGrupo = coresPorGrupo.get(ponto.grupo_st);
+      if (!corGrupo) continue;
+
+      // Validacao 3: ponto dentro de hexagono do mesmo grupo (usando index espacial)
+      const hexsDoGrupo = hexagonosPorGrupo.get(ponto.grupo_st) || [];
+      const pontoCoords: [number, number] = [ponto.latitude_vl, ponto.longitude_vl];
+      let hexValido: Hexagono | null = null;
+      let dentroOutroGrupo = false;
+
+      // Checar hexagonos do mesmo grupo primeiro
+      for (const hex of hexsDoGrupo) {
+        const poligono = geometriasConvertidas.get(hex.hexagon_pk);
+        if (!poligono || poligono.length < 3) continue;
+        if (pontoDentroPoligono(pontoCoords, poligono)) {
+          hexValido = hex;
+          break;
+        }
+      }
+
+      // Se nao achou no mesmo grupo, verificar se esta dentro de outro grupo (bloqueio)
+      if (!hexValido) {
+        for (const [grp, hexs] of hexagonosPorGrupo) {
+          if (grp === ponto.grupo_st) continue;
+          for (const hex of hexs) {
+            const poligono = geometriasConvertidas.get(hex.hexagon_pk);
+            if (!poligono || poligono.length < 3) continue;
+            if (pontoDentroPoligono(pontoCoords, poligono)) {
+              dentroOutroGrupo = true;
+              break;
+            }
+          }
+          if (dentroOutroGrupo) break;
+        }
+
+        if (dentroOutroGrupo) continue;
+
+        // Fallback: proximidade (1km) de hexagono do mesmo grupo
+        let menorDist = Infinity;
+        for (const hex of hexsDoGrupo) {
+          const dist = calcularDistancia(ponto.latitude_vl, ponto.longitude_vl, hex.hex_centroid_lat, hex.hex_centroid_lon);
+          if (dist < menorDist) {
+            menorDist = dist;
+            hexValido = hex;
+          }
+        }
+        if (menorDist >= 1000) continue;
+      }
+
+      // Ponto validado — calcular dados
+      const cor = ponto.hexColor_st || `rgb(${ponto.rgbColorR_vl},${ponto.rgbColorG_vl},${ponto.rgbColorB_vl})`;
+      const fluxo = getFluxoRealPonto(ponto);
+      const radius = tamanhoUniforme ? 10 : (maxF === minF ? 10 : 6 + 10 * ((fluxo - minF) / (maxF - minF)));
+
+      // Agregar fluxo por hexagono
+      if (hexValido) {
+        const agg = fluxoAgregadoPorHex.get(hexValido.hexagon_pk);
+        if (agg) { agg.total += fluxo; agg.count += 1; }
+        else fluxoAgregadoPorHex.set(hexValido.hexagon_pk, { total: fluxo, count: 1 });
+      }
+
+      resultado.push({
+        ponto,
+        cor,
+        radius,
+        hexagonoAssociado: hexValido,
+        fluxoAgregado: 0,
+        totalPontosNoHex: 0,
+      });
+    }
+
+    // Segunda passada: preencher fluxo agregado
+    for (const r of resultado) {
+      if (r.hexagonoAssociado) {
+        const agg = fluxoAgregadoPorHex.get(r.hexagonoAssociado.hexagon_pk);
+        if (agg) {
+          r.fluxoAgregado = agg.total;
+          r.totalPontosNoHex = agg.count;
+        }
+      }
+    }
+
+    return resultado;
+  }, [pontosMidia, hexagonos, geometriasConvertidas, hexagonosPorGrupo, coresPorGrupo, tamanhoUniforme]);
+
   const minFluxo = hexagonos.length > 0 ? Math.min(...hexagonos.map(h => h.calculatedFluxoEstimado_vl)) : 0;
   const maxFluxo = hexagonos.length > 0 ? Math.max(...hexagonos.map(h => h.calculatedFluxoEstimado_vl)) : 1;
   
   function getRadius(fluxo: number) {
-    // Raio mínimo 6, máximo 20
     if (maxFluxo === minFluxo) return 10;
     return 6 + 14 * ((fluxo - minFluxo) / (maxFluxo - minFluxo));
-  }
-
-  // Calcular tamanho dos pontos de mídia baseado no fluxo REAL do ponto
-  // Função auxiliar para obter o fluxo do ponto com priorização correta
-  // Baseado na análise: fluxoEstimado_vl parece ser o campo mais completo e confiável
-  // Prioridade: fluxo_vl > fluxoPassantes_vl > fluxoEstimado_vl > calculatedFluxoEstimado_vl
-  // IMPORTANTE: Esta função DEVE retornar o fluxo INDIVIDUAL do ponto, nunca o do hexágono
-  const getFluxoRealPonto = (p: PontoMidia) => {
-    // Verificar se o campo existe e tem valor válido (não null, não undefined)
-    // NUNCA usar valores do hexágono aqui - apenas campos do próprio ponto
-    if (p.fluxo_vl !== null && p.fluxo_vl !== undefined && p.fluxo_vl > 0) {
-      return p.fluxo_vl;
-    }
-    if (p.fluxoPassantes_vl !== null && p.fluxoPassantes_vl !== undefined && p.fluxoPassantes_vl > 0) {
-      return p.fluxoPassantes_vl;
-    }
-    // fluxoEstimado_vl parece ser o campo mais completo baseado na análise
-    if (p.fluxoEstimado_vl !== null && p.fluxoEstimado_vl !== undefined && p.fluxoEstimado_vl > 0) {
-      return p.fluxoEstimado_vl;
-    }
-    // calculatedFluxoEstimado_vl como último recurso
-    if (p.calculatedFluxoEstimado_vl !== null && p.calculatedFluxoEstimado_vl !== undefined && p.calculatedFluxoEstimado_vl > 0) {
-      return p.calculatedFluxoEstimado_vl;
-    }
-    return 0;
-  };
-  
-  const minFluxoPontos = pontosMidia.length > 0 ? Math.min(...pontosMidia.map(getFluxoRealPonto)) : 0;
-  const maxFluxoPontos = pontosMidia.length > 0 ? Math.max(...pontosMidia.map(getFluxoRealPonto)) : 1;
-
-  function getRadiusPonto(fluxo: number) {
-    // Se tamanho uniforme está ativado, retornar tamanho fixo
-    if (tamanhoUniforme) {
-      return 10; // Tamanho médio fixo para todos os pontos
-    }
-    
-    // Caso contrário, usar tamanho baseado no fluxo
-    // Raio mínimo 6, máximo 16 - Pontos menores para melhor visualização geral
-    if (maxFluxoPontos === minFluxoPontos) return 10;
-    return 6 + 10 * ((fluxo - minFluxoPontos) / (maxFluxoPontos - minFluxoPontos));
   }
 
   // Componente de Status para feedback do usuário
@@ -1001,7 +1003,7 @@ export const Mapa: React.FC = () => {
         <div className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`} />
         <div className="w-full overflow-x-auto pt-20 flex-1 overflow-auto">
           <h1 className="text-lg font-bold text-[#222] tracking-wide mb-4 uppercase font-sans mt-4 pl-6">
-            Meus roteiros
+            {nomeGrupo ? `Roteiro: ${nomeGrupo}` : 'Roteiro'}
           </h1>
           <div className="w-full flex flex-row gap-8 mt-8 px-8 flex-1 min-h-[500px]" style={{height: 'calc(100vh - 220px)'}}>
             {/* Coluna dos filtros */}
@@ -1201,87 +1203,117 @@ export const Mapa: React.FC = () => {
                 })()
               )}
               
-              {/* Seção de Dicas e Ajuda */}
-              <div className="mt-6 p-5 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border-2 border-blue-200 rounded-xl shadow-md">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center shadow-md">
-                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                    </svg>
+              {/* Painel de resultados por praça */}
+              <div className="mt-2">
+                {loadingResultados ? (
+                  <div className="flex items-center gap-3 py-6 justify-center text-gray-400">
+                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-[#ff4600] border-solid flex-shrink-0"></div>
+                    <span className="text-sm">Carregando resultados...</span>
                   </div>
-                  <h4 className="text-sm font-bold text-blue-900 uppercase tracking-wide">Dicas de Uso</h4>
-                </div>
-                
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3 bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
-                    <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-                      </svg>
+                ) : dadosPorPraca.length > 0 ? (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                      Resultados por praça — período completo
+                    </p>
+                    <div className="space-y-2">
+                      {dadosPorPraca.map((item, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setCidadeSelecionada(item.cidade_st)}
+                          className={`w-full text-left rounded-xl border-2 p-3 transition-all ${
+                            cidadeSelecionada === item.cidade_st
+                              ? 'border-[#ff4600] bg-orange-50'
+                              : 'border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-bold text-[#222]">{item.cidade_st}</span>
+                            <span className="text-xs text-[#ff4600] font-semibold flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                              </svg>
+                              Ver mapa
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <div className="text-[10px] text-gray-400 uppercase">Impactos</div>
+                              <div className="text-xs font-semibold text-gray-700">
+                                {Math.round(item.impactosTotal_vl ?? 0).toLocaleString('pt-BR')}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] text-gray-400 uppercase">Cobertura</div>
+                              <div className="text-xs font-semibold text-gray-700">
+                                {item.coberturaProp_vl?.toFixed(1) ?? '—'}%
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] text-gray-400 uppercase">Freq.</div>
+                              <div className="text-xs font-semibold text-gray-700">
+                                {item.frequencia_vl?.toFixed(1) ?? '—'}x
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
                     </div>
-                    <span className="text-xs text-blue-900 font-medium">Clique nos pontos do mapa para ver detalhes</span>
+                    {/* Totais gerais */}
+                    {totaisGerais && (
+                      <div className="mt-3 p-3 bg-[#393939] rounded-xl">
+                        <p className="text-[10px] text-gray-400 uppercase font-semibold mb-2">Total da campanha</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <div className="text-[10px] text-gray-400 uppercase">Impactos</div>
+                            <div className="text-xs font-bold text-white">
+                              {Math.round(totaisGerais.impactosTotal_vl ?? 0).toLocaleString('pt-BR')}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-gray-400 uppercase">Cobertura</div>
+                            <div className="text-xs font-bold text-white">
+                              {totaisGerais.coberturaProp_vl?.toFixed(1) ?? '—'}%
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-gray-400 uppercase">GRP</div>
+                            <div className="text-xs font-bold text-white">
+                              {totaisGerais.grp_vl?.toFixed(1) ?? '—'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-start gap-3 bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
-                    <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                      </svg>
-                    </div>
-                    <span className="text-xs text-blue-900 font-medium">Use o zoom para explorar áreas específicas</span>
+                ) : grupo ? (
+                  <div className="py-4 text-center text-xs text-gray-400">
+                    Nenhum resultado disponível para esta campanha.
                   </div>
-                  <div className="flex items-start gap-3 bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
-                    <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <span className="text-xs text-blue-900 font-medium">Selecione uma semana para filtrar dados específicos</span>
-                  </div>
-                  <div className="flex items-start gap-3 bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
-                    <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-                      </svg>
-                    </div>
-                    <span className="text-xs text-blue-900 font-medium">As cores indicam diferentes grupos de planejamento</span>
-                  </div>
-                </div>
-                
-                {hexagonos.length === 0 && (
-                  <div className="mt-4 p-4 bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-300 rounded-lg shadow-sm">
-                    <p className="text-xs font-bold text-yellow-900 mb-2">Não encontrou dados?</p>
-                    <div className="space-y-1 text-xs text-yellow-800">
-                      <div>✓ Verifique se a praça possui planejamento cadastrado</div>
-                      <div>✓ Tente selecionar outra semana</div>
-                      <div>✓ Entre em contato com o suporte se o problema persistir</div>
-                    </div>
+                ) : null}
+
+                {/* Nota quando praça já está selecionada */}
+                {cidadeSelecionada && (
+                  <div className="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-500">
+                    Clique nos pontos do mapa para ver detalhes. Use o filtro de semana para explorar períodos específicos.
                   </div>
                 )}
               </div>
             </div>
             {/* Coluna do mapa */}
             <div className="flex-1 h-full w-full" style={{ minHeight: 320, background: '#fff', borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e5e5', marginBottom: 48, position: 'relative' }}>
-              {/* Overlay/modal para seleção de praça e semana */}
+              {/* Overlay simples enquanto nenhuma praça está selecionada */}
               {showOverlay && (
                 <div className="absolute inset-0 bg-gradient-to-br from-gray-50 via-white to-orange-50 z-50 flex items-center justify-center p-8">
-                  <div className="text-center max-w-lg">
-                    <div className="w-24 h-24 bg-gradient-to-br from-orange-500 to-amber-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl animate-pulse">
-                      <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="text-center max-w-sm">
+                    <div className="w-16 h-16 bg-gradient-to-br from-orange-400 to-amber-400 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                      <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                       </svg>
                     </div>
-                    <h3 className="text-3xl font-bold text-gray-900 mb-4">
-                      Mapa de Roteiros
-                    </h3>
-                    <p className="text-base text-gray-600 mb-8 leading-relaxed">
-                      Para visualizar o mapa interativo, selecione uma praça no painel à esquerda e opcionalmente uma semana específica.
+                    <h3 className="text-xl font-bold text-gray-800 mb-2">Selecione uma praça</h3>
+                    <p className="text-sm text-gray-500 leading-relaxed">
+                      Escolha uma praça no painel ao lado para visualizar o mapa detalhado da campanha.
                     </p>
-                    <div className="inline-flex items-center gap-3 bg-gradient-to-r from-[#ff4600] to-orange-600 text-white px-6 py-3 rounded-xl shadow-lg">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span className="font-semibold">Dica: Comece selecionando uma praça</span>
-                    </div>
                   </div>
                 </div>
               )}
@@ -1300,132 +1332,37 @@ export const Mapa: React.FC = () => {
                 {loadingHexagonos && (
                   <MapLoadingOverlay message="Carregando pontos do mapa..." />
                 )}
-                {hexagonos.map((hex, idx) => (
-                  <Polygon
-                    key={"poly-" + idx}
-                    positions={wktToLatLngs(hex.geometry_8)}
-                    pathOptions={{
-                      color: hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`,
-                      fillOpacity: 0.6,
-                      weight: 2,
-                      opacity: 0.8
-                    }}
-                  >
-                  </Polygon>
-                ))}
+                {hexagonos.map((hex, idx) => {
+                  const positions = geometriasConvertidas.get(hex.hexagon_pk);
+                  if (!positions || positions.length < 3) return null;
+                  return (
+                    <Polygon
+                      key={"poly-" + idx}
+                      positions={positions}
+                      pathOptions={{
+                        color: hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`,
+                        fillOpacity: 0.6,
+                        weight: 2,
+                        opacity: 0.8
+                      }}
+                    />
+                  );
+                })}
 
-                {/* Pontos de mídia individuais com bordas diferentes */}
-                {/* IMPORTANTE: Os pontos já foram filtrados pelos grupos dos hexágonos */}
-                {/* Só renderizar pontos se houver hexágonos disponíveis */}
-                {hexagonos.length > 0 && pontosMidia.length > 0 && (() => {
-                  // Criar um mapa de cores por grupo dos hexágonos para acesso rápido
-                  const coresPorGrupo = new Map<string, string>();
-                  hexagonos.forEach(hex => {
-                    if (hex.grupo_st && !coresPorGrupo.has(hex.grupo_st)) {
-                      const cor = hex.hexColor_st || `rgb(${hex.rgbColorR_vl},${hex.rgbColorG_vl},${hex.rgbColorB_vl})`;
-                      coresPorGrupo.set(hex.grupo_st, cor);
-                    }
-                  });
-                  
-                  console.log(`🎨 [Mapa] Cores por grupo disponíveis:`, Array.from(coresPorGrupo.entries()));
-                  console.log(`🎨 [Mapa] Total de pontos para renderizar: ${pontosMidia.length}`);
-                  console.log(`🔷 [Mapa] Total de hexágonos: ${hexagonos.length}`);
-                  
-                  // Armazenar pontos que foram realmente renderizados para usar na legenda
-                  const pontosRenderizados: PontoMidia[] = [];
-                  
-                  // IMPORTANTE: O fluxo agregado será calculado DURANTE a renderização
-                  // Isso garante que apenas pontos que passaram em TODAS as validações sejam contados
-                  const fluxoAgregadoPorHexagono = new Map<number, { total: number, count: number, pontos: PontoMidia[] }>();
-                  
-                  console.log(`📊 [Mapa] Total de pontos recebidos: ${pontosMidia.length}`);
-                  console.log(`📊 [Mapa] Fluxo agregado será calculado apenas para pontos RENDERIZADOS`);
-                  
-                  // Mapa para rastrear quantos pontos estão em cada hexágono
-                  const pontosPorHexagono = new Map<number, number>();
-                  
-                  const pontosJSX = pontosMidia.map((ponto, idx) => {
-                    // VALIDAÇÃO 1: Garantir que o subgrupo deriva do grupo
-                    if (ponto.grupoSub_st && !ponto.grupoSub_st.startsWith(ponto.grupo_st)) {
-                      console.warn(`⚠️ [Mapa] Ponto ${ponto.planoMidia_pk} com subgrupo "${ponto.grupoSub_st}" que não deriva do grupo "${ponto.grupo_st}" - não renderizando`);
-                      return null;
-                    }
-                    
-                    // VALIDAÇÃO 2: Verificar se o grupo do ponto existe nos hexágonos
-                    const corGrupo = coresPorGrupo.get(ponto.grupo_st);
-                    if (!corGrupo) {
-                      console.warn(`⚠️ [Mapa] Ponto ${ponto.planoMidia_pk} com grupo ${ponto.grupo_st} não encontrado nos hexágonos. Grupos disponíveis:`, Array.from(coresPorGrupo.keys()));
-                      return null;
-                    }
-                    
-                    // VALIDAÇÃO 3: Verificar se o ponto está dentro de um hexágono do mesmo grupo
-                    // Isso garante que não apareçam pontos de um grupo dentro de hexágonos de outro grupo
-                    const podeRenderizar = validarPontoNoHexagonoCorreto(ponto, hexagonos);
-                    if (!podeRenderizar) {
-                      // Ponto está dentro de hexágono de outro grupo ou não há hexágonos do mesmo grupo
-                      return null;
-                    }
-                    
-                    // Usar a cor própria do ponto vinda da view/banco de dados
-                    const cor = ponto.hexColor_st || `rgb(${ponto.rgbColorR_vl},${ponto.rgbColorG_vl},${ponto.rgbColorB_vl})`;
-                    
-                    // Adicionar à lista de pontos renderizados para usar na legenda
-                    pontosRenderizados.push(ponto);
-                    
-                    // Identificar em qual hexágono este ponto está (para estatísticas e exibição)
-                    const pontoCoords: [number, number] = [ponto.latitude_vl, ponto.longitude_vl];
-                    let hexagonoDoPonto: Hexagono | null = null;
-                    for (const hex of hexagonos) {
-                      if (hex.grupo_st === ponto.grupo_st && hex.geometry_8) {
-                        const poligono = wktToLatLngs(hex.geometry_8);
-                        if (poligono.length >= 3 && pontoDentroPoligono(pontoCoords, poligono)) {
-                          pontosPorHexagono.set(hex.hexagon_pk, (pontosPorHexagono.get(hex.hexagon_pk) || 0) + 1);
-                          hexagonoDoPonto = hex;
-                          
-                          // IMPORTANTE: Adicionar este ponto ao fluxo agregado APENAS se ele passou em todas as validações
-                          // Isso garante que o fluxo agregado reflita apenas os pontos realmente renderizados
-                          if (!fluxoAgregadoPorHexagono.has(hex.hexagon_pk)) {
-                            fluxoAgregadoPorHexagono.set(hex.hexagon_pk, { total: 0, count: 0, pontos: [] });
-                    }
-                    const fluxoPontoIndividual = getFluxoRealPonto(ponto);
-                          const agregado = fluxoAgregadoPorHexagono.get(hex.hexagon_pk)!;
-                    agregado.total += fluxoPontoIndividual;
-                    agregado.count += 1;
-                    agregado.pontos.push(ponto);
-                          
-                          console.log(`✅ [Mapa] Ponto ${ponto.planoMidia_pk} (fluxo: ${fluxoPontoIndividual.toLocaleString('pt-BR')}, grupo: ${ponto.grupo_st}, subgrupo: ${ponto.grupoSub_st}) RENDERIZADO no hexágono ${hex.hexagon_pk}. Total agregado agora: ${agregado.total.toLocaleString('pt-BR')} (${agregado.count} pontos renderizados)`);
-                          break;
-                        }
-                      }
-                    }
-                    
-                    // Armazenar hexágono do ponto para usar no popup
-                    // Também armazenar o fluxo agregado calculado (agora calculado apenas dos pontos renderizados)
-                    (ponto as any).hexagonoAssociado = hexagonoDoPonto;
-                    if (hexagonoDoPonto && fluxoAgregadoPorHexagono.has(hexagonoDoPonto.hexagon_pk)) {
-                      const agregado = fluxoAgregadoPorHexagono.get(hexagonoDoPonto.hexagon_pk)!;
-                    (ponto as any).hexagonoFluxoAgregado = agregado.total;
-                    (ponto as any).hexagonoTotalPontos = agregado.count;
-                    }
-                    
-                    // Debug: verificar se a cor está correta
-                    if (idx < 5) { // Log apenas os primeiros 5 pontos
-                      console.log(`✅ [Mapa] Ponto ${ponto.planoMidia_pk}: grupo=${ponto.grupo_st}, subgrupo=${ponto.grupoSub_st}, cor=${cor}`);
-                    }
-                  
-                    return (
+                {/* Pontos de midia — usa pontosValidados (pre-processado via useMemo) */}
+                {pontosValidados.map(({ ponto, cor, radius, hexagonoAssociado, fluxoAgregado, totalPontosNoHex }, idx) => (
                       <CircleMarker
                         key={`ponto-${ponto.planoMidia_pk}-${idx}`}
                         center={[ponto.latitude_vl, ponto.longitude_vl]}
                         pathOptions={{ 
-                          color: '#ffffff', // Borda branca fina
-                          fillColor: cor, // Cor própria do ponto vinda da view/banco
+                          color: '#ffffff',
+                          fillColor: cor,
                           fillOpacity: 0.85,
                           weight: 1.5,
                           opacity: 1,
-                          dashArray: ponto.estaticoDigital_st === 'E' ? '3, 3' : undefined // Tracejado para Estático
+                          dashArray: ponto.estaticoDigital_st === 'E' ? '3, 3' : undefined
                         }}
-                        radius={getRadiusPonto(getFluxoRealPonto(ponto))}
+                        radius={radius}
                       >
                     <Popup maxWidth={350}>
                       <div style={{ 
@@ -1496,7 +1433,7 @@ export const Mapa: React.FC = () => {
                             
                             {/* Hexágono associado */}
                             {(() => {
-                              const hexAssociado = (ponto as any).hexagonoAssociado;
+                              const hexAssociado = hexagonoAssociado;
                               if (hexAssociado) {
                                 return (
                                   <div style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #e5e7eb' }}>
@@ -1563,76 +1500,30 @@ export const Mapa: React.FC = () => {
                               // Não usar valores do hexágono aqui - apenas campos do próprio ponto
                               const fluxoReal = getFluxoRealPonto(ponto);
                               
-                              // DEBUG: Verificar se o fluxo está correto e não foi alterado pelo hexágono
-                              if ((ponto as any).hexagonoAssociado) {
-                                const hex = (ponto as any).hexagonoAssociado;
-                                const fluxoHex = hex.fluxoEstimado_vl || hex.calculatedFluxoEstimado_vl || 0;
-                                
-                                // Se o fluxo do ponto for igual ao do hexágono, pode ser um problema
-                                if (Math.abs(fluxoReal - fluxoHex) < 1 && fluxoReal > 0) {
-                                  console.warn(`⚠️ [Popup] ATENÇÃO: Ponto ${ponto.planoMidia_pk} tem fluxo igual ao hexágono ${hex.hexagon_pk}!`);
-                                  console.warn(`   Fluxo do Ponto: ${fluxoReal.toLocaleString('pt-BR')}`);
-                                  console.warn(`   Fluxo do Hexágono: ${fluxoHex.toLocaleString('pt-BR')}`);
-                                  console.warn(`   Campos do ponto:`, {
-                                    fluxo_vl: ponto.fluxo_vl,
-                                    fluxoPassantes_vl: ponto.fluxoPassantes_vl,
-                                    fluxoEstimado_vl: ponto.fluxoEstimado_vl,
-                                    calculatedFluxoEstimado_vl: ponto.calculatedFluxoEstimado_vl
-                                  });
-                                }
-                              }
-                              
                               return fluxoReal.toLocaleString('pt-BR');
                             })()}
                           </div>
                           {/* Mostrar fonte do fluxo */}
                           {(() => {
-                            const temFluxoVl = ponto.fluxo_vl !== null && ponto.fluxo_vl !== undefined && ponto.fluxo_vl > 0;
-                            const temFluxoPassantes = ponto.fluxoPassantes_vl !== null && ponto.fluxoPassantes_vl !== undefined && ponto.fluxoPassantes_vl > 0;
-                            const temFluxoEstimado = ponto.fluxoEstimado_vl !== null && ponto.fluxoEstimado_vl !== undefined && ponto.fluxoEstimado_vl > 0;
-                            const usaCalculated = ponto.calculatedFluxoEstimado_vl !== null && ponto.calculatedFluxoEstimado_vl !== undefined && ponto.calculatedFluxoEstimado_vl > 0 && !temFluxoVl && !temFluxoPassantes && !temFluxoEstimado;
-                            
-                            let fonteTexto = '';
-                            if (temFluxoVl) {
-                              fonteTexto = 'Fluxo real (fluxo_vl)';
-                            } else if (temFluxoPassantes) {
-                              fonteTexto = 'Fluxo de passantes (fluxoPassantes_vl)';
-                            } else if (temFluxoEstimado) {
-                              fonteTexto = 'Fluxo estimado (fluxoEstimado_vl)';
-                            } else if (usaCalculated) {
-                              fonteTexto = 'Fluxo calculado (calculatedFluxoEstimado_vl)';
-                            }
-                            
-                            if (fonteTexto) {
-                              return (
-                                <div style={{ fontSize: 9, color: '#64748b', marginTop: 4, fontStyle: 'italic' }}>
-                                  {fonteTexto}
-                                </div>
-                              );
-                            }
-                            return null;
+                            const fonteTexto = (ponto.fluxoEstimado_vl != null && ponto.fluxoEstimado_vl > 0)
+                              ? 'Fluxo estimado (fluxoEstimado_vl)'
+                              : (ponto.calculatedFluxoEstimado_vl != null && ponto.calculatedFluxoEstimado_vl > 0)
+                                ? 'Fluxo calculado (calculatedFluxoEstimado_vl)'
+                                : '';
+                            return fonteTexto ? (
+                              <div style={{ fontSize: 9, color: '#64748b', marginTop: 4, fontStyle: 'italic' }}>
+                                {fonteTexto}
+                              </div>
+                            ) : null;
                           })()}
                         </div>
 
-                        {/* Informações do Hexágono - Comparação de Fluxos */}
-                        {(ponto as any).hexagonoAssociado && (() => {
-                          const hex = (ponto as any).hexagonoAssociado;
-                          
-                          // CRÍTICO: O fluxo do ponto DEVE ser o fluxo INDIVIDUAL do ponto, não do hexágono
-                          // Garantir que estamos usando o fluxo REAL do ponto, não o do hexágono
+                        {/* Informacoes do Hexagono */}
+                        {hexagonoAssociado && (() => {
+                          const hex = hexagonoAssociado;
                           const fluxoPonto = getFluxoRealPonto(ponto);
-                          
-                          // DEBUG: Log para verificar se o fluxo está correto
-                          console.log(`🔍 [Popup] Ponto ${ponto.planoMidia_pk}: fluxo individual = ${fluxoPonto.toLocaleString('pt-BR')}, hexágono ${hex.hexagon_pk}`);
-                          
-                          // PRIORIDADE 1: Usar fluxo agregado calculado dos pontos dentro do hexágono
-                          // Isso representa a soma real dos fluxos de todos os pontos dentro do hexágono
-                          const fluxoAgregadoPontos = (ponto as any).hexagonoFluxoAgregado;
-                          const totalPontosNoHexagono = (ponto as any).hexagonoTotalPontos || 1;
-                          
-                          console.log(`🔍 [Popup] Hexágono ${hex.hexagon_pk}: fluxo agregado = ${fluxoAgregadoPontos?.toLocaleString('pt-BR') || 'N/A'}, total pontos = ${totalPontosNoHexagono}`);
-                          
-                          // PRIORIDADE 2: Usar fluxo do hexágono do banco (fluxoEstimado_vl ou calculatedFluxoEstimado_vl)
+                          const fluxoAgregadoPontos = fluxoAgregado;
+                          const totalPontosNoHexagono = totalPontosNoHex || 1;
                           // Este é o fluxo da área geográfica do hexágono
                           const fluxoHexagonoBanco = (hex.fluxoEstimado_vl !== null && hex.fluxoEstimado_vl !== undefined && hex.fluxoEstimado_vl > 0) 
                             ? hex.fluxoEstimado_vl 
@@ -1649,12 +1540,9 @@ export const Mapa: React.FC = () => {
                               ? 'fluxoEstimado_vl (banco)'
                               : 'calculatedFluxoEstimado_vl (banco)');
                           
-                          const campoPonto = (() => {
-                            if (ponto.fluxo_vl !== null && ponto.fluxo_vl !== undefined && ponto.fluxo_vl > 0) return 'fluxo_vl';
-                            if (ponto.fluxoPassantes_vl !== null && ponto.fluxoPassantes_vl !== undefined && ponto.fluxoPassantes_vl > 0) return 'fluxoPassantes_vl';
-                            if (ponto.fluxoEstimado_vl !== null && ponto.fluxoEstimado_vl !== undefined && ponto.fluxoEstimado_vl > 0) return 'fluxoEstimado_vl';
-                            return 'calculatedFluxoEstimado_vl';
-                          })();
+                          const campoPonto = (ponto.fluxoEstimado_vl != null && ponto.fluxoEstimado_vl > 0)
+                            ? 'fluxoEstimado_vl'
+                            : 'calculatedFluxoEstimado_vl';
                           
                           const diferenca = fluxoHexagono - fluxoPonto;
                           const percentualDiferenca = fluxoPonto > 0 ? ((diferenca / fluxoPonto) * 100) : 0;
@@ -1796,44 +1684,7 @@ export const Mapa: React.FC = () => {
                       </div>
                     </Popup>
                   </CircleMarker>
-                    );
-                  })
-                  .filter(Boolean); // Remover nulls
-                  
-                  console.log(`✅ [Mapa] Total de pontos renderizados: ${pontosRenderizados.length} de ${pontosMidia.length}`);
-                  
-                  // Identificar hexágonos sem pontos
-                  const hexagonosSemPontos = hexagonos.filter(hex => !pontosPorHexagono.has(hex.hexagon_pk));
-                  if (hexagonosSemPontos.length > 0) {
-                    console.log(`ℹ️ [Mapa] ${hexagonosSemPontos.length} hexágono(s) sem pontos de mídia (isso pode ser normal se a área não tem pontos cadastrados):`, 
-                      hexagonosSemPontos.map(h => `Hex ${h.hexagon_pk} (${h.grupo_st})`).join(', '));
-                  }
-                  
-                  // Estatísticas de pontos por hexágono
-                  const hexagonosComPontos = Array.from(pontosPorHexagono.entries());
-                  if (hexagonosComPontos.length > 0) {
-                    const maxPontosPorHex = Math.max(...hexagonosComPontos.map(([_, count]) => count));
-                    const hexagonosComMultiplosPontos = hexagonosComPontos.filter(([_, count]) => count > 1);
-                    console.log(`📊 [Mapa] Estatísticas: Máximo de pontos por hexágono: ${maxPontosPorHex}, Hexágonos com múltiplos pontos: ${hexagonosComMultiplosPontos.length}`);
-                  }
-                  
-                  // Log final do fluxo agregado calculado (apenas pontos renderizados)
-                  console.log(`\n📊 [Mapa] RESUMO FINAL - Fluxo agregado por hexágono (apenas pontos RENDERIZADOS):`);
-                  fluxoAgregadoPorHexagono.forEach((agregado, hexPk) => {
-                    const hex = hexagonos.find(h => h.hexagon_pk === hexPk);
-                    const fluxoHexBanco = hex?.fluxoEstimado_vl || hex?.calculatedFluxoEstimado_vl || 0;
-                    console.log(`   Hexágono ${hexPk} (${hex?.grupo_st || 'N/A'}):`);
-                    console.log(`      - Pontos RENDERIZADOS: ${agregado.count}`);
-                    console.log(`      - Fluxo agregado (soma dos pontos): ${agregado.total.toLocaleString('pt-BR')}`);
-                    console.log(`      - Fluxo do banco: ${fluxoHexBanco.toLocaleString('pt-BR')}`);
-                    agregado.pontos.forEach((p, idx) => {
-                      const fluxoP = getFluxoRealPonto(p);
-                      console.log(`      - Ponto ${idx + 1}: ${p.planoMidia_pk} (fluxo: ${fluxoP.toLocaleString('pt-BR')})`);
-                    });
-                  });
-                  
-                  return pontosJSX;
-                })()}
+                ))}
               </MapContainer>
             </div>
             {/* Legendas agrupadas no canto inferior direito */}
@@ -1938,30 +1789,15 @@ export const Mapa: React.FC = () => {
                 
                 {/* Legenda de Grupos (Pontos) */}
                 {(() => {
-                  // Usar apenas os pontos que foram realmente renderizados no mapa
-                  const pontosParaLegenda = pontosMidia.filter(ponto => {
-                    // Aplicar as mesmas validações usadas na renderização
-                    if (!ponto.grupo_st || !ponto.grupoSub_st) return false;
-                    if (!ponto.grupoSub_st.startsWith(ponto.grupo_st)) return false;
-                    
-                    // Verificar se o grupo existe nos hexágonos
-                      const hexagonoComGrupo = hexagonos.find(h => h.grupo_st === ponto.grupo_st);
-                    if (!hexagonoComGrupo) return false;
-                    
-                    // Validar se o ponto está no hexágono correto
-                    return validarPontoNoHexagonoCorreto(ponto, hexagonos);
-                  });
+                  if (pontosValidados.length === 0) return null;
                   
-                  if (pontosParaLegenda.length === 0) return null;
-                  
-                  // Agrupar por subgrupo (que agora chamamos de "grupo")
                   const gruposUnicos = new Map<string, { subgrupo: string; ponto: PontoMidia }>();
                   
-                  pontosParaLegenda.forEach((ponto: PontoMidia) => {
+                  for (const { ponto } of pontosValidados) {
                     if (!gruposUnicos.has(ponto.grupoSub_st)) {
                       gruposUnicos.set(ponto.grupoSub_st, { subgrupo: ponto.grupoSub_st, ponto });
                     }
-                  });
+                  }
                   
                   // Ordenar grupos
                   const gruposOrdenados = Array.from(gruposUnicos.values()).sort((a, b) => 
