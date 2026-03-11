@@ -1,6 +1,7 @@
 const handlers = {
   'dashboard': require('../handlers/banco-ativos-dashboard'),
   'mapa': require('../handlers/banco-ativos-mapa'),
+  'centroids': require('../handlers/banco-ativos-centroids'),
   'busca': require('../handlers/busca-pontos-midia'),
   'relatorio-praca': require('../handlers/banco-ativos-relatorio-praca'),
   'relatorio-exibidor': require('../handlers/banco-ativos-relatorio-exibidor'),
