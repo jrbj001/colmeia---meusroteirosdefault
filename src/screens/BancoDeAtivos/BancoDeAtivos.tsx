@@ -537,18 +537,18 @@ export const BancoDeAtivos: React.FC = () => {
                     ]}
                     pathOptions={isSelecionada ? {
                       color: '#ff4600',
-                      weight: 2.5,
-                      opacity: 0.9,
+                      weight: 3,
+                      opacity: 1,
                       fillColor: '#ff4600',
-                      fillOpacity: 0.08,
+                      fillOpacity: 0.10,
                       dashArray: undefined,
                     } : {
-                      color: '#94a3b8',
-                      weight: 1,
-                      opacity: 0.35,
-                      fillColor: '#64748b',
-                      fillOpacity: 0.03,
-                      dashArray: '4 3',
+                      color: '#475569',
+                      weight: 1.5,
+                      opacity: 0.7,
+                      fillColor: '#334155',
+                      fillOpacity: 0.04,
+                      dashArray: '5 4',
                     }}
                     eventHandlers={{
                       click: () => {
