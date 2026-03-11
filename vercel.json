@@ -44,6 +44,7 @@
     { "source": "/api/hexagonos", "destination": "/api/mapa?action=hexagonos" },
     { "source": "/api/pontos-midia", "destination": "/api/mapa?action=pontos-midia" },
     { "source": "/api/inventario-cidade", "destination": "/api/mapa?action=inventario-cidade" },
+    { "source": "/api/pracas-centros", "destination": "/api/mapa?action=pracas-centros" },
 
     { "source": "/api/report-indicadores-vias-publicas", "destination": "/api/reports?action=vias-publicas" },
     { "source": "/api/report-indicadores-summary", "destination": "/api/reports?action=summary" },

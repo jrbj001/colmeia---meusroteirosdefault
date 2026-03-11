@@ -5,6 +5,7 @@ const handlers = {
   'hexagonos': require('../handlers/hexagonos'),
   'pontos-midia': require('../handlers/pontos-midia'),
   'inventario-cidade': require('../handlers/inventario-cidade'),
+  'pracas-centros': require('../handlers/pracas-centros'),
 };
 
 module.exports = async (req, res) => {

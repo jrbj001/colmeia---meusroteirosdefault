@@ -4,7 +4,7 @@ import { Topbar } from "../../components/Topbar/Topbar";
 import { Pagination } from "../MeusRoteiros/sections/Pagination";
 import { useSearchParams, useLocation } from "react-router-dom";
 import api from "../../config/axios";
-import { MapContainer, TileLayer, CircleMarker, useMap, Polygon, ZoomControl } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, useMap, Polygon, ZoomControl, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { useDebounce } from '../../hooks/useDebounce';
 import { SkeletonLoader } from '../../components/SkeletonLoader';
@@ -57,7 +57,7 @@ interface PontoMidia {
   [key: string]: any;
 }
 
-// Componente auxiliar para ajustar o centro e bounds do mapa
+// Componente auxiliar para ajustar o centro e bounds do mapa (praça selecionada)
 function AjustarMapa({ hexagonos }: { hexagonos: Hexagono[] }) {
   const map = useMap();
   React.useEffect(() => {
@@ -66,6 +66,22 @@ function AjustarMapa({ hexagonos }: { hexagonos: Hexagono[] }) {
       map.fitBounds(bounds, { padding: [40, 40] });
     }
   }, [hexagonos, map]);
+  return null;
+}
+
+// Componente para centralizar no Brasil mostrando todas as praças
+function AjustarMapaBrasil({ pracas }: { pracas: { lat: number; lon: number }[] }) {
+  const map = useMap();
+  React.useEffect(() => {
+    if (pracas.length === 0) return;
+    if (pracas.length === 1) {
+      map.setView([pracas[0].lat, pracas[0].lon], 8);
+    } else {
+      const bounds = L.latLngBounds(pracas.map(p => [p.lat, p.lon] as [number, number]));
+      map.fitBounds(bounds, { padding: [80, 80], maxZoom: 8 });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pracas.length]);
   return null;
 }
 
@@ -154,6 +170,7 @@ export const Mapa: React.FC = () => {
   const [dadosPorPraca, setDadosPorPraca] = React.useState<ResultadoPraca[]>([]);
   const [totaisGerais, setTotaisGerais] = React.useState<TotaisGerais | null>(null);
   const [loadingResultados, setLoadingResultados] = React.useState(false);
+  const [pracasCentros, setPracasCentros] = React.useState<{ cidade_st: string; estado_st?: string; lat: number; lon: number; total_pontos: number }[]>([]);
   const [hexagonos, setHexagonos] = React.useState<Hexagono[]>([]);
   const [pontosMidia, setPontosMidia] = React.useState<PontoMidia[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -439,15 +456,21 @@ export const Mapa: React.FC = () => {
     }
   }, [grupo]);
 
-  // Carregar resultados gerais por praça ao abrir a tela
+  // Carregar resultados gerais por praça + centroids ao abrir a tela
   React.useEffect(() => {
     if (!grupo) return;
     setLoadingResultados(true);
-    api.post('report-indicadores-vias-publicas', { report_pk: Number(grupo) })
-      .then(res => {
-        if (res.data.success) {
-          setDadosPorPraca(res.data.data || []);
-          setTotaisGerais(res.data.totais || null);
+    Promise.all([
+      api.post('report-indicadores-vias-publicas', { report_pk: Number(grupo) }),
+      api.get(`pracas-centros?grupo_pk=${grupo}`),
+    ])
+      .then(([indicRes, centrosRes]) => {
+        if (indicRes.data.success) {
+          setDadosPorPraca(indicRes.data.data || []);
+          setTotaisGerais(indicRes.data.totais || null);
+        }
+        if (centrosRes.data.pracas) {
+          setPracasCentros(centrosRes.data.pracas);
         }
       })
       .catch(err => console.error('Erro ao carregar resultados por praça:', err))
@@ -1443,27 +1466,22 @@ export const Mapa: React.FC = () => {
             </div>
 
             {/* Mapa — ocupa 100% da area */}
-            <style>{`.leaflet-top.leaflet-left .leaflet-control-zoom { display: none !important; }`}</style>
+            <style>{`
+              .leaflet-top.leaflet-left .leaflet-control-zoom { display: none !important; }
+              .leaflet-praca-label {
+                background: transparent !important;
+                border: none !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+                white-space: nowrap;
+              }
+              .leaflet-praca-label::before { display: none !important; }
+            `}</style>
             <div className="absolute inset-0" style={{ zIndex: 1 }}>
               {/* Overlay enquanto nenhuma praça está selecionada */}
-              {showOverlay && (
-                <div className="absolute inset-0 bg-gradient-to-br from-gray-50 via-white to-orange-50 flex items-center justify-center p-8" style={{ zIndex: 10 }}>
-                  <div className="text-center max-w-sm">
-                    <div className="w-16 h-16 bg-gradient-to-br from-orange-400 to-amber-400 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-                      <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                      </svg>
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-800 mb-2">Selecione uma praça</h3>
-                    <p className="text-sm text-gray-500 leading-relaxed">
-                      Escolha uma praça no painel ao lado para visualizar o mapa detalhado da campanha.
-                    </p>
-                  </div>
-                </div>
-              )}
               <MapContainer
-                center={hexagonos.length > 0 ? [hexagonos[0].hex_centroid_lat, hexagonos[0].hex_centroid_lon] : [-15.7801, -47.9292]}
-                zoom={12}
+                center={[-15.7801, -47.9292]}
+                zoom={5}
                 style={{ height: '100%', width: '100%' }}
                 zoomControl={false}
               >
@@ -1472,7 +1490,58 @@ export const Mapa: React.FC = () => {
                   url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
                 />
+
+                {/* Ajusta bounds para a praça selecionada */}
                 <AjustarMapa hexagonos={hexagonos} />
+
+                {/* Visão Brasil: bubbles de praças antes de qualquer seleção */}
+                {showOverlay && pracasCentros.map((praca) => {
+                  const dadosPraca = dadosPorPraca.find(
+                    d => d.cidade_st?.trim().toUpperCase() === praca.cidade_st?.trim().toUpperCase()
+                  );
+                  const impactos = dadosPraca?.impactosTotal_vl ?? 0;
+                  const cobertura = dadosPraca?.coberturaProp_vl;
+                  const freq = dadosPraca?.frequencia_vl;
+                  return (
+                    <CircleMarker
+                      key={praca.cidade_st}
+                      center={[praca.lat, praca.lon]}
+                      radius={18}
+                      pathOptions={{
+                        color: '#ff4600',
+                        fillColor: '#ff4600',
+                        fillOpacity: 0.85,
+                        weight: 2,
+                        opacity: 1,
+                      }}
+                      eventHandlers={{
+                        click: () => { setCidadeSelecionada(praca.cidade_st); setPontoSelecionado(null); }
+                      }}
+                    >
+                      <Tooltip permanent direction="bottom" offset={[0, 14]}
+                        className="leaflet-praca-label"
+                      >
+                        <span style={{ fontWeight: 700, fontSize: 11, color: '#222' }}>
+                          {praca.cidade_st}
+                          {praca.estado_st ? `/${praca.estado_st}` : ''}
+                        </span>
+                      </Tooltip>
+                      <Tooltip direction="top" offset={[0, -18]} opacity={1}>
+                        <div style={{ fontSize: 11, lineHeight: 1.6 }}>
+                          <strong>{praca.cidade_st}</strong><br />
+                          <span style={{ color: '#555' }}>{praca.total_pontos} pontos</span><br />
+                          {impactos > 0 && <><span style={{ color: '#ff4600' }}>{Math.round(impactos).toLocaleString('pt-BR')}</span> impactos<br /></>}
+                          {cobertura != null && <>{cobertura.toFixed(1)}% cobertura · {freq?.toFixed(1)}x freq</>}
+                        </div>
+                      </Tooltip>
+                    </CircleMarker>
+                  );
+                })}
+
+                {/* Ajusta bounds para todas as praças na visão Brasil */}
+                {showOverlay && pracasCentros.length > 0 && (
+                  <AjustarMapaBrasil pracas={pracasCentros} />
+                )}
                 
                 {/* Loading Overlay estilo Apple */}
                 {loadingHexagonos && (
