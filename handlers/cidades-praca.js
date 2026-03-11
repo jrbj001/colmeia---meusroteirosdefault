@@ -1,4 +1,4 @@
-const { getPool } = require('./db');
+const { getPostgresPool } = require('./banco-ativos-passantes');
 
 module.exports = async (req, res) => {
   if (req.method !== 'GET') {
@@ -6,36 +6,64 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const pool = await getPool();
-    const { search } = req.query;
-    
-    let query = `
-      SELECT 
-        pk as id_cidade,
-        cidade_st as nome_cidade,
-        estado_st as nome_estado
-      FROM serv_product_be180.cidadeClassIbgeKantar_dm_vw 
-      WHERE 1=1
-    `;
-    
-    // Se houver termo de busca, filtrar por nome da cidade ou estado
-    if (search && search.trim()) {
-      query += ` AND (cidade_st LIKE @search OR estado_st LIKE @search)`;
-    }
-    
-    query += ` ORDER BY cidade_st, estado_st`;
-    
-    const request = pool.request();
-    
-    if (search && search.trim()) {
-      request.input('search', `%${search.trim()}%`);
-    }
-    
-    const result = await request.query(query);
-    
-    res.json(result.recordset);
+    const pool   = await getPostgresPool();
+    const search = req.query.search?.trim() || '';
+
+    const params = search ? [`%${search}%`] : [];
+    const where  = search ? 'AND (c.name ILIKE $1 OR COALESCE(s.acronym, s.name, \'\') ILIKE $1)' : '';
+
+    // Fix Bug 1: usa cities.name (cidades reais), não district (bairros) do SQL Server
+    const result = await pool.query(`
+      SELECT DISTINCT
+        c.id   AS id_cidade,
+        c.name AS nome_cidade,
+        COALESCE(s.acronym, s.name, '') AS nome_estado
+      FROM cities c
+      LEFT JOIN states s ON s.id = c.state_id
+      WHERE EXISTS (
+        SELECT 1 FROM media_points mp
+        WHERE mp.city_id    = c.id
+          AND mp.is_deleted = false
+          AND mp.is_active  = true
+      )
+      ${where}
+      ORDER BY c.name
+      LIMIT 1000
+    `, params);
+
+    res.json(result.rows);
   } catch (error) {
-    console.error('Erro na API /api/cidades-praca:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
+    // Fallback sem join de states caso a coluna não exista
+    if (error.message.includes('states') || error.message.includes('state_id')) {
+      try {
+        const pool   = await getPostgresPool();
+        const search = req.query.search?.trim() || '';
+        const params = search ? [`%${search}%`] : [];
+        const where  = search ? 'AND c.name ILIKE $1' : '';
+
+        const result = await pool.query(`
+          SELECT DISTINCT
+            c.id   AS id_cidade,
+            c.name AS nome_cidade,
+            ''     AS nome_estado
+          FROM cities c
+          WHERE EXISTS (
+            SELECT 1 FROM media_points mp
+            WHERE mp.city_id    = c.id
+              AND mp.is_deleted = false
+              AND mp.is_active  = true
+          )
+          ${where}
+          ORDER BY c.name
+          LIMIT 1000
+        `, params);
+
+        return res.json(result.rows);
+      } catch (err2) {
+        console.error('[cidades-praca] Fallback falhou:', err2.message);
+      }
+    }
+    console.error('[cidades-praca] Erro:', error.message);
+    res.status(500).json({ error: 'Erro ao buscar cidades' });
   }
 };
