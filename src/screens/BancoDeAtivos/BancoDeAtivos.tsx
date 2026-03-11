@@ -45,6 +45,9 @@ interface PontoMidia {
 }
 
 interface Perimetro {
+  city_id: number | null;
+  cidade_st: string;
+  estado_st?: string;
   latitude_min_vl: number;
   latitude_max_vl: number;
   longitude_min_vl: number;
@@ -156,7 +159,7 @@ export const BancoDeAtivos: React.FC = () => {
   // Interaction
   const [cidadeSelecionada, setCidadeSelecionada] = React.useState<CityBubble | null>(null);
   const [pontoSelecionado, setPontoSelecionado] = React.useState<PontoMidia | null>(null);
-  const [perimetro, setPerimetro] = React.useState<Perimetro | null>(null);
+  const [perimetros, setPerimetros] = React.useState<Perimetro[]>([]);
   const [painelColapsado, setPainelColapsado] = React.useState(false);
 
   // Filters
@@ -194,10 +197,12 @@ export const BancoDeAtivos: React.FC = () => {
     Promise.all([
       api.get('/banco-ativos-dashboard'),
       api.get('/banco-ativos-centroids'),
+      api.get('/banco-ativos-perimetro'),
     ])
-      .then(([dashRes, centRes]) => {
+      .then(([dashRes, centRes, perRes]) => {
         if (dashRes.data.success) setDados(dashRes.data.data);
         if (centRes.data.success) setCentroids(centRes.data.data || []);
+        if (perRes.data.success)  setPerimetros(perRes.data.data || []);
       })
       .catch(err => console.error('Erro ao carregar dados:', err))
       .finally(() => setLoading(false));
@@ -209,14 +214,8 @@ export const BancoDeAtivos: React.FC = () => {
     const params: Record<string, string> = { cidade };
     if (filtroAmbiente !== 'todos') params.tipo_ambiente = filtroAmbiente;
 
-    Promise.all([
-      api.get('/banco-ativos-mapa', { params }),
-      api.get('/banco-ativos-perimetro', { params: { cidade } }),
-    ])
-      .then(([mapaRes, perimetroRes]) => {
-        if (mapaRes.data.success) setPontos(mapaRes.data.data);
-        if (perimetroRes.data.success) setPerimetro(perimetroRes.data.data);
-      })
+    api.get('/banco-ativos-mapa', { params })
+      .then(res => { if (res.data.success) setPontos(res.data.data); })
       .catch(err => console.error('Erro ao carregar pontos:', err))
       .finally(() => setLoadingPontos(false));
   }, [filtroAmbiente]);
@@ -224,15 +223,13 @@ export const BancoDeAtivos: React.FC = () => {
   const handleClickCidade = React.useCallback((city: CityBubble) => {
     setCidadeSelecionada(city);
     setPontoSelecionado(null);
-    setPerimetro(null);
     carregarPontosCidade(city.cidade);
-  }, [carregarPontosCidade]);
+  }, [carregarPontosCidade, perimetros]);
 
   const voltarBrasil = React.useCallback(() => {
     setCidadeSelecionada(null);
     setPontos([]);
     setPontoSelecionado(null);
-    setPerimetro(null);
   }, []);
 
   // Derived
@@ -528,23 +525,44 @@ export const BancoDeAtivos: React.FC = () => {
                 </>
               )}
 
-              {/* Bounding box da cidade selecionada */}
-              {perimetro && (
-                <Rectangle
-                  bounds={[
-                    [perimetro.latitude_min_vl, perimetro.longitude_min_vl],
-                    [perimetro.latitude_max_vl, perimetro.longitude_max_vl],
-                  ]}
-                  pathOptions={{
-                    color: '#ff4600',
-                    weight: 2,
-                    opacity: 0.7,
-                    fillColor: '#ff4600',
-                    fillOpacity: 0.05,
-                    dashArray: '6 4',
-                  }}
-                />
-              )}
+              {/* Perimetros de todas as cidades */}
+              {perimetros.map(p => {
+                const isSelecionada = cidadeSelecionada?.cidade === p.cidade_st;
+                return (
+                  <Rectangle
+                    key={p.city_id ?? p.cidade_st}
+                    bounds={[
+                      [p.latitude_min_vl,  p.longitude_min_vl],
+                      [p.latitude_max_vl,  p.longitude_max_vl],
+                    ]}
+                    pathOptions={isSelecionada ? {
+                      color: '#ff4600',
+                      weight: 2.5,
+                      opacity: 0.9,
+                      fillColor: '#ff4600',
+                      fillOpacity: 0.08,
+                      dashArray: undefined,
+                    } : {
+                      color: '#94a3b8',
+                      weight: 1,
+                      opacity: 0.35,
+                      fillColor: '#64748b',
+                      fillOpacity: 0.03,
+                      dashArray: '4 3',
+                    }}
+                    eventHandlers={{
+                      click: () => {
+                        const city = centroids.find(c => c.cidade === p.cidade_st);
+                        if (city) handleClickCidade(city);
+                      },
+                    }}
+                  >
+                    <Tooltip sticky>
+                      <span style={{ fontSize: 11, fontWeight: 600 }}>{p.cidade_st}{p.estado_st ? `/${p.estado_st}` : ''}</span>
+                    </Tooltip>
+                  </Rectangle>
+                );
+              })}
             </MapContainer>
           </div>
 
