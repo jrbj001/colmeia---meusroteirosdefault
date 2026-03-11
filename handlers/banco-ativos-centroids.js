@@ -1,4 +1,4 @@
-const { getPostgresPool } = require('./banco-ativos-passantes');
+const { sql, getPool } = require('./db');
 
 module.exports = async (req, res) => {
   if (req.method !== 'GET') {
@@ -6,67 +6,37 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const pool = await getPostgresPool();
+    const pool = await getPool();
     const { tipo_ambiente } = req.query;
 
     let envFilter = '';
-    if (tipo_ambiente === 'indoor') envFilter = "AND mt.environment = 'Indoor'";
-    else if (tipo_ambiente === 'vias_publicas') envFilter = "AND mt.environment = 'Public'";
+    if (tipo_ambiente === 'indoor')       envFilter = "AND environment_st = 'Indoor'";
+    else if (tipo_ambiente === 'vias_publicas') envFilter = "AND environment_st = 'Public'";
 
-    const result = await pool.query(`
+    const result = await pool.request().query(`
       SELECT
-        c.name                          AS cidade,
-        COALESCE(s.acronym, s.name, '') AS estado,
-        AVG(CAST(mp.latitude  AS FLOAT)) AS lat,
-        AVG(CAST(mp.longitude AS FLOAT)) AS lon,
-        COUNT(*)                         AS total_pontos,
-        SUM(COALESCE(mp.pedestrian_flow, 0))  AS total_passantes,
-        SUM(COALESCE(mp.total_ipv_impact, 0)) AS total_impactos,
-        COUNT(*) FILTER (WHERE mt.environment = 'Public') AS pontos_public,
-        COUNT(*) FILTER (WHERE mt.environment = 'Indoor') AS pontos_indoor
-      FROM media_points mp
-      JOIN  cities c ON c.id = mp.city_id
-      LEFT JOIN states s ON s.id = c.state_id
-      LEFT JOIN media_types mt ON mt.id = mp.media_type_id
-      WHERE mp.is_deleted = false
-        AND mp.is_active  = true
-        AND mp.latitude  IS NOT NULL AND mp.latitude  != 0
-        AND mp.longitude IS NOT NULL AND mp.longitude != 0
+        cidade_st                                                    AS cidade,
+        estado_st                                                    AS estado,
+        AVG(CAST(latitude  AS FLOAT))                               AS lat,
+        AVG(CAST(longitude AS FLOAT))                               AS lon,
+        COUNT(*)                                                     AS total_pontos,
+        SUM(ISNULL(CAST(pedestrian_flow  AS FLOAT), 0))             AS total_passantes,
+        SUM(ISNULL(CAST(total_ipv_impact AS FLOAT), 0))             AS total_impactos,
+        SUM(CASE WHEN environment_st = 'Public'  THEN 1 ELSE 0 END) AS pontos_public,
+        SUM(CASE WHEN environment_st = 'Indoor'  THEN 1 ELSE 0 END) AS pontos_indoor
+      FROM [serv_product_be180].[bancoAtivosJoin_ft]
+      WHERE valid_bl = 1
+        AND latitude  IS NOT NULL AND CAST(latitude  AS FLOAT) != 0
+        AND longitude IS NOT NULL AND CAST(longitude AS FLOAT) != 0
+        AND cidade_st IS NOT NULL
         ${envFilter}
-      GROUP BY c.name, s.acronym, s.name
-      ORDER BY total_pontos DESC
+      GROUP BY cidade_st, estado_st
+      ORDER BY COUNT(*) DESC
     `);
 
-    res.status(200).json({ success: true, data: result.rows });
+    res.status(200).json({ success: true, data: result.recordset });
 
   } catch (error) {
-    if (error.message.includes('states') || error.message.includes('state_id')) {
-      try {
-        const pool = await getPostgresPool();
-        const result = await pool.query(`
-          SELECT
-            c.name AS cidade, '' AS estado,
-            AVG(CAST(mp.latitude AS FLOAT)) AS lat,
-            AVG(CAST(mp.longitude AS FLOAT)) AS lon,
-            COUNT(*) AS total_pontos,
-            SUM(COALESCE(mp.pedestrian_flow, 0)) AS total_passantes,
-            SUM(COALESCE(mp.total_ipv_impact, 0)) AS total_impactos,
-            COUNT(*) FILTER (WHERE mt.environment = 'Public') AS pontos_public,
-            COUNT(*) FILTER (WHERE mt.environment = 'Indoor') AS pontos_indoor
-          FROM media_points mp
-          JOIN cities c ON c.id = mp.city_id
-          LEFT JOIN media_types mt ON mt.id = mp.media_type_id
-          WHERE mp.is_deleted = false AND mp.is_active = true
-            AND mp.latitude IS NOT NULL AND mp.latitude != 0
-            AND mp.longitude IS NOT NULL AND mp.longitude != 0
-          GROUP BY c.name
-          ORDER BY total_pontos DESC
-        `);
-        return res.status(200).json({ success: true, data: result.rows });
-      } catch (err2) {
-        console.error('[banco-ativos-centroids] Fallback falhou:', err2.message);
-      }
-    }
     console.error('[banco-ativos-centroids] Erro:', error.message);
     res.status(500).json({ success: false, error: error.message });
   }

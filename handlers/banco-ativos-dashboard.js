@@ -1,4 +1,4 @@
-const { getPostgresPool } = require('./banco-ativos-passantes');
+const { getPool } = require('./db');
 
 module.exports = async (req, res) => {
   if (req.method !== 'GET') {
@@ -6,49 +6,34 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const pool = await getPostgresPool();
+    const pool = await getPool();
 
-    // Fix Bug 1: praças = COUNT(DISTINCT cities.name) — não district (bairro)
-    // Fix Bug 2: exibidores = COUNT(DISTINCT media_exhibitors.id) — não media_exhibitor_id genérico
-    // Fix Bug 3/4: classificação via media_types.environment ('Public'/'Indoor') — não ILIKE no nome
-    const result = await pool.query(`
-      WITH base AS (
-        SELECT
-          mp.id,
-          c.name         AS cidade,
-          me.id          AS exibidor_id,
-          mt.environment AS ambiente
-        FROM media_points mp
-        LEFT JOIN cities           c  ON c.id  = mp.city_id
-        LEFT JOIN media_exhibitors me ON me.id = mp.media_exhibitor_id
-        LEFT JOIN media_types      mt ON mt.id = mp.media_type_id
-        WHERE mp.is_deleted = false
-          AND mp.is_active  = true
-      )
+    const result = await pool.request().query(`
       SELECT
-        COUNT(*)                                                          AS total_pontos_midia,
-        COUNT(DISTINCT cidade)                                            AS total_pracas,
-        COUNT(DISTINCT exibidor_id)                                       AS total_exibidores,
+        COUNT(*)                                                            AS total_pontos_midia,
+        COUNT(DISTINCT cidade_st)                                           AS total_pracas,
+        COUNT(DISTINCT exibidor_st)                                         AS total_exibidores,
 
-        COUNT(*)           FILTER (WHERE ambiente = 'Public')            AS vias_publicas_pontos_midia,
-        COUNT(DISTINCT cidade)      FILTER (WHERE ambiente = 'Public')   AS vias_publicas_pracas,
-        COUNT(DISTINCT exibidor_id) FILTER (WHERE ambiente = 'Public')   AS vias_publicas_exibidores,
+        SUM(CASE WHEN environment_st = 'Public'  THEN 1 ELSE 0 END)        AS vias_publicas_pontos_midia,
+        COUNT(DISTINCT CASE WHEN environment_st = 'Public'  THEN cidade_st  END) AS vias_publicas_pracas,
+        COUNT(DISTINCT CASE WHEN environment_st = 'Public'  THEN exibidor_st END) AS vias_publicas_exibidores,
 
-        COUNT(*)           FILTER (WHERE ambiente = 'Indoor')            AS indoor_pontos_midia,
-        COUNT(DISTINCT cidade)      FILTER (WHERE ambiente = 'Indoor')   AS indoor_pracas,
-        COUNT(DISTINCT exibidor_id) FILTER (WHERE ambiente = 'Indoor')   AS indoor_exibidores
-      FROM base
+        SUM(CASE WHEN environment_st = 'Indoor'  THEN 1 ELSE 0 END)        AS indoor_pontos_midia,
+        COUNT(DISTINCT CASE WHEN environment_st = 'Indoor'  THEN cidade_st  END) AS indoor_pracas,
+        COUNT(DISTINCT CASE WHEN environment_st = 'Indoor'  THEN exibidor_st END) AS indoor_exibidores
+      FROM [serv_product_be180].[bancoAtivosJoin_ft]
+      WHERE valid_bl = 1
     `);
 
-    const row = result.rows[0] || {};
+    const row = result.recordset[0] || {};
 
     res.status(200).json({
       success: true,
       data: {
         total: {
-          pontos_midia: parseInt(row.total_pontos_midia)          || 0,
-          pracas:       parseInt(row.total_pracas)                || 0,
-          exibidores:   parseInt(row.total_exibidores)            || 0,
+          pontos_midia: parseInt(row.total_pontos_midia) || 0,
+          pracas:       parseInt(row.total_pracas)       || 0,
+          exibidores:   parseInt(row.total_exibidores)   || 0,
         },
         vias_publicas: {
           pontos_midia: parseInt(row.vias_publicas_pontos_midia)  || 0,
@@ -56,9 +41,9 @@ module.exports = async (req, res) => {
           exibidores:   parseInt(row.vias_publicas_exibidores)    || 0,
         },
         indoor: {
-          pontos_midia: parseInt(row.indoor_pontos_midia)         || 0,
-          pracas:       parseInt(row.indoor_pracas)               || 0,
-          exibidores:   parseInt(row.indoor_exibidores)           || 0,
+          pontos_midia: parseInt(row.indoor_pontos_midia) || 0,
+          pracas:       parseInt(row.indoor_pracas)       || 0,
+          exibidores:   parseInt(row.indoor_exibidores)   || 0,
         },
       },
     });

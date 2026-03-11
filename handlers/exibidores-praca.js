@@ -1,4 +1,4 @@
-const { getPostgresPool } = require('./banco-ativos-passantes');
+const { sql, getPool } = require('./db');
 
 module.exports = async (req, res) => {
   if (req.method !== 'GET') {
@@ -6,31 +6,31 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const pool   = await getPostgresPool();
-    const search = req.query.search?.trim() || '';
+    const pool    = await getPool();
+    const search  = req.query.search?.trim() || '';
+    const request = pool.request();
 
-    const params = search ? [`%${search}%`] : [];
-    const where  = search ? 'AND me.name ILIKE $1' : '';
+    let where = 'WHERE valid_bl = 1 AND exibidor_st IS NOT NULL';
+    if (search) {
+      request.input('search', sql.NVarChar, `%${search}%`);
+      where += ' AND exibidor_st LIKE @search';
+    }
 
-    // Fix Bug 2: lista media_exhibitors.name (empresas reais), não codes de pontos
-    const result = await pool.query(`
-      SELECT DISTINCT
-        me.id   AS id_exibidor,
-        me.name AS nome_exibidor,
-        me.name AS codigo_exibidor
-      FROM media_exhibitors me
-      WHERE EXISTS (
-        SELECT 1 FROM media_points mp
-        WHERE mp.media_exhibitor_id = me.id
-          AND mp.is_deleted = false
-          AND mp.is_active  = true
-      )
+    const result = await request.query(`
+      SELECT TOP 500
+        exibidor_st AS nome_exibidor
+      FROM [serv_product_be180].[bancoAtivosJoin_ft]
       ${where}
-      ORDER BY me.name
-      LIMIT 500
-    `, params);
+      GROUP BY exibidor_st
+      ORDER BY exibidor_st
+    `);
 
-    res.json(result.rows);
+    res.json(result.recordset.map(r => ({
+      id_exibidor:     r.nome_exibidor,
+      nome_exibidor:   r.nome_exibidor,
+      codigo_exibidor: r.nome_exibidor,
+    })));
+
   } catch (error) {
     console.error('[exibidores-praca] Erro:', error.message);
     res.status(500).json({ error: 'Erro ao buscar exibidores' });

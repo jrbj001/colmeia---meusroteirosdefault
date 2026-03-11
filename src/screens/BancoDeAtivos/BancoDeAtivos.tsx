@@ -2,7 +2,7 @@ import React from 'react';
 import { Sidebar } from '../../components/Sidebar/Sidebar';
 import { Topbar } from '../../components/Topbar/Topbar';
 import api from '../../config/axios';
-import { MapContainer, TileLayer, CircleMarker, ZoomControl, Tooltip, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, ZoomControl, Tooltip, Rectangle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
@@ -42,6 +42,15 @@ interface PontoMidia {
   passantes: number;
   impactos_ipv: number;
   grupo_midia: string;
+}
+
+interface Perimetro {
+  latitude_min_vl: number;
+  latitude_max_vl: number;
+  longitude_min_vl: number;
+  longitude_max_vl: number;
+  latitude_center_vl: number;
+  longitude_center_vl: number;
 }
 
 // ── Map helpers ────────────────────────────────────────────────────────
@@ -147,6 +156,7 @@ export const BancoDeAtivos: React.FC = () => {
   // Interaction
   const [cidadeSelecionada, setCidadeSelecionada] = React.useState<CityBubble | null>(null);
   const [pontoSelecionado, setPontoSelecionado] = React.useState<PontoMidia | null>(null);
+  const [perimetro, setPerimetro] = React.useState<Perimetro | null>(null);
   const [painelColapsado, setPainelColapsado] = React.useState(false);
 
   // Filters
@@ -196,14 +206,16 @@ export const BancoDeAtivos: React.FC = () => {
   const carregarPontosCidade = React.useCallback((cidade: string) => {
     setLoadingPontos(true);
     setPontoSelecionado(null);
-    api.get('/banco-ativos-mapa', { params: { tipo_ambiente: filtroAmbiente === 'todos' ? undefined : filtroAmbiente } })
-      .then(res => {
-        if (res.data.success) {
-          const filtered = res.data.data.filter((p: PontoMidia) =>
-            (p.cidade || '').toUpperCase().trim() === cidade.toUpperCase().trim()
-          );
-          setPontos(filtered);
-        }
+    const params: Record<string, string> = { cidade };
+    if (filtroAmbiente !== 'todos') params.tipo_ambiente = filtroAmbiente;
+
+    Promise.all([
+      api.get('/banco-ativos-mapa', { params }),
+      api.get('/banco-ativos-perimetro', { params: { cidade } }),
+    ])
+      .then(([mapaRes, perimetroRes]) => {
+        if (mapaRes.data.success) setPontos(mapaRes.data.data);
+        if (perimetroRes.data.success) setPerimetro(perimetroRes.data.data);
       })
       .catch(err => console.error('Erro ao carregar pontos:', err))
       .finally(() => setLoadingPontos(false));
@@ -212,6 +224,7 @@ export const BancoDeAtivos: React.FC = () => {
   const handleClickCidade = React.useCallback((city: CityBubble) => {
     setCidadeSelecionada(city);
     setPontoSelecionado(null);
+    setPerimetro(null);
     carregarPontosCidade(city.cidade);
   }, [carregarPontosCidade]);
 
@@ -219,6 +232,7 @@ export const BancoDeAtivos: React.FC = () => {
     setCidadeSelecionada(null);
     setPontos([]);
     setPontoSelecionado(null);
+    setPerimetro(null);
   }, []);
 
   // Derived
@@ -506,12 +520,30 @@ export const BancoDeAtivos: React.FC = () => {
                 <AjustarMapaBrasil cidades={centroidsFiltrados} />
               )}
 
-              {/* City drill-down: clustered points */}
+              {/* City drill-down: clustered points + perimetro */}
               {cidadeSelecionada && !loadingPontos && pontos.length > 0 && (
                 <>
                   <FlyToCity lat={cidadeSelecionada.lat} lon={cidadeSelecionada.lon} />
                   <MarkerClusterLayer pontos={pontos} onSelect={setPontoSelecionado} />
                 </>
+              )}
+
+              {/* Bounding box da cidade selecionada */}
+              {perimetro && (
+                <Rectangle
+                  bounds={[
+                    [perimetro.latitude_min_vl, perimetro.longitude_min_vl],
+                    [perimetro.latitude_max_vl, perimetro.longitude_max_vl],
+                  ]}
+                  pathOptions={{
+                    color: '#ff4600',
+                    weight: 2,
+                    opacity: 0.7,
+                    fillColor: '#ff4600',
+                    fillOpacity: 0.05,
+                    dashArray: '6 4',
+                  }}
+                />
               )}
             </MapContainer>
           </div>

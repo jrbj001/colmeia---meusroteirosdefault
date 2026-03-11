@@ -1,4 +1,4 @@
-const { getPostgresPool } = require('./banco-ativos-passantes');
+const { sql, getPool } = require('./db');
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
@@ -11,47 +11,38 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const pool = await getPostgresPool();
+    const pool = await getPool();
 
-    // Fix Bug 2: busca por media_exhibitors.name (nome real da empresa)
-    // Fix Bug 3/4: classifica via mt.environment ('Public'/'Indoor'), não ILIKE no nome
-    // Fix Bug 1: agrupa por cities.name (cidade), não por district (bairro)
-    const result = await pool.query(`
-      WITH pontos AS (
+    const result = await pool.request()
+      .input('exibidor', sql.NVarChar, `%${exibidor}%`)
+      .query(`
         SELECT
-          COALESCE(c.name, 'Sem cidade')  AS cidade,
-          mp.id                           AS ponto_id,
-          mt.environment                  AS ambiente,
-          mt.name                         AS tipo_midia,
-          mp.pedestrian_flow,
-          mp.total_ipv_impact,
-          mp.social_class_geo
-        FROM media_points    mp
-        JOIN  media_exhibitors me  ON me.id  = mp.media_exhibitor_id
-        LEFT JOIN cities       c   ON c.id   = mp.city_id
-        LEFT JOIN media_types  mt  ON mt.id  = mp.media_type_id
-        WHERE mp.is_deleted = false
-          AND mp.is_active  = true
-          AND me.name ILIKE $1
-      )
-      SELECT
-        cidade,
-        COUNT(DISTINCT ponto_id)                                          AS total,
-        COUNT(DISTINCT ponto_id) FILTER (WHERE ambiente = 'Public')      AS pontos_vias_publicas,
-        COUNT(DISTINCT ponto_id) FILTER (WHERE ambiente = 'Indoor')      AS pontos_indoor,
-        STRING_AGG(DISTINCT tipo_midia, ', ') FILTER (WHERE ambiente = 'Public')  AS vias_publicas,
-        STRING_AGG(DISTINCT tipo_midia, ', ') FILTER (WHERE ambiente = 'Indoor')  AS indoor,
-        ROUND(AVG(pedestrian_flow)   FILTER (WHERE pedestrian_flow   IS NOT NULL))::bigint AS fluxo_medio_passantes,
-        ROUND(SUM(total_ipv_impact)  FILTER (WHERE total_ipv_impact  IS NOT NULL))::bigint AS total_impacto_ipv,
-        MODE() WITHIN GROUP (ORDER BY social_class_geo) FILTER (WHERE social_class_geo IS NOT NULL) AS classe_social_predominante
-      FROM pontos
-      GROUP BY cidade
-      ORDER BY total DESC
-    `, [`%${exibidor}%`]);
+          ISNULL(cidade_st, 'Sem cidade')                                  AS cidade,
+          COUNT(*)                                                          AS total,
+          SUM(CASE WHEN environment_st = 'Public'  THEN 1 ELSE 0 END)     AS pontos_vias_publicas,
+          SUM(CASE WHEN environment_st = 'Indoor'  THEN 1 ELSE 0 END)     AS pontos_indoor,
+          AVG(ISNULL(CAST(pedestrian_flow  AS FLOAT), 0))                 AS fluxo_medio_passantes,
+          SUM(ISNULL(CAST(total_ipv_impact AS FLOAT), 0))                 AS total_impacto_ipv,
+          (
+            SELECT TOP 1 social_class_geo
+            FROM [serv_product_be180].[bancoAtivosJoin_ft] sub
+            WHERE sub.valid_bl = 1
+              AND sub.exibidor_st LIKE @exibidor
+              AND sub.cidade_st = base.cidade_st
+              AND sub.social_class_geo IS NOT NULL
+            GROUP BY social_class_geo
+            ORDER BY COUNT(*) DESC
+          )                                                                AS classe_social_predominante
+        FROM [serv_product_be180].[bancoAtivosJoin_ft] base
+        WHERE valid_bl = 1
+          AND exibidor_st LIKE @exibidor
+        GROUP BY cidade_st
+        ORDER BY total DESC
+      `);
 
-    const totalGeral = result.rows.reduce((s, r) => s + (parseInt(r.total) || 0), 0);
+    const totalGeral = result.recordset.reduce((s, r) => s + (parseInt(r.total) || 0), 0);
 
-    res.status(200).json({ success: true, data: result.rows, totalGeral, exibidor });
+    res.status(200).json({ success: true, data: result.recordset, totalGeral, exibidor });
 
   } catch (error) {
     console.error('[banco-ativos-relatorio-exibidor] Erro:', error.message);
