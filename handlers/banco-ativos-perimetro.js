@@ -7,7 +7,7 @@ module.exports = async (req, res) => {
 
   try {
     const pool   = await getPool();
-    const cidade = req.query.cidade?.trim() || null;
+    const cidade = req.query.cidade ? req.query.cidade.replace(/\+/g, ' ').trim() : null;
 
     // --- Retornar TODOS os perimetros (visão Brasil) ---
     // Calculado diretamente de bancoAtivosJoin_ft — sem depender de city_id

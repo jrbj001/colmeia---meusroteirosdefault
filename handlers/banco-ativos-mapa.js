@@ -9,7 +9,10 @@ module.exports = async (req, res) => {
 
   try {
     const pool = await getPool();
-    const { tipo_ambiente, cidade } = req.query;
+    const { tipo_ambiente } = req.query;
+    // Axios codifica espaços como '+' em query strings — precisamos decodificar manualmente
+    const cidade = req.query.cidade ? req.query.cidade.replace(/\+/g, ' ').trim() : null;
+    console.log('[banco-ativos-mapa] cidade:', cidade, '| tipo_ambiente:', tipo_ambiente);
 
     const request = pool.request();
     const filters = ['valid_bl = 1', 'latitude IS NOT NULL', 'longitude IS NOT NULL',
@@ -53,6 +56,7 @@ module.exports = async (req, res) => {
     `);
 
     const pontos = result.recordset;
+    console.log('[banco-ativos-mapa] retornando', pontos.length, 'pontos para cidade:', cidade);
 
     const stats = {
       total_pontos:    pontos.length,

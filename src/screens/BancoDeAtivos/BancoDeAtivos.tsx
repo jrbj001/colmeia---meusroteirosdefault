@@ -254,18 +254,24 @@ export const BancoDeAtivos: React.FC = () => {
   // Aceita `ambienteParam` para evitar stale closure quando o filtro muda e
   // a função é chamada no mesmo ciclo de render (antes do re-render com novo valor)
   const carregarPontosCidade = React.useCallback((cidade: string, ambienteParam?: string) => {
+    console.log('[carregarPontosCidade] buscando:', cidade, '| ambiente:', ambienteParam ?? filtroAmbiente);
     setLoadingPontos(true);
+    setPontos([]);
     setPontoSelecionado(null);
     const ambiente = ambienteParam ?? filtroAmbiente;
     const params: Record<string, string> = { cidade };
     if (ambiente !== 'todos') params.tipo_ambiente = ambiente;
     api.get('/banco-ativos-mapa', { params })
-      .then(res => { if (res.data.success) setPontos(res.data.data); })
-      .catch(err => console.error('Erro ao carregar pontos:', err))
+      .then(res => {
+        console.log('[carregarPontosCidade] resposta:', res.data.success, '| pontos:', res.data.data?.length);
+        if (res.data.success) setPontos(res.data.data);
+      })
+      .catch(err => console.error('[carregarPontosCidade] erro:', err))
       .finally(() => setLoadingPontos(false));
   }, [filtroAmbiente]);
 
   const handleClickCidade = React.useCallback((city: CityBubble) => {
+    console.log('[handleClickCidade] cidade:', city.cidade, '| lat:', city.lat, '| lon:', city.lon);
     setCidadeSelecionada(city);
     setPontoSelecionado(null);
     setHoveredCity(null);
@@ -627,7 +633,8 @@ export const BancoDeAtivos: React.FC = () => {
                       [p.latitude_min_vl, p.longitude_min_vl],
                       [p.latitude_max_vl, p.longitude_max_vl],
                     ]}
-                    pathOptions={style}
+                    pathOptions={{ ...style, interactive: true }}
+                    bubblingMouseEvents={false}
                     eventHandlers={{
                       mouseover: () => setHoveredCity({
                         cidade_st: p.cidade_st,
@@ -639,7 +646,10 @@ export const BancoDeAtivos: React.FC = () => {
                         total_impactos: city?.total_impactos ?? 0,
                       }),
                       mouseout: () => setHoveredCity(null),
-                      click: () => handleClickCidade(cityParaClick),
+                      click: () => {
+                        console.log('[Rectangle click] cidade:', p.cidade_st, '| cityParaClick:', cityParaClick.cidade);
+                        handleClickCidade(cityParaClick);
+                      },
                     }}
                   />
                 );
@@ -681,12 +691,15 @@ export const BancoDeAtivos: React.FC = () => {
                 <AjustarMapaBrasil cidades={centroidsFiltrados} />
               )}
 
-              {/* City drill-down: clustered points */}
-              {cidadeSelecionada && !loadingPontos && pontos.length > 0 && (
-                <>
-                  <FlyToCity lat={cidadeSelecionada.lat} lon={cidadeSelecionada.lon} />
-                  <MarkerClusterLayer pontos={pontos} onSelect={setPontoSelecionado} />
-                </>
+              {/* Fly to city imediatamente ao selecionar — sem esperar pelos pontos */}
+              {cidadeSelecionada && (
+                <FlyToCity lat={cidadeSelecionada.lat} lon={cidadeSelecionada.lon} />
+              )}
+
+              {/* MarkerClusterLayer sempre montado quando há cidade selecionada;
+                  renderiza vazio enquanto carrega e atualiza sozinho quando pontos chegam */}
+              {cidadeSelecionada && (
+                <MarkerClusterLayer pontos={pontos} onSelect={setPontoSelecionado} />
               )}
             </MapContainer>
                   </div>

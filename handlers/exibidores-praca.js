@@ -7,7 +7,7 @@ module.exports = async (req, res) => {
 
   try {
     const pool    = await getPool();
-    const search  = req.query.search?.trim() || '';
+    const search  = (req.query.search || '').replace(/\+/g, ' ').trim();
     const request = pool.request();
 
     let where = 'WHERE valid_bl = 1 AND exibidor_st IS NOT NULL';
