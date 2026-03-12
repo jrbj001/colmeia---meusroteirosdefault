@@ -286,12 +286,17 @@ export const BancoDeAtivos: React.FC = () => {
   const showBrazilView = !cidadeSelecionada;
   const maxPontos = React.useMemo(() => Math.max(...centroids.map(c => c.total_pontos), 1), [centroids]);
 
-  // Map cidade_st → centroid for quick lookup
+  // Map cidade_st → centroid para lookup rápido
+  // Chave normalizada (trim + lowercase) para tolerar diferenças de case/espaços entre as duas queries
   const centroidMap = React.useMemo(() => {
     const m = new Map<string, CityBubble>();
-    centroids.forEach(c => m.set(c.cidade, c));
+    centroids.forEach(c => m.set((c.cidade ?? '').trim().toLowerCase(), c));
     return m;
   }, [centroids]);
+
+  const getCentroid = React.useCallback((nome: string): CityBubble | undefined => {
+    return centroidMap.get((nome ?? '').trim().toLowerCase());
+  }, [centroidMap]);
 
   const centroidsFiltrados = React.useMemo(() => {
     if (filtroAmbiente === 'todos') return centroids;
@@ -597,9 +602,9 @@ export const BancoDeAtivos: React.FC = () => {
 
               {/* Choropleth perimeters — sempre visíveis */}
               {perimetros.map(p => {
-                const city = centroidMap.get(p.cidade_st);
+                const city = getCentroid(p.cidade_st);
                 const totalPontos = city?.total_pontos ?? 0;
-                const isSelecionada = cidadeSelecionada?.cidade === p.cidade_st;
+                const isSelecionada = (cidadeSelecionada?.cidade ?? '').trim().toLowerCase() === (p.cidade_st ?? '').trim().toLowerCase();
                 const style = choroplethStyle(totalPontos, maxPontos, isSelecionada);
                 return (
                   <Rectangle

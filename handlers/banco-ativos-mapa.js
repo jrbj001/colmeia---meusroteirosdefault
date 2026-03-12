@@ -22,9 +22,9 @@ module.exports = async (req, res) => {
     }
 
     if (cidade) {
-      // Exact match: evita trazer pontos de cidades com nome semelhante (ex: "Santos" != "Santos Dumont")
-      request.input('cidade', sql.NVarChar, cidade);
-      filters.push('cidade_st = @cidade');
+      // LTRIM/RTRIM nos dois lados: evita falhas por espaços no banco
+      request.input('cidade', sql.NVarChar, cidade.trim());
+      filters.push('LTRIM(RTRIM(cidade_st)) = @cidade');
     }
 
     const where = filters.map(f => `(${f})`).join(' AND ');
