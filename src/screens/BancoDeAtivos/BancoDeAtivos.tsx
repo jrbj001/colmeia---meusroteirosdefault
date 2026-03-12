@@ -251,11 +251,14 @@ export const BancoDeAtivos: React.FC = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  const carregarPontosCidade = React.useCallback((cidade: string) => {
+  // Aceita `ambienteParam` para evitar stale closure quando o filtro muda e
+  // a função é chamada no mesmo ciclo de render (antes do re-render com novo valor)
+  const carregarPontosCidade = React.useCallback((cidade: string, ambienteParam?: string) => {
     setLoadingPontos(true);
     setPontoSelecionado(null);
+    const ambiente = ambienteParam ?? filtroAmbiente;
     const params: Record<string, string> = { cidade };
-    if (filtroAmbiente !== 'todos') params.tipo_ambiente = filtroAmbiente;
+    if (ambiente !== 'todos') params.tipo_ambiente = ambiente;
     api.get('/banco-ativos-mapa', { params })
       .then(res => { if (res.data.success) setPontos(res.data.data); })
       .catch(err => console.error('Erro ao carregar pontos:', err))
@@ -422,7 +425,7 @@ export const BancoDeAtivos: React.FC = () => {
                     {(['todos', 'vias_publicas', 'indoor'] as const).map(opt => (
                       <button
                         key={opt}
-                        onClick={() => { setFiltroAmbiente(opt); if (cidadeSelecionada) carregarPontosCidade(cidadeSelecionada.cidade); }}
+                        onClick={() => { setFiltroAmbiente(opt); if (cidadeSelecionada) carregarPontosCidade(cidadeSelecionada.cidade, opt); }}
                         className={`flex-1 text-[10px] py-1.5 rounded-lg font-medium transition ${
                           filtroAmbiente === opt
                             ? 'bg-[#ff4600] text-white shadow'

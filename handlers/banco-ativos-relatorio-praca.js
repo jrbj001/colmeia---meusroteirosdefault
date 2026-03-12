@@ -19,8 +19,8 @@ module.exports = async (req, res) => {
         SELECT
           ISNULL(exibidor_st, 'Sem exibidor')                              AS exibidor_nome,
           COUNT(*)                                                          AS total,
-          SUM(CASE WHEN environment_st = 'Public'  THEN 1 ELSE 0 END)     AS pontos_vias_publicas,
-          SUM(CASE WHEN environment_st = 'Indoor'  THEN 1 ELSE 0 END)     AS pontos_indoor,
+          SUM(CASE WHEN UPPER(environment_st) = 'PUBLIC' THEN 1 ELSE 0 END) AS pontos_vias_publicas,
+          SUM(CASE WHEN UPPER(environment_st) = 'INDOOR' THEN 1 ELSE 0 END) AS pontos_indoor,
           AVG(ISNULL(CAST(pedestrian_flow  AS FLOAT), 0))                 AS fluxo_medio_passantes,
           SUM(ISNULL(CAST(total_ipv_impact AS FLOAT), 0))                 AS total_impacto_ipv,
           (

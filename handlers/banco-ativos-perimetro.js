@@ -31,6 +31,7 @@ module.exports = async (req, res) => {
         HAVING
           MIN(CAST(latitude  AS FLOAT)) != MAX(CAST(latitude  AS FLOAT))
           AND MIN(CAST(longitude AS FLOAT)) != MAX(CAST(longitude AS FLOAT))
+        ORDER BY cidade_st
       `);
 
       return res.status(200).json({ success: true, data: result.recordset });

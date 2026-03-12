@@ -16,14 +16,15 @@ module.exports = async (req, res) => {
                      'CAST(latitude AS FLOAT) != 0', 'CAST(longitude AS FLOAT) != 0'];
 
     if (tipo_ambiente === 'indoor') {
-      filters.push("environment_st = 'Indoor'");
+      filters.push("UPPER(environment_st) = 'INDOOR'");
     } else if (tipo_ambiente === 'vias_publicas') {
-      filters.push("environment_st = 'Public'");
+      filters.push("UPPER(environment_st) = 'PUBLIC'");
     }
 
     if (cidade) {
-      request.input('cidade', sql.NVarChar, `%${cidade}%`);
-      filters.push('cidade_st LIKE @cidade');
+      // Exact match: evita trazer pontos de cidades com nome semelhante (ex: "Santos" != "Santos Dumont")
+      request.input('cidade', sql.NVarChar, cidade);
+      filters.push('cidade_st = @cidade');
     }
 
     const where = filters.map(f => `(${f})`).join(' AND ');

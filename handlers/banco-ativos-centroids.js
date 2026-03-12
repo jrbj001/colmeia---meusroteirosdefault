@@ -10,8 +10,8 @@ module.exports = async (req, res) => {
     const { tipo_ambiente } = req.query;
 
     let envFilter = '';
-    if (tipo_ambiente === 'indoor')       envFilter = "AND environment_st = 'Indoor'";
-    else if (tipo_ambiente === 'vias_publicas') envFilter = "AND environment_st = 'Public'";
+    if (tipo_ambiente === 'indoor')            envFilter = "AND UPPER(environment_st) = 'INDOOR'";
+    else if (tipo_ambiente === 'vias_publicas') envFilter = "AND UPPER(environment_st) = 'PUBLIC'";
 
     const result = await pool.request().query(`
       SELECT
@@ -22,8 +22,8 @@ module.exports = async (req, res) => {
         COUNT(*)                                                     AS total_pontos,
         SUM(ISNULL(CAST(pedestrian_flow  AS FLOAT), 0))             AS total_passantes,
         SUM(ISNULL(CAST(total_ipv_impact AS FLOAT), 0))             AS total_impactos,
-        SUM(CASE WHEN environment_st = 'Public'  THEN 1 ELSE 0 END) AS pontos_public,
-        SUM(CASE WHEN environment_st = 'Indoor'  THEN 1 ELSE 0 END) AS pontos_indoor
+        SUM(CASE WHEN UPPER(environment_st) = 'PUBLIC' THEN 1 ELSE 0 END) AS pontos_public,
+        SUM(CASE WHEN UPPER(environment_st) = 'INDOOR' THEN 1 ELSE 0 END) AS pontos_indoor
       FROM [serv_product_be180].[bancoAtivosJoin_ft]
       WHERE valid_bl = 1
         AND latitude  IS NOT NULL AND CAST(latitude  AS FLOAT) != 0

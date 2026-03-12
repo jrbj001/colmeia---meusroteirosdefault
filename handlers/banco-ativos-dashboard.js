@@ -14,13 +14,13 @@ module.exports = async (req, res) => {
         COUNT(DISTINCT cidade_st)                                           AS total_pracas,
         COUNT(DISTINCT exibidor_st)                                         AS total_exibidores,
 
-        SUM(CASE WHEN environment_st = 'Public'  THEN 1 ELSE 0 END)        AS vias_publicas_pontos_midia,
-        COUNT(DISTINCT CASE WHEN environment_st = 'Public'  THEN cidade_st  END) AS vias_publicas_pracas,
-        COUNT(DISTINCT CASE WHEN environment_st = 'Public'  THEN exibidor_st END) AS vias_publicas_exibidores,
+        SUM(CASE WHEN UPPER(environment_st) = 'PUBLIC'  THEN 1 ELSE 0 END)        AS vias_publicas_pontos_midia,
+        COUNT(DISTINCT CASE WHEN UPPER(environment_st) = 'PUBLIC'  THEN cidade_st  END) AS vias_publicas_pracas,
+        COUNT(DISTINCT CASE WHEN UPPER(environment_st) = 'PUBLIC'  THEN exibidor_st END) AS vias_publicas_exibidores,
 
-        SUM(CASE WHEN environment_st = 'Indoor'  THEN 1 ELSE 0 END)        AS indoor_pontos_midia,
-        COUNT(DISTINCT CASE WHEN environment_st = 'Indoor'  THEN cidade_st  END) AS indoor_pracas,
-        COUNT(DISTINCT CASE WHEN environment_st = 'Indoor'  THEN exibidor_st END) AS indoor_exibidores
+        SUM(CASE WHEN UPPER(environment_st) = 'INDOOR'  THEN 1 ELSE 0 END)        AS indoor_pontos_midia,
+        COUNT(DISTINCT CASE WHEN UPPER(environment_st) = 'INDOOR'  THEN cidade_st  END) AS indoor_pracas,
+        COUNT(DISTINCT CASE WHEN UPPER(environment_st) = 'INDOOR'  THEN exibidor_st END) AS indoor_exibidores
       FROM [serv_product_be180].[bancoAtivosJoin_ft]
       WHERE valid_bl = 1
     `);
