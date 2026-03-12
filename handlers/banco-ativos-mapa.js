@@ -22,9 +22,8 @@ module.exports = async (req, res) => {
     }
 
     if (cidade) {
-      // LTRIM/RTRIM nos dois lados: evita falhas por espaços no banco
-      request.input('cidade', sql.NVarChar, cidade.trim());
-      filters.push('LTRIM(RTRIM(cidade_st)) = @cidade');
+      request.input('cidade', sql.NVarChar, `%${cidade.trim()}%`);
+      filters.push('cidade_st LIKE @cidade');
     }
 
     const where = filters.map(f => `(${f})`).join(' AND ');

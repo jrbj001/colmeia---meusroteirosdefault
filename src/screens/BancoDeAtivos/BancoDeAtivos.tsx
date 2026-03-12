@@ -313,13 +313,13 @@ export const BancoDeAtivos: React.FC = () => {
 
   // ── Render ─────────────────────────────────────────────────────────
 
-  return (
-    <div className="min-h-screen bg-white flex font-sans">
-      <Sidebar menuReduzido={menuReduzido} setMenuReduzido={setMenuReduzido} />
+    return (
+      <div className="min-h-screen bg-white flex font-sans">
+        <Sidebar menuReduzido={menuReduzido} setMenuReduzido={setMenuReduzido} />
       <div className={`fixed top-0 z-20 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? 'left-20' : 'left-64'}`} />
       <div className={`flex-1 transition-all duration-300 min-h-screen w-full ${menuReduzido ? 'ml-20' : 'ml-64'} flex flex-col`}>
-        <Topbar
-          menuReduzido={menuReduzido}
+          <Topbar 
+            menuReduzido={menuReduzido} 
           breadcrumbItems={[
             { label: 'Home', path: '/' },
             { label: 'Banco de Ativos' },
@@ -349,8 +349,8 @@ export const BancoDeAtivos: React.FC = () => {
               <div className="flex items-center gap-1.5">
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="4" cy="4" r="1.2" fill="#aaa"/><circle cx="10" cy="4" r="1.2" fill="#aaa"/><circle cx="4" cy="10" r="1.2" fill="#aaa"/><circle cx="10" cy="10" r="1.2" fill="#aaa"/></svg>
                 <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Banco de Ativos</span>
-              </div>
-              <button
+                </div>
+                <button
                 onMouseDown={e => e.stopPropagation()}
                 onClick={() => setPainelColapsado(v => !v)}
                 className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-200 transition"
@@ -361,9 +361,9 @@ export const BancoDeAtivos: React.FC = () => {
                     : <path d="M2 4L6 8L10 4" stroke="#888" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   }
                 </svg>
-              </button>
+                </button>
             </div>
-
+            
             {/* Panel Content */}
             <div
               className="flex flex-col overflow-y-auto"
@@ -383,43 +383,43 @@ export const BancoDeAtivos: React.FC = () => {
                       <span className="text-[10px] uppercase tracking-wide font-semibold text-gray-500">Total Geral</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-center">
-                      <div>
+                <div>
                         <div className="text-lg font-bold text-gray-800">{fmt(dados.total.pontos_midia)}</div>
                         <div className="text-[9px] text-gray-400 uppercase">Pontos</div>
-                      </div>
+                    </div>
                       <div>
                         <div className="text-lg font-bold text-gray-800">{fmt(dados.total.pracas)}</div>
                         <div className="text-[9px] text-gray-400 uppercase">Praças</div>
-                      </div>
+                    </div>
                       <div>
                         <div className="text-lg font-bold text-gray-800">{fmt(dados.total.exibidores)}</div>
                         <div className="text-[9px] text-gray-400 uppercase">Exibidores</div>
-                      </div>
                     </div>
                   </div>
+                </div>
                 )}
 
                 {/* Card: VP vs Indoor */}
                 {dados && (
                   <div className="rounded-xl border-2 border-gray-200 bg-white p-3">
                     <div className="grid grid-cols-2 gap-3">
-                      <div>
+                <div>
                         <div className="flex items-center gap-1 mb-1.5">
                           <span className="w-2 h-2 rounded-full bg-blue-500" />
                           <span className="text-[9px] uppercase tracking-wide font-semibold text-gray-500">Vias Públicas</span>
-                        </div>
+                    </div>
                         <div className="text-sm font-bold text-blue-600">{fmt(dados.vias_publicas.pontos_midia)}</div>
                         <div className="text-[9px] text-gray-400">{fmt(dados.vias_publicas.pracas)} praças · {fmt(dados.vias_publicas.exibidores)} exib.</div>
-                      </div>
+                    </div>
                       <div>
                         <div className="flex items-center gap-1 mb-1.5">
                           <span className="w-2 h-2 rounded-full bg-orange-500" />
                           <span className="text-[9px] uppercase tracking-wide font-semibold text-gray-500">Indoor</span>
-                        </div>
+                    </div>
                         <div className="text-sm font-bold text-orange-600">{fmt(dados.indoor.pontos_midia)}</div>
                         <div className="text-[9px] text-gray-400">{fmt(dados.indoor.pracas)} praças · {fmt(dados.indoor.exibidores)} exib.</div>
-                      </div>
-                    </div>
+                  </div>
+                </div>
                   </div>
                 )}
 
@@ -440,7 +440,7 @@ export const BancoDeAtivos: React.FC = () => {
                         {opt === 'todos' ? 'Todos' : opt === 'vias_publicas' ? 'VP' : 'Indoor'}
                       </button>
                     ))}
-                  </div>
+                    </div>
                   {cidadeSelecionada && (
                     <button
                       onClick={voltarBrasil}
@@ -449,7 +449,7 @@ export const BancoDeAtivos: React.FC = () => {
                       ← Voltar para visão Brasil
                     </button>
                   )}
-                </div>
+                    </div>
 
                 {/* Card: Cidade Selecionada */}
                 {cidadeSelecionada && (
@@ -460,9 +460,9 @@ export const BancoDeAtivos: React.FC = () => {
                         <span className="text-[10px] uppercase tracking-wide font-semibold text-[#ff4600]">
                           {cidadeSelecionada.cidade}{cidadeSelecionada.estado ? `/${cidadeSelecionada.estado}` : ''}
                         </span>
-                      </div>
-                      <button onClick={voltarBrasil} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
                     </div>
+                      <button onClick={voltarBrasil} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+                  </div>
                     {loadingPontos ? (
                       <div className="flex items-center justify-center py-4">
                         <div className="w-5 h-5 border-2 border-gray-200 border-t-[#ff4600] rounded-full animate-spin" />
@@ -480,11 +480,11 @@ export const BancoDeAtivos: React.FC = () => {
                         <div>
                           <div className="text-sm font-bold text-gray-800">{fmt(cidadeSelecionada.total_impactos)}</div>
                           <div className="text-[9px] text-gray-400">Impactos</div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                </div>
+              </div>
+            )}
+              </div>
+            )}
 
                 {/* Card: Ponto Selecionado */}
                 {pontoSelecionado && (
@@ -492,7 +492,7 @@ export const BancoDeAtivos: React.FC = () => {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[10px] uppercase tracking-wide font-semibold text-gray-500">Detalhe do Ponto</span>
                       <button onClick={() => setPontoSelecionado(null)} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
-                    </div>
+                </div>
                     <div className="space-y-1.5 text-xs">
                       {pontoSelecionado.code && (
                         <div className="flex justify-between"><span className="text-gray-400">Código</span><span className="font-medium text-gray-700">{pontoSelecionado.code}</span></div>
@@ -502,7 +502,7 @@ export const BancoDeAtivos: React.FC = () => {
                       <div className="flex justify-between"><span className="text-gray-400">Ambiente</span>
                         <span className={`font-medium ${(pontoSelecionado.ambiente || '').toUpperCase().includes('PUBLIC') ? 'text-blue-600' : 'text-orange-600'}`}>
                           {(pontoSelecionado.ambiente || '').toUpperCase().includes('PUBLIC') ? 'Vias Públicas' : 'Indoor'}
-                        </span>
+                          </span>
                       </div>
                       <div className="flex justify-between"><span className="text-gray-400">Cidade</span><span className="font-medium text-gray-700">{pontoSelecionado.cidade || '-'}</span></div>
                       {pontoSelecionado.bairro && pontoSelecionado.bairro !== 'Não informado' && (
@@ -516,18 +516,18 @@ export const BancoDeAtivos: React.FC = () => {
                         <div>
                           <div className="text-sm font-bold text-gray-800">{fmt(pontoSelecionado.passantes || 0)}</div>
                           <div className="text-[8px] text-gray-400 uppercase">Passantes</div>
-                        </div>
+                            </div>
                         <div>
                           <div className="text-sm font-bold text-gray-800">{fmt(pontoSelecionado.impactos_ipv || 0)}</div>
                           <div className="text-[8px] text-gray-400 uppercase">Impactos</div>
-                        </div>
+                            </div>
                         <div>
                           <div className="text-sm font-bold text-gray-800">{pontoSelecionado.rating || '-'}</div>
                           <div className="text-[8px] text-gray-400 uppercase">Rating</div>
                         </div>
-                      </div>
+                          </div>
+                        </div>
                     </div>
-                  </div>
                 )}
 
                 {loading && (
@@ -535,9 +535,9 @@ export const BancoDeAtivos: React.FC = () => {
                     <div className="w-8 h-8 border-3 border-gray-200 border-t-[#ff4600] rounded-full animate-spin" />
                   </div>
                 )}
-              </div>
-            </div>
-          </div>
+                    </div>
+                    </div>
+                    </div>
 
           {/* ── Hover Card (cidade em hover no perimetro) ── */}
           {hoveredCity && !cidadeSelecionada && (
@@ -554,21 +554,21 @@ export const BancoDeAtivos: React.FC = () => {
             >
               <div className="text-[11px] font-bold text-gray-800 mb-2">
                 {hoveredCity.cidade_st}{hoveredCity.estado_st ? ` / ${hoveredCity.estado_st}` : ''}
-              </div>
+                    </div>
               <div className="grid grid-cols-3 gap-2 text-center mb-2">
-                <div>
+                    <div>
                   <div className="text-sm font-bold text-[#ff4600]">{fmt(hoveredCity.total_pontos)}</div>
                   <div className="text-[8px] text-gray-400 uppercase">Pontos</div>
-                </div>
-                <div>
+                    </div>
+                    <div>
                   <div className="text-sm font-bold text-blue-600">{fmt(hoveredCity.pontos_public)}</div>
                   <div className="text-[8px] text-gray-400 uppercase">VP</div>
-                </div>
-                <div>
+                    </div>
+                    <div>
                   <div className="text-sm font-bold text-orange-500">{fmt(hoveredCity.pontos_indoor)}</div>
                   <div className="text-[8px] text-gray-400 uppercase">Indoor</div>
-                </div>
-              </div>
+                    </div>
+                  </div>
               {hoveredCity.total_passantes > 0 && (
                 <div className="flex justify-between text-[10px]">
                   <span className="text-gray-400">Passantes</span>
@@ -606,6 +606,20 @@ export const BancoDeAtivos: React.FC = () => {
                 const totalPontos = city?.total_pontos ?? 0;
                 const isSelecionada = (cidadeSelecionada?.cidade ?? '').trim().toLowerCase() === (p.cidade_st ?? '').trim().toLowerCase();
                 const style = choroplethStyle(totalPontos, maxPontos, isSelecionada);
+
+                // CityBubble garantido: usa centroid se disponível, senão usa coords do próprio perimetro
+                const cityParaClick: CityBubble = city ?? {
+                  cidade: p.cidade_st,
+                  estado: p.estado_st ?? '',
+                  lat: Number(p.latitude_center_vl) || -15.78,
+                  lon: Number(p.longitude_center_vl) || -47.93,
+                  total_pontos: 0,
+                  total_passantes: 0,
+                  total_impactos: 0,
+                  pontos_public: 0,
+                  pontos_indoor: 0,
+                };
+
                 return (
                   <Rectangle
                     key={p.cidade_st}
@@ -615,19 +629,17 @@ export const BancoDeAtivos: React.FC = () => {
                     ]}
                     pathOptions={style}
                     eventHandlers={{
-                      mouseover: () => {
-                        if (city) setHoveredCity({
-                          cidade_st: p.cidade_st,
-                          estado_st: p.estado_st,
-                          total_pontos: city.total_pontos,
-                          pontos_public: city.pontos_public,
-                          pontos_indoor: city.pontos_indoor,
-                          total_passantes: city.total_passantes,
-                          total_impactos: city.total_impactos,
-                        });
-                      },
+                      mouseover: () => setHoveredCity({
+                        cidade_st: p.cidade_st,
+                        estado_st: p.estado_st,
+                        total_pontos: city?.total_pontos ?? 0,
+                        pontos_public: city?.pontos_public ?? 0,
+                        pontos_indoor: city?.pontos_indoor ?? 0,
+                        total_passantes: city?.total_passantes ?? 0,
+                        total_impactos: city?.total_impactos ?? 0,
+                      }),
                       mouseout: () => setHoveredCity(null),
-                      click: () => { if (city) handleClickCidade(city); },
+                      click: () => handleClickCidade(cityParaClick),
                     }}
                   />
                 );
@@ -677,8 +689,8 @@ export const BancoDeAtivos: React.FC = () => {
                 </>
               )}
             </MapContainer>
-          </div>
-
+                  </div>
+                  
           {/* ── Legenda Choropleth ── */}
           <div style={{
             position: 'absolute', bottom: 48, right: 16, zIndex: 500,
@@ -687,30 +699,30 @@ export const BancoDeAtivos: React.FC = () => {
           }}>
             <div className="text-[9px] uppercase tracking-wide text-gray-400 font-semibold mb-2">
               {showBrazilView ? 'Densidade de Pontos' : 'Ambiente'}
-            </div>
+                                        </div>
             {showBrazilView ? (
               <div className="flex items-center gap-1">
                 {['#fed7aa','#fb923c','#f97316','#ea580c','#c2410c','#9a3412'].map((c, i) => (
                   <span key={i} style={{ width: 16, height: 10, borderRadius: 2, background: c, display: 'inline-block', opacity: 0.85 }} />
                 ))}
                 <span className="text-[9px] text-gray-400 ml-1">menos → mais</span>
-              </div>
-            ) : (
+                                      </div>
+                                    ) : (
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
                   <span className="text-[10px] text-gray-500">Vias Públicas</span>
-                </div>
+                                  </div>
                 <span style={{ width: 1, height: 14, background: '#e5e7eb', display: 'inline-block' }} />
                 <div className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-orange-500" />
                   <span className="text-[10px] text-gray-500">Indoor</span>
-                </div>
+                                </div>
                 <span style={{ width: 1, height: 14, background: '#e5e7eb', display: 'inline-block' }} />
                 <span className="text-[10px] text-gray-500 font-medium">{fmt(pontos.length)} pontos</span>
               </div>
             )}
-          </div>
+                    </div>
 
           {/* Loading overlay */}
           {loadingPontos && (
@@ -718,11 +730,11 @@ export const BancoDeAtivos: React.FC = () => {
               <div className="flex flex-col items-center gap-2">
                 <div className="w-10 h-10 border-4 border-gray-200 border-t-[#ff4600] rounded-full animate-spin" />
                 <span className="text-sm text-gray-500">Carregando pontos...</span>
+                </div>
               </div>
-            </div>
-          )}
+            )}
         </div>
-
+        
         {/* ── Footer ── */}
         <div className={`fixed bottom-0 z-[600] pointer-events-none transition-all duration-300 ${menuReduzido ? 'left-20 w-[calc(100%-5rem)]' : 'left-64 w-[calc(100%-16rem)]'}`}>
           <footer className="w-full border-t border-[#e5e5e5] px-4 py-2 text-center text-[10px] italic text-[#b0b0b0] tracking-wide bg-white pointer-events-none">
