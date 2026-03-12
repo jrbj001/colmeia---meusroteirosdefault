@@ -56,7 +56,60 @@ interface Perimetro {
   longitude_center_vl: number;
 }
 
+interface HoveredCity {
+  cidade_st: string;
+  estado_st?: string;
+  total_pontos: number;
+  pontos_public: number;
+  pontos_indoor: number;
+  total_passantes: number;
+  total_impactos: number;
+}
+
+// ── Choropleth helpers ─────────────────────────────────────────────────
+
+function choroplethStyle(pontos: number, maxPontos: number, isSelecionada: boolean) {
+  if (isSelecionada) {
+    return { color: '#ff4600', weight: 3, opacity: 1, fillColor: '#ff4600', fillOpacity: 0.15, dashArray: undefined };
+  }
+  if (maxPontos <= 0 || pontos <= 0) {
+    return { color: '#94a3b8', weight: 1, opacity: 0.4, fillColor: '#94a3b8', fillOpacity: 0.03, dashArray: '4 3' };
+  }
+  const ratio = Math.log(pontos + 1) / Math.log(maxPontos + 1);
+
+  let fillColor: string;
+  let fillOpacity: number;
+  if (ratio < 0.15) { fillColor = '#fed7aa'; fillOpacity = 0.18; }
+  else if (ratio < 0.30) { fillColor = '#fb923c'; fillOpacity = 0.22; }
+  else if (ratio < 0.50) { fillColor = '#f97316'; fillOpacity = 0.28; }
+  else if (ratio < 0.70) { fillColor = '#ea580c'; fillOpacity = 0.34; }
+  else if (ratio < 0.85) { fillColor = '#c2410c'; fillOpacity = 0.40; }
+  else                    { fillColor = '#9a3412'; fillOpacity = 0.48; }
+
+  const borderOpacity = 0.45 + ratio * 0.45;
+  return {
+    color: fillColor,
+    weight: 1.5,
+    opacity: borderOpacity,
+    fillColor,
+    fillOpacity,
+    dashArray: undefined,
+  };
+}
+
 // ── Map helpers ────────────────────────────────────────────────────────
+
+function ZoomTracker({ onZoom }: { onZoom: (z: number) => void }) {
+  const map = useMap();
+  React.useEffect(() => {
+    onZoom(map.getZoom());
+    const handler = () => onZoom(map.getZoom());
+    map.on('zoomend', handler);
+    return () => { map.off('zoomend', handler); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map]);
+  return null;
+}
 
 function AjustarMapaBrasil({ cidades }: { cidades: CityBubble[] }) {
   const map = useMap();
@@ -87,9 +140,7 @@ function MarkerClusterLayer({ pontos, onSelect }: { pontos: PontoMidia[]; onSele
   const clusterRef = React.useRef<L.MarkerClusterGroup | null>(null);
 
   React.useEffect(() => {
-    if (clusterRef.current) {
-      map.removeLayer(clusterRef.current);
-    }
+    if (clusterRef.current) map.removeLayer(clusterRef.current);
     // @ts-ignore
     const cluster = L.markerClusterGroup({
       maxClusterRadius: 50,
@@ -98,7 +149,7 @@ function MarkerClusterLayer({ pontos, onSelect }: { pontos: PontoMidia[]; onSele
       iconCreateFunction: (c: any) => {
         const count = c.getChildCount();
         return L.divIcon({
-          html: `<div style="background:#ff4600;color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.25)">${count > 999 ? Math.round(count/1000)+'k' : count}</div>`,
+          html: `<div style="background:#ff4600;color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.25)">${count > 999 ? Math.round(count / 1000) + 'k' : count}</div>`,
           className: '',
           iconSize: [36, 36],
         });
@@ -110,11 +161,7 @@ function MarkerClusterLayer({ pontos, onSelect }: { pontos: PontoMidia[]; onSele
       const isPublic = (p.ambiente || '').toUpperCase().includes('PUBLIC');
       const color = isPublic ? '#3b82f6' : '#f97316';
       const marker = L.circleMarker([Number(p.latitude), Number(p.longitude)], {
-        radius: 5,
-        fillColor: color,
-        color: '#fff',
-        weight: 1.5,
-        fillOpacity: 0.85,
+        radius: 5, fillColor: color, color: '#fff', weight: 1.5, fillOpacity: 0.85,
       });
       marker.on('click', () => onSelect(p));
       cluster.addLayer(marker);
@@ -122,10 +169,7 @@ function MarkerClusterLayer({ pontos, onSelect }: { pontos: PontoMidia[]; onSele
 
     map.addLayer(cluster);
     clusterRef.current = cluster;
-
-    return () => {
-      if (clusterRef.current) map.removeLayer(clusterRef.current);
-    };
+    return () => { if (clusterRef.current) map.removeLayer(clusterRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pontos]);
 
@@ -134,14 +178,11 @@ function MarkerClusterLayer({ pontos, onSelect }: { pontos: PontoMidia[]; onSele
 
 // ── Formatters ─────────────────────────────────────────────────────────
 
-function fmt(n: number): string {
-  return n.toLocaleString('pt-BR');
-}
+function fmt(n: number): string { return n.toLocaleString('pt-BR'); }
 
 function bubbleRadius(total: number, max: number): number {
-  if (max <= 0) return 8;
-  const ratio = total / max;
-  return Math.max(6, Math.min(24, 6 + ratio * 18));
+  if (max <= 0) return 6;
+  return Math.max(4, Math.min(16, 4 + (total / max) * 12));
 }
 
 // ── Main Component ─────────────────────────────────────────────────────
@@ -153,14 +194,16 @@ export const BancoDeAtivos: React.FC = () => {
   const [dados, setDados] = React.useState<DashboardData | null>(null);
   const [centroids, setCentroids] = React.useState<CityBubble[]>([]);
   const [pontos, setPontos] = React.useState<PontoMidia[]>([]);
+  const [perimetros, setPerimetros] = React.useState<Perimetro[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [loadingPontos, setLoadingPontos] = React.useState(false);
 
   // Interaction
   const [cidadeSelecionada, setCidadeSelecionada] = React.useState<CityBubble | null>(null);
   const [pontoSelecionado, setPontoSelecionado] = React.useState<PontoMidia | null>(null);
-  const [perimetros, setPerimetros] = React.useState<Perimetro[]>([]);
   const [painelColapsado, setPainelColapsado] = React.useState(false);
+  const [zoom, setZoom] = React.useState(4);
+  const [hoveredCity, setHoveredCity] = React.useState<HoveredCity | null>(null);
 
   // Filters
   const [filtroAmbiente, setFiltroAmbiente] = React.useState<'todos' | 'vias_publicas' | 'indoor'>('todos');
@@ -213,7 +256,6 @@ export const BancoDeAtivos: React.FC = () => {
     setPontoSelecionado(null);
     const params: Record<string, string> = { cidade };
     if (filtroAmbiente !== 'todos') params.tipo_ambiente = filtroAmbiente;
-
     api.get('/banco-ativos-mapa', { params })
       .then(res => { if (res.data.success) setPontos(res.data.data); })
       .catch(err => console.error('Erro ao carregar pontos:', err))
@@ -223,18 +265,30 @@ export const BancoDeAtivos: React.FC = () => {
   const handleClickCidade = React.useCallback((city: CityBubble) => {
     setCidadeSelecionada(city);
     setPontoSelecionado(null);
+    setHoveredCity(null);
     carregarPontosCidade(city.cidade);
-  }, [carregarPontosCidade, perimetros]);
+  }, [carregarPontosCidade]);
 
   const voltarBrasil = React.useCallback(() => {
     setCidadeSelecionada(null);
     setPontos([]);
     setPontoSelecionado(null);
+    setHoveredCity(null);
   }, []);
 
-  // Derived
+  const handleZoom = React.useCallback((z: number) => setZoom(z), []);
+
+  // ── Derived ────────────────────────────────────────────────────────
+
   const showBrazilView = !cidadeSelecionada;
   const maxPontos = React.useMemo(() => Math.max(...centroids.map(c => c.total_pontos), 1), [centroids]);
+
+  // Map cidade_st → centroid for quick lookup
+  const centroidMap = React.useMemo(() => {
+    const m = new Map<string, CityBubble>();
+    centroids.forEach(c => m.set(c.cidade, c));
+    return m;
+  }, [centroids]);
 
   const centroidsFiltrados = React.useMemo(() => {
     if (filtroAmbiente === 'todos') return centroids;
@@ -242,6 +296,12 @@ export const BancoDeAtivos: React.FC = () => {
       filtroAmbiente === 'vias_publicas' ? c.pontos_public > 0 : c.pontos_indoor > 0
     );
   }, [centroids, filtroAmbiente]);
+
+  // Progressive disclosure thresholds
+  // zoom < 5  → only choropleth perimeters, no bubbles
+  // zoom 5-7  → perimeters + city bubbles (hover only, no labels)
+  // zoom >= 8 → city drill-down with clustered points
+  const showBubbles = showBrazilView && zoom >= 5;
 
   // ── Render ─────────────────────────────────────────────────────────
 
@@ -263,8 +323,7 @@ export const BancoDeAtivos: React.FC = () => {
 
           <style>{`
             .leaflet-top.leaflet-left .leaflet-control-zoom { display: none !important; }
-            .leaflet-praca-label { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; white-space: nowrap; }
-            .leaflet-praca-label::before { display: none !important; }
+            .leaflet-tooltip { pointer-events: none; }
           `}</style>
 
           {/* ── Floating Panel ── */}
@@ -463,7 +522,6 @@ export const BancoDeAtivos: React.FC = () => {
                   </div>
                 )}
 
-                {/* Loading state */}
                 {loading && (
                   <div className="flex items-center justify-center py-8">
                     <div className="w-8 h-8 border-3 border-gray-200 border-t-[#ff4600] rounded-full animate-spin" />
@@ -472,6 +530,52 @@ export const BancoDeAtivos: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* ── Hover Card (cidade em hover no perimetro) ── */}
+          {hoveredCity && !cidadeSelecionada && (
+            <div
+              className="absolute z-[490] rounded-xl shadow-xl pointer-events-none"
+              style={{
+                right: 60, top: 10,
+                background: 'rgba(255,255,255,0.97)',
+                backdropFilter: 'blur(8px)',
+                border: '1.5px solid rgba(0,0,0,0.08)',
+                minWidth: 200,
+                padding: '10px 14px',
+              }}
+            >
+              <div className="text-[11px] font-bold text-gray-800 mb-2">
+                {hoveredCity.cidade_st}{hoveredCity.estado_st ? ` / ${hoveredCity.estado_st}` : ''}
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center mb-2">
+                <div>
+                  <div className="text-sm font-bold text-[#ff4600]">{fmt(hoveredCity.total_pontos)}</div>
+                  <div className="text-[8px] text-gray-400 uppercase">Pontos</div>
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-blue-600">{fmt(hoveredCity.pontos_public)}</div>
+                  <div className="text-[8px] text-gray-400 uppercase">VP</div>
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-orange-500">{fmt(hoveredCity.pontos_indoor)}</div>
+                  <div className="text-[8px] text-gray-400 uppercase">Indoor</div>
+                </div>
+              </div>
+              {hoveredCity.total_passantes > 0 && (
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-gray-400">Passantes</span>
+                  <span className="font-semibold text-gray-700">{fmt(hoveredCity.total_passantes)}</span>
+                </div>
+              )}
+              {hoveredCity.total_impactos > 0 && (
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-gray-400">Impactos IPV</span>
+                  <span className="font-semibold text-gray-700">{fmt(hoveredCity.total_impactos)}</span>
+                </div>
+              )}
+              <div className="mt-2 text-[9px] text-gray-400 italic">Clique para ver os pontos</div>
+            </div>
+          )}
 
           {/* ── Map ── */}
           <div className="absolute inset-0" style={{ zIndex: 1 }}>
@@ -482,34 +586,74 @@ export const BancoDeAtivos: React.FC = () => {
               zoomControl={false}
             >
               <ZoomControl position="topright" />
+              <ZoomTracker onZoom={handleZoom} />
               <TileLayer
                 url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
               />
 
-              {/* Brazil Overview: city bubbles */}
-              {showBrazilView && centroidsFiltrados.map(city => (
+              {/* Choropleth perimeters — sempre visíveis */}
+              {perimetros.map(p => {
+                const city = centroidMap.get(p.cidade_st);
+                const totalPontos = city?.total_pontos ?? 0;
+                const isSelecionada = cidadeSelecionada?.cidade === p.cidade_st;
+                const style = choroplethStyle(totalPontos, maxPontos, isSelecionada);
+                return (
+                  <Rectangle
+                    key={p.cidade_st}
+                    bounds={[
+                      [p.latitude_min_vl, p.longitude_min_vl],
+                      [p.latitude_max_vl, p.longitude_max_vl],
+                    ]}
+                    pathOptions={style}
+                    eventHandlers={{
+                      mouseover: () => {
+                        if (city) setHoveredCity({
+                          cidade_st: p.cidade_st,
+                          estado_st: p.estado_st,
+                          total_pontos: city.total_pontos,
+                          pontos_public: city.pontos_public,
+                          pontos_indoor: city.pontos_indoor,
+                          total_passantes: city.total_passantes,
+                          total_impactos: city.total_impactos,
+                        });
+                      },
+                      mouseout: () => setHoveredCity(null),
+                      click: () => { if (city) handleClickCidade(city); },
+                    }}
+                  />
+                );
+              })}
+
+              {/* City bubbles — aparecem a partir do zoom 5 na visão Brasil */}
+              {showBubbles && centroidsFiltrados.map(city => (
                 <CircleMarker
                   key={city.cidade}
                   center={[city.lat, city.lon]}
                   radius={bubbleRadius(city.total_pontos, maxPontos)}
-                  pathOptions={{ color: '#ff4600', fillColor: '#ff4600', fillOpacity: 0.8, weight: 2, opacity: 1 }}
-                  eventHandlers={{ click: () => handleClickCidade(city) }}
+                  pathOptions={{ color: '#ff4600', fillColor: '#ff4600', fillOpacity: 0.75, weight: 1.5, opacity: 1 }}
+                  eventHandlers={{
+                    click: () => handleClickCidade(city),
+                    mouseover: () => setHoveredCity({
+                      cidade_st: city.cidade,
+                      estado_st: city.estado,
+                      total_pontos: city.total_pontos,
+                      pontos_public: city.pontos_public,
+                      pontos_indoor: city.pontos_indoor,
+                      total_passantes: city.total_passantes,
+                      total_impactos: city.total_impactos,
+                    }),
+                    mouseout: () => setHoveredCity(null),
+                  }}
                 >
-                  <Tooltip permanent direction="bottom" offset={[0, 12]} className="leaflet-praca-label">
-                    <span style={{ fontWeight: 700, fontSize: 10, color: '#222' }}>
-                      {city.cidade}{city.estado ? `/${city.estado}` : ''}
-                    </span>
-                  </Tooltip>
-                  <Tooltip direction="top" offset={[0, -16]} opacity={1}>
-                    <div style={{ fontSize: 11, lineHeight: 1.6 }}>
-                      <strong>{city.cidade}</strong><br />
-                      <span style={{ color: '#555' }}>{fmt(city.total_pontos)} pontos</span><br />
-                      <span style={{ color: '#3b82f6' }}>{fmt(city.pontos_public)} VP</span> · <span style={{ color: '#f97316' }}>{fmt(city.pontos_indoor)} Indoor</span><br />
-                      {city.total_passantes > 0 && <>{fmt(city.total_passantes)} passantes<br /></>}
-                      {city.total_impactos > 0 && <>{fmt(city.total_impactos)} impactos</>}
-                    </div>
-                  </Tooltip>
+                  {/* Tooltip compacto apenas com nome — só quando zoom >= 7 */}
+                  {zoom >= 7 && (
+                    <Tooltip permanent direction="bottom" offset={[0, 8]} className="leaflet-praca-label" opacity={0.85}>
+                      <span style={{ fontWeight: 600, fontSize: 9, color: '#444', letterSpacing: 0.2 }}>
+                        {city.cidade}
+                      </span>
+                    </Tooltip>
+                  )}
                 </CircleMarker>
               ))}
 
@@ -517,80 +661,50 @@ export const BancoDeAtivos: React.FC = () => {
                 <AjustarMapaBrasil cidades={centroidsFiltrados} />
               )}
 
-              {/* City drill-down: clustered points + perimetro */}
+              {/* City drill-down: clustered points */}
               {cidadeSelecionada && !loadingPontos && pontos.length > 0 && (
                 <>
                   <FlyToCity lat={cidadeSelecionada.lat} lon={cidadeSelecionada.lon} />
                   <MarkerClusterLayer pontos={pontos} onSelect={setPontoSelecionado} />
                 </>
               )}
-
-              {/* Perimetros de todas as cidades */}
-              {perimetros.map(p => {
-                const isSelecionada = cidadeSelecionada?.cidade === p.cidade_st;
-                return (
-                  <Rectangle
-                    key={p.city_id ?? p.cidade_st}
-                    bounds={[
-                      [p.latitude_min_vl,  p.longitude_min_vl],
-                      [p.latitude_max_vl,  p.longitude_max_vl],
-                    ]}
-                    pathOptions={isSelecionada ? {
-                      color: '#ff4600',
-                      weight: 3,
-                      opacity: 1,
-                      fillColor: '#ff4600',
-                      fillOpacity: 0.10,
-                      dashArray: undefined,
-                    } : {
-                      color: '#475569',
-                      weight: 1.5,
-                      opacity: 0.7,
-                      fillColor: '#334155',
-                      fillOpacity: 0.04,
-                      dashArray: '5 4',
-                    }}
-                    eventHandlers={{
-                      click: () => {
-                        const city = centroids.find(c => c.cidade === p.cidade_st);
-                        if (city) handleClickCidade(city);
-                      },
-                    }}
-                  >
-                    <Tooltip sticky>
-                      <span style={{ fontSize: 11, fontWeight: 600 }}>{p.cidade_st}{p.estado_st ? `/${p.estado_st}` : ''}</span>
-                    </Tooltip>
-                  </Rectangle>
-                );
-              })}
             </MapContainer>
           </div>
 
-          {/* ── Mini Legend ── */}
+          {/* ── Legenda Choropleth ── */}
           <div style={{
             position: 'absolute', bottom: 48, right: 16, zIndex: 500,
-            background: 'rgba(255,255,255,0.95)', borderRadius: 8,
-            padding: '6px 12px', boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
-            display: 'flex', alignItems: 'center', gap: 12,
+            background: 'rgba(255,255,255,0.95)', borderRadius: 10,
+            padding: '8px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
           }}>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-              <span className="text-[10px] text-gray-500">Vias Públicas</span>
+            <div className="text-[9px] uppercase tracking-wide text-gray-400 font-semibold mb-2">
+              {showBrazilView ? 'Densidade de Pontos' : 'Ambiente'}
             </div>
-            <span style={{ width: 1, height: 16, background: '#e5e7eb' }} />
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-orange-500" />
-              <span className="text-[10px] text-gray-500">Indoor</span>
-            </div>
-            {!showBrazilView && pontos.length > 0 && (
-              <>
-                <span style={{ width: 1, height: 16, background: '#e5e7eb' }} />
+            {showBrazilView ? (
+              <div className="flex items-center gap-1">
+                {['#fed7aa','#fb923c','#f97316','#ea580c','#c2410c','#9a3412'].map((c, i) => (
+                  <span key={i} style={{ width: 16, height: 10, borderRadius: 2, background: c, display: 'inline-block', opacity: 0.85 }} />
+                ))}
+                <span className="text-[9px] text-gray-400 ml-1">menos → mais</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                  <span className="text-[10px] text-gray-500">Vias Públicas</span>
+                </div>
+                <span style={{ width: 1, height: 14, background: '#e5e7eb', display: 'inline-block' }} />
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-orange-500" />
+                  <span className="text-[10px] text-gray-500">Indoor</span>
+                </div>
+                <span style={{ width: 1, height: 14, background: '#e5e7eb', display: 'inline-block' }} />
                 <span className="text-[10px] text-gray-500 font-medium">{fmt(pontos.length)} pontos</span>
-              </>
+              </div>
             )}
           </div>
 
-          {/* Loading overlay for city points */}
+          {/* Loading overlay */}
           {loadingPontos && (
             <div className="absolute inset-0 z-[400] flex items-center justify-center bg-white/50 backdrop-blur-sm">
               <div className="flex flex-col items-center gap-2">
