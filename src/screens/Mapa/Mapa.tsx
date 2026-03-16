@@ -157,6 +157,7 @@ interface TotaisGerais {
 }
 
 export const Mapa: React.FC = () => {
+  const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
   const [menuReduzido, setMenuReduzido] = React.useState(false);
   const [searchParams] = useSearchParams();
   const location = useLocation();
@@ -178,6 +179,7 @@ export const Mapa: React.FC = () => {
   const [loadingPontos, setLoadingPontos] = React.useState(false);
   const [mostrarSugestoes, setMostrarSugestoes] = React.useState(false);
   const [mostrarModalDetalhes, setMostrarModalDetalhes] = React.useState(false);
+  const [mostrarStreetView, setMostrarStreetView] = React.useState(false);
   
   const [tamanhoUniforme, setTamanhoUniforme] = React.useState(false);
   const [pontoSelecionado, setPontoSelecionado] = React.useState<PontoMidia | null>(null);
@@ -247,6 +249,27 @@ export const Mapa: React.FC = () => {
     totalHexagonos: number;
     timestamp: Date;
   } | null>(null);
+
+  const streetViewEmbedUrl = React.useMemo(() => {
+    if (!pontoSelecionado || !googleMapsApiKey) return null;
+    const lat = pontoSelecionado.latitude_vl;
+    const lng = pontoSelecionado.longitude_vl;
+    const params = new URLSearchParams({
+      key: googleMapsApiKey,
+      location: `${lat},${lng}`,
+      heading: "210",
+      pitch: "10",
+      fov: "80",
+    });
+    return `https://www.google.com/maps/embed/v1/streetview?${params.toString()}`;
+  }, [pontoSelecionado, googleMapsApiKey]);
+
+  const streetViewExternalUrl = React.useMemo(() => {
+    if (!pontoSelecionado) return null;
+    const lat = pontoSelecionado.latitude_vl;
+    const lng = pontoSelecionado.longitude_vl;
+    return `https://www.google.com/maps?q=&layer=c&cbll=${lat},${lng}`;
+  }, [pontoSelecionado]);
 
   // Funções auxiliares para feedback do usuário
   const showStatus = (message: string, type: "info" | "success" | "warning" | "error" = "info") => {
@@ -1082,8 +1105,8 @@ export const Mapa: React.FC = () => {
                     <circle cx="10" cy="9" r="1.2" fill="#aaa"/>
                   </svg>
                   <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Painel</span>
-                </div>
-                <button
+              </div>
+                  <button
                   onMouseDown={e => e.stopPropagation()}
                   onClick={() => setPainelColapsado(v => !v)}
                   className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-200 transition-colors"
@@ -1094,9 +1117,9 @@ export const Mapa: React.FC = () => {
                       ? <path d="M2 4l4 4 4-4" stroke="#555" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                       : <path d="M2 8l4-4 4 4" stroke="#555" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                     }
-                  </svg>
-                </button>
-              </div>
+                        </svg>
+                  </button>
+                        </div>
 
               {/* Conteúdo colapsável */}
               <div
@@ -1114,7 +1137,7 @@ export const Mapa: React.FC = () => {
                 <div className="text-[10px] text-[#ff4600] uppercase tracking-wide font-semibold mb-0.5">● Campanha</div>
                 <div className="text-sm font-bold text-gray-900 leading-tight break-all">
                   {nomeGrupo || <span className="italic text-gray-400">Carregando...</span>}
-                </div>
+                    </div>
                 {hexagonos.length > 0 && (
                   <div className="mt-2 flex gap-3 text-[10px] text-gray-400">
                     <span><strong className="text-gray-600">{formatNumber(hexagonos.length)}</strong> hex</span>
@@ -1122,8 +1145,8 @@ export const Mapa: React.FC = () => {
                     <span><strong className="text-gray-600">{formatNumber(pontosValidados.length)}</strong> pontos</span>
                     <span>·</span>
                     <span>~{formatNumber(hexagonos.length * 0.36)} km²</span>
-                  </div>
-                )}
+                </div>
+              )}
               </div>
 
               {/* Status e erros */}
@@ -1131,7 +1154,7 @@ export const Mapa: React.FC = () => {
               {erro && (
                 <div className="mb-3 p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg text-xs">
                   {erro}
-                </div>
+                        </div>
               )}
 
               {/* Resultados por praça — cards clicáveis substituem o combo */}
@@ -1139,7 +1162,7 @@ export const Mapa: React.FC = () => {
                 <div className="flex items-center gap-3 py-6 justify-center text-gray-400">
                   <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-[#ff4600] border-solid flex-shrink-0" />
                   <span className="text-sm">Carregando resultados...</span>
-                </div>
+                        </div>
               ) : dadosPorPraca.length > 0 ? (
                 <div className="space-y-2 mb-3">
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
@@ -1162,20 +1185,20 @@ export const Mapa: React.FC = () => {
                         ) : (
                           <span className="text-[10px] text-gray-400">Ver mapa →</span>
                         )}
-                      </div>
+                        </div>
                       <div className="grid grid-cols-3 gap-2">
                         <div>
                           <div className="text-[10px] text-gray-400 uppercase">Impactos</div>
                           <div className="text-xs font-semibold text-gray-700">
                             {Math.round(item.impactosTotal_vl ?? 0).toLocaleString('pt-BR')}
-                          </div>
+                        </div>
                         </div>
                         <div>
                           <div className="text-[10px] text-gray-400 uppercase">Cobertura</div>
                           <div className="text-xs font-semibold text-gray-700">
                             {item.coberturaProp_vl?.toFixed(1) ?? '—'}%
+                      </div>
                           </div>
-                        </div>
                         <div>
                           <div className="text-[10px] text-gray-400 uppercase">Freq.</div>
                           <div className="text-xs font-semibold text-gray-700">
@@ -1183,7 +1206,7 @@ export const Mapa: React.FC = () => {
                           </div>
                         </div>
                       </div>
-
+                      
                       {/* Semana — só aparece dentro da praça selecionada */}
                       {cidadeSelecionada === item.cidade_st && semanas.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-orange-200" onClick={e => e.stopPropagation()}>
@@ -1217,28 +1240,28 @@ export const Mapa: React.FC = () => {
                           <div className="text-[10px] text-gray-400 uppercase">Impactos</div>
                           <div className="text-xs font-bold text-gray-800">
                             {Math.round(totaisGerais.impactosTotal_vl ?? 0).toLocaleString('pt-BR')}
-                          </div>
-                        </div>
+                  </div>
+                </div>
                         <div>
                           <div className="text-[10px] text-gray-400 uppercase">Cobertura</div>
                           <div className="text-xs font-bold text-gray-800">
                             {totaisGerais.coberturaProp_vl?.toFixed(1) ?? '—'}%
-                          </div>
-                        </div>
+                    </div>
+                  </div>
                         <div>
                           <div className="text-[10px] text-gray-400 uppercase">GRP</div>
                           <div className="text-xs font-bold text-gray-800">
                             {totaisGerais.grp_vl?.toFixed(1) ?? '—'}
-                          </div>
-                        </div>
-                      </div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                    </div>
+                  </div>
+                )}
+              </div>
               ) : grupo ? (
                 <div className="py-4 text-center text-xs text-gray-400">
                   Nenhum resultado disponível para esta campanha.
-                </div>
+            </div>
               ) : null}
 
               {/* Painel de detalhes do ponto selecionado */}
@@ -1288,8 +1311,8 @@ export const Mapa: React.FC = () => {
                     label: labelExtras[k.toLowerCase()] || k.replace(/_st$|_vl$|_bl$|_dt$|_dh$/g, '').replace(/_/g, ' '),
                     valor: v
                   }));
-
-                return (
+                  
+                    return (
                   <div className="mb-3 space-y-2">
 
                     {/* Card do GRUPO */}
@@ -1299,7 +1322,7 @@ export const Mapa: React.FC = () => {
                           <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: corGrupo }} />
                           <span className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Grupo</span>
                           <span className="text-sm font-bold text-[#222]">{pontoSelecionado.grupoSub_st}</span>
-                        </div>
+                                </div>
                         <button
                           onClick={() => setPontoSelecionado(null)}
                           className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
@@ -1308,8 +1331,8 @@ export const Mapa: React.FC = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                           </svg>
                         </button>
-                      </div>
-
+                            </div>
+                            
                       {/* Descrição legível do grupo (grupoDesc_st dos hexagonos) */}
                       {grupoDesc && (
                         <div className="text-xs font-medium text-gray-600 mb-1">{grupoDesc}</div>
@@ -1319,32 +1342,32 @@ export const Mapa: React.FC = () => {
                       )}
 
                       <div className="grid grid-cols-3 gap-2 mb-2">
-                        <div>
+                                <div>
                           <div className="text-[10px] text-gray-400 uppercase">Pontos</div>
                           <div className="text-xs font-semibold text-gray-700">{pontosDoGrupo.length}</div>
-                        </div>
-                        <div>
+                                </div>
+                                <div>
                           <div className="text-[10px] text-gray-400 uppercase">Fluxo total</div>
                           <div className="text-xs font-semibold text-gray-700">{formatNumber(fluxoTotalGrupo)}</div>
-                        </div>
+                                </div>
                         <div>
                           <div className="text-[10px] text-gray-400 uppercase">Média/ponto</div>
                           <div className="text-xs font-semibold text-gray-700">{formatNumber(Math.round(fluxoMedioGrupo))}</div>
+                          </div>
                         </div>
-                      </div>
 
                       {/* Chips de tipo */}
                       <div className="flex gap-1.5 flex-wrap mb-2">
                         {nDigital > 0 && <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-medium">{nDigital} digital{nDigital > 1 ? 'is' : ''}</span>}
                         {nEstatico > 0 && <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full font-medium">{nEstatico} estático{nEstatico > 1 ? 's' : ''}</span>}
-                      </div>
+                          </div>
 
                       {/* Cidades cobertas pelo grupo */}
                       {cidadesGrupo.length > 0 && (
                         <div className="text-[10px] text-gray-400">
                           <span className="font-medium text-gray-500">Praças: </span>
                           {cidadesGrupo.join(' · ')}
-                        </div>
+                          </div>
                       )}
                     </div>
 
@@ -1355,11 +1378,11 @@ export const Mapa: React.FC = () => {
                           <span className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${isDigital ? 'bg-blue-500' : 'bg-emerald-500'}`} />
                           <span className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Ponto</span>
                           <span className="text-[10px] text-gray-400">#{pontoSelecionado.planoMidia_pk}</span>
-                        </div>
+                                </div>
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isDigital ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
                           {isDigital ? 'Digital' : 'Estático'}
                         </span>
-                      </div>
+                        </div>
 
                       {/* Tipo de mídia */}
                       {pontoSelecionado.tipo_st && (
@@ -1370,7 +1393,7 @@ export const Mapa: React.FC = () => {
                       {(pontoSelecionado.cidade_st || pontoSelecionado.bairro_st) && (
                         <div className="text-[10px] text-gray-400 mb-2">
                           {[pontoSelecionado.bairro_st, pontoSelecionado.cidade_st, pontoSelecionado.estado_st].filter(Boolean).join(' · ')}
-                        </div>
+                              </div>
                       )}
 
                       {/* Fluxo — dois valores lado a lado */}
@@ -1379,15 +1402,15 @@ export const Mapa: React.FC = () => {
                           <div className="text-[10px] text-gray-400 uppercase">Fluxo estimado</div>
                           <div className="text-xs font-semibold text-gray-700">
                             {pontoSelecionado.fluxoEstimado_vl != null ? formatNumber(pontoSelecionado.fluxoEstimado_vl) : '—'}
-                          </div>
-                        </div>
+                                  </div>
+                                    </div>
                         <div>
                           <div className="text-[10px] text-gray-400 uppercase">Fluxo calculado</div>
                           <div className="text-xs font-semibold text-gray-700">
                             {pontoSelecionado.calculatedFluxoEstimado_vl != null ? formatNumber(pontoSelecionado.calculatedFluxoEstimado_vl) : '—'}
-                          </div>
-                        </div>
-                      </div>
+                                  </div>
+                                    </div>
+                                    </div>
 
                       {/* Formato + Coordenadas */}
                       <div className="grid grid-cols-2 gap-2">
@@ -1395,14 +1418,29 @@ export const Mapa: React.FC = () => {
                           <div>
                             <div className="text-[10px] text-gray-400 uppercase">Formato</div>
                             <div className="text-xs font-semibold text-gray-700">{pontoSelecionado.formato_st}</div>
-                          </div>
-                        )}
+                                      </div>
+                                    )}
                         <div>
                           <div className="text-[10px] text-gray-400 uppercase">Coordenadas</div>
                           <div className="text-[10px] font-medium text-gray-500 font-mono">
                             {pontoSelecionado.latitude_vl.toFixed(5)}, {pontoSelecionado.longitude_vl.toFixed(5)}
+                                      </div>
+                                  </div>
+                                    </div>
+
+                      <div className="mt-2 pt-2 border-t border-gray-100 space-y-1.5">
+                        {googleMapsApiKey ? (
+                          <button
+                            onClick={() => setMostrarStreetView(true)}
+                            className="w-full text-[11px] px-3 py-2 rounded-md bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 transition-colors font-semibold"
+                          >
+                            Ver Street View no painel
+                          </button>
+                        ) : (
+                          <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
+                            Street View embutido requer `VITE_GOOGLE_MAPS_API_KEY`
                           </div>
-                        </div>
+                        )}
                       </div>
 
                       {/* Campos extras vindos do SELECT * — filtrados e com labels legíveis */}
@@ -1414,28 +1452,28 @@ export const Mapa: React.FC = () => {
                               <div key={chave}>
                                 <div className="text-[9px] text-gray-400 uppercase leading-tight tracking-wide">{label}</div>
                                 <div className="text-[10px] font-medium text-gray-700 break-words leading-snug">{String(valor)}</div>
-                              </div>
+                                      </div>
                             ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
 
-                  </div>
-                );
-              })()}
+                            </div>
+                          );
+                        })()}
 
               {/* Dica contextual quando praça selecionada mas nenhum ponto */}
               {cidadeSelecionada && !pontoSelecionado && hexagonos.length > 0 && (
                 <div className="mt-1 p-3 border-2 border-gray-200 rounded-xl text-[10px] text-gray-400 text-center">
                   Clique em um ponto no mapa para ver os detalhes.
-                </div>
-              )}
+                          </div>
+                        )}
 
               {/* Otimizador */}
               {hexagonos.length > 0 && temDados && (
                 <div className="mt-3">
-                  <button
+                      <button
                     onClick={() => { analisar(); setMostrarSugestoes(true); }}
                     disabled={isAnalyzing}
                     className="w-full bg-gradient-to-r from-[#ff4600] to-orange-500 text-white rounded-xl px-4 py-3 text-xs font-bold hover:from-[#e03700] hover:to-orange-400 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
@@ -1445,7 +1483,7 @@ export const Mapa: React.FC = () => {
                     ) : (
                       <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg><span>Otimizar Plano</span><span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px]">BETA</span></>
                     )}
-                  </button>
+                      </button>
                   {analise && mostrarSugestoes && (
                     <div className="mt-2 p-3 border-2 border-gray-200 rounded-xl bg-white space-y-1.5">
                       <div className="text-[10px] text-gray-400 uppercase font-semibold">Quick Insights</div>
@@ -1459,9 +1497,9 @@ export const Mapa: React.FC = () => {
                       </button>
                     </div>
                   )}
-                </div>
-              )}
-
+                  </div>
+                )}
+                
               </div>{/* fim conteúdo colapsável */}
             </div>
 
@@ -1524,7 +1562,7 @@ export const Mapa: React.FC = () => {
                         <span style={{ fontWeight: 700, fontSize: 11, color: '#222' }}>
                           {praca.cidade_st}
                           {praca.estado_st ? `/${praca.estado_st}` : ''}
-                        </span>
+                          </span>
                       </Tooltip>
                       <Tooltip direction="top" offset={[0, -18]} opacity={1}>
                         <div style={{ fontSize: 11, lineHeight: 1.6 }}>
@@ -1628,10 +1666,10 @@ export const Mapa: React.FC = () => {
                             fill={ponto.hexColor_st || `rgb(${ponto.rgbColorR_vl},${ponto.rgbColorG_vl},${ponto.rgbColorB_vl})`}
                             stroke="#fff" strokeWidth={1}
                             strokeDasharray={ponto.estaticoDigital_st === 'E' ? '2,2' : undefined}
-                          />
-                        </svg>
+                              />
+                            </svg>
                         <span style={{ fontSize: 10, color: '#555', fontWeight: 500 }}>{subgrupo}</span>
-                      </div>
+                          </div>
                     ));
                 })()}
 
@@ -1643,7 +1681,7 @@ export const Mapa: React.FC = () => {
                 </span>
               </div>
             )}
-        </div>
+          </div>
         <div className={`fixed bottom-0 z-[600] pointer-events-none transition-all duration-300 ${menuReduzido ? 'left-20 w-[calc(100%-5rem)]' : 'left-64 w-[calc(100%-16rem)]'}`}>
           <footer className="w-full border-t border-[#e5e5e5] px-4 py-2 text-center text-[10px] italic text-[#b0b0b0] tracking-wide bg-white pointer-events-none">
             © 2025 Colmeia. All rights are reserved to Be Mediatech OOH.
@@ -1657,6 +1695,62 @@ export const Mapa: React.FC = () => {
         isOpen={mostrarModalDetalhes}
         onClose={() => setMostrarModalDetalhes(false)}
       />
+      {mostrarStreetView && pontoSelecionado && (
+        <div className="fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-5xl h-[80vh] bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Street View do ponto</h3>
+                <p className="text-xs text-gray-500">
+                  {pontoSelecionado.latitude_vl.toFixed(5)}, {pontoSelecionado.longitude_vl.toFixed(5)}
+                </p>
+              </div>
+              <button
+                onClick={() => setMostrarStreetView(false)}
+                className="w-8 h-8 rounded-full hover:bg-gray-100 text-gray-600"
+                aria-label="Fechar Street View"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 bg-gray-100">
+              {streetViewEmbedUrl ? (
+                <iframe
+                  title="Street View"
+                  src={streetViewEmbedUrl}
+                  width="100%"
+                  height="100%"
+                  style={{ border: 0 }}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  allowFullScreen
+                />
+              ) : (
+                <div className="h-full w-full flex items-center justify-center p-6 text-center">
+                  <div>
+                    <p className="text-sm text-gray-700 mb-2">
+                      Nao foi possivel carregar o Street View embutido.
+                    </p>
+                    <p className="text-xs text-gray-500 mb-4">
+                      Configure `VITE_GOOGLE_MAPS_API_KEY` no `.env` para habilitar.
+                    </p>
+                    {streetViewExternalUrl && (
+                      <a
+                        href={streetViewExternalUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-block text-xs px-3 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                      >
+                        Abrir no Google Maps
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }; 
