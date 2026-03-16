@@ -1,42 +1,31 @@
-const { getPostgresPool } = require('./banco-ativos-passantes');
+const { sql, getPool } = require('./db');
 
 module.exports = async (req, res) => {
   try {
-    console.log('📊 [Bairros] Listando bairros disponíveis');
-    
-    const pool = await getPostgresPool();
+    const pool = await getPool();
+    const search = (req.query.search || '').replace(/\+/g, ' ').trim();
+    const praca = (req.query.praca || '').replace(/\+/g, ' ').trim();
+    const request = pool.request();
 
-    const { praca } = req.query;
-
-    let query = `
-      SELECT DISTINCT
-        mp.district AS name
-      FROM media_points mp
-    `;
-
-    const conditions = ['mp.is_active = true', 'mp.is_deleted = false', 'mp.district IS NOT NULL', "mp.district != ''"];
-    const params = [];
-
-    // Filtrar por praça se fornecido
+    let where = `WHERE valid_bl = 1 AND district IS NOT NULL AND LTRIM(RTRIM(district)) <> ''`;
     if (praca) {
-      const paramIndex = params.length + 1;
-      conditions.push(`c.name = $${paramIndex}`);
-      params.push(praca);
-      query = `
-        SELECT DISTINCT
-          mp.district AS name
-        FROM media_points mp
-        LEFT JOIN cities c ON mp.city_id = c.id
-      `;
+      request.input('praca', sql.NVarChar, `%${praca}%`);
+      where += ' AND cidade_st LIKE @praca';
+    }
+    if (search) {
+      request.input('search', sql.NVarChar, `%${search}%`);
+      where += ' AND district LIKE @search';
     }
 
-    query += ` WHERE ${conditions.join(' AND ')} ORDER BY mp.district`;
+    const result = await request.query(`
+      SELECT TOP 1000 district AS name
+      FROM [serv_product_be180].[bancoAtivosJoin_ft]
+      ${where}
+      GROUP BY district
+      ORDER BY district
+    `);
 
-    const result = await pool.query(query, params);
-
-    console.log(`✅ [Bairros] ${result.rows.length} bairros encontrados`);
-
-    res.status(200).json(result.rows);
+    res.status(200).json(result.recordset || []);
 
   } catch (error) {
     console.error('❌ [Bairros] Erro:', error);

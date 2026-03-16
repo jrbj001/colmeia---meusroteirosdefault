@@ -12,7 +12,9 @@ module.exports = async (req, res) => {
     const { tipo_ambiente } = req.query;
     // Axios codifica espaços como '+' em query strings — precisamos decodificar manualmente
     const cidade = req.query.cidade ? req.query.cidade.replace(/\+/g, ' ').trim() : null;
-    console.log('[banco-ativos-mapa] cidade:', cidade, '| tipo_ambiente:', tipo_ambiente);
+    const exibidor = req.query.exibidor ? req.query.exibidor.replace(/\+/g, ' ').trim() : null;
+    const bairro = req.query.bairro ? req.query.bairro.replace(/\+/g, ' ').trim() : null;
+    console.log('[banco-ativos-mapa] cidade:', cidade, '| tipo_ambiente:', tipo_ambiente, '| exibidor:', exibidor, '| bairro:', bairro);
 
     const request = pool.request();
     const filters = ['valid_bl = 1', 'latitude IS NOT NULL', 'longitude IS NOT NULL',
@@ -28,8 +30,48 @@ module.exports = async (req, res) => {
       request.input('cidade', sql.NVarChar, `%${cidade.trim()}%`);
       filters.push('cidade_st LIKE @cidade');
     }
+    if (exibidor) {
+      request.input('exibidor', sql.NVarChar, `%${exibidor.trim()}%`);
+      filters.push('exibidor_st LIKE @exibidor');
+    }
+    if (bairro) {
+      request.input('bairro', sql.NVarChar, `%${bairro.trim()}%`);
+      filters.push('district LIKE @bairro');
+    }
 
     const where = filters.map(f => `(${f})`).join(' AND ');
+
+    // Detecta dinamicamente uma coluna de rua/logradouro disponível no banco
+    const colsResult = await pool.request().query(`
+      SELECT LOWER(c.name) AS name
+      FROM sys.columns c
+      INNER JOIN sys.objects o ON o.object_id = c.object_id
+      INNER JOIN sys.schemas s ON s.schema_id = o.schema_id
+      WHERE s.name = 'serv_product_be180'
+        AND o.name = 'bancoAtivosJoin_ft'
+    `);
+    const availableCols = new Set((colsResult.recordset || []).map(r => r.name));
+    const ruaCandidates = [
+      'rua_st',
+      'rua',
+      'rua_vl',
+      'logradouro_st',
+      'logradouro',
+      'logradouro_vl',
+      'endereco_st',
+      'endereco',
+      'endereco_vl',
+      'endereco1_st',
+      'address1_st',
+      'address_line1',
+      'address_line',
+      'street_st',
+      'street',
+      'address_st',
+      'address',
+    ];
+    const ruaCol = ruaCandidates.find(c => availableCols.has(c));
+    const ruaSelect = ruaCol ? `${ruaCol} AS rua,` : `CAST(NULL AS NVARCHAR(255)) AS rua,`;
 
     const result = await request.query(`
       SELECT
@@ -46,6 +88,7 @@ module.exports = async (req, res) => {
         social_class_geo                    AS rating,
         ISNULL(CAST(pedestrian_flow  AS FLOAT), 0)  AS passantes,
         ISNULL(CAST(total_ipv_impact AS FLOAT), 0)  AS impactos_ipv,
+        ${ruaSelect}
         grupo_st                            AS grupo_midia,
         grupoSub_st                         AS subgrupo_midia,
         categoria_st                        AS categoria,

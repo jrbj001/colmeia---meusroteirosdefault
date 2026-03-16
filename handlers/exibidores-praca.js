@@ -8,12 +8,17 @@ module.exports = async (req, res) => {
   try {
     const pool    = await getPool();
     const search  = (req.query.search || '').replace(/\+/g, ' ').trim();
+    const praca   = (req.query.praca || '').replace(/\+/g, ' ').trim();
     const request = pool.request();
 
     let where = 'WHERE valid_bl = 1 AND exibidor_st IS NOT NULL';
     if (search) {
       request.input('search', sql.NVarChar, `%${search}%`);
       where += ' AND exibidor_st LIKE @search';
+    }
+    if (praca) {
+      request.input('praca', sql.NVarChar, `%${praca}%`);
+      where += ' AND cidade_st LIKE @praca';
     }
 
     const result = await request.query(`

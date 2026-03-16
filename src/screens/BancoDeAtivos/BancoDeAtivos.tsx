@@ -42,6 +42,12 @@ interface PontoMidia {
   passantes: number;
   impactos_ipv: number;
   grupo_midia: string;
+  rua?: string;
+}
+
+interface SugestaoPraca {
+  nome_cidade: string;
+  nome_estado?: string;
 }
 
 interface Perimetro {
@@ -180,6 +186,22 @@ function MarkerClusterLayer({ pontos, onSelect }: { pontos: PontoMidia[]; onSele
 
 function fmt(n: number): string { return n.toLocaleString('pt-BR'); }
 
+function fmtCompact(n: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    notation: 'compact',
+    compactDisplay: 'short',
+    maximumFractionDigits: 1,
+  }).format(n || 0);
+}
+
+function normalizeText(value: string): string {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
 function bubbleRadius(total: number, max: number): number {
   if (max <= 0) return 6;
   return Math.max(4, Math.min(16, 4 + (total / max) * 12));
@@ -188,6 +210,7 @@ function bubbleRadius(total: number, max: number): number {
 // ── Main Component ─────────────────────────────────────────────────────
 
 export const BancoDeAtivos: React.FC = () => {
+  const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
   const [menuReduzido, setMenuReduzido] = React.useState(false);
 
   // Data
@@ -201,12 +224,25 @@ export const BancoDeAtivos: React.FC = () => {
   // Interaction
   const [cidadeSelecionada, setCidadeSelecionada] = React.useState<CityBubble | null>(null);
   const [pontoSelecionado, setPontoSelecionado] = React.useState<PontoMidia | null>(null);
+  const [mostrarStreetView, setMostrarStreetView] = React.useState(false);
   const [painelColapsado, setPainelColapsado] = React.useState(false);
   const [zoom, setZoom] = React.useState(4);
   const [hoveredCity, setHoveredCity] = React.useState<HoveredCity | null>(null);
+  const [ruaPorCoordenada, setRuaPorCoordenada] = React.useState<Record<string, string>>({});
+  const [buscandoRua, setBuscandoRua] = React.useState(false);
 
   // Filters
   const [filtroAmbiente, setFiltroAmbiente] = React.useState<'todos' | 'vias_publicas' | 'indoor'>('todos');
+  const [buscaPraca, setBuscaPraca] = React.useState('');
+  const [buscaExibidor, setBuscaExibidor] = React.useState('');
+  const [buscaBairro, setBuscaBairro] = React.useState('');
+  const [sugestoesPraca, setSugestoesPraca] = React.useState<SugestaoPraca[]>([]);
+  const [sugestoesExibidor, setSugestoesExibidor] = React.useState<string[]>([]);
+  const [sugestoesBairro, setSugestoesBairro] = React.useState<string[]>([]);
+  const [baseExibidoresPraca, setBaseExibidoresPraca] = React.useState<string[]>([]);
+  const [baseBairrosPraca, setBaseBairrosPraca] = React.useState<string[]>([]);
+  const [mostrarBuscaAvancada, setMostrarBuscaAvancada] = React.useState(false);
+  const [campoBuscaAtivo, setCampoBuscaAtivo] = React.useState<'praca' | 'exibidor' | 'bairro' | null>(null);
 
   // Drag
   const painelRef = React.useRef<HTMLDivElement>(null);
@@ -253,14 +289,22 @@ export const BancoDeAtivos: React.FC = () => {
 
   // Aceita `ambienteParam` para evitar stale closure quando o filtro muda e
   // a função é chamada no mesmo ciclo de render (antes do re-render com novo valor)
-  const carregarPontosCidade = React.useCallback((cidade: string, ambienteParam?: string) => {
-    console.log('[carregarPontosCidade] buscando:', cidade, '| ambiente:', ambienteParam ?? filtroAmbiente);
+  const carregarPontosCidade = React.useCallback((
+    cidade: string,
+    ambienteParam?: string,
+    filtrosParam?: { exibidor?: string; bairro?: string }
+  ) => {
+    console.log('[carregarPontosCidade] buscando:', cidade, '| ambiente:', ambienteParam ?? filtroAmbiente, '| filtros:', filtrosParam);
     setLoadingPontos(true);
     setPontos([]);
     setPontoSelecionado(null);
     const ambiente = ambienteParam ?? filtroAmbiente;
     const params: Record<string, string> = { cidade };
     if (ambiente !== 'todos') params.tipo_ambiente = ambiente;
+    const exibidorFiltro = (filtrosParam?.exibidor ?? buscaExibidor).trim();
+    const bairroFiltro = (filtrosParam?.bairro ?? buscaBairro).trim();
+    if (exibidorFiltro) params.exibidor = exibidorFiltro;
+    if (bairroFiltro) params.bairro = bairroFiltro;
     api.get('/banco-ativos-mapa', { params })
       .then(res => {
         console.log('[carregarPontosCidade] resposta:', res.data.success, '| pontos:', res.data.data?.length);
@@ -268,15 +312,17 @@ export const BancoDeAtivos: React.FC = () => {
       })
       .catch(err => console.error('[carregarPontosCidade] erro:', err))
       .finally(() => setLoadingPontos(false));
-  }, [filtroAmbiente]);
+  }, [filtroAmbiente, buscaExibidor, buscaBairro]);
 
   const handleClickCidade = React.useCallback((city: CityBubble) => {
     console.log('[handleClickCidade] cidade:', city.cidade, '| lat:', city.lat, '| lon:', city.lon);
     setCidadeSelecionada(city);
+    setBuscaPraca(city.cidade);
     setPontoSelecionado(null);
     setHoveredCity(null);
-    carregarPontosCidade(city.cidade);
-  }, [carregarPontosCidade]);
+    carregarPontosCidade(city.cidade, undefined, { exibidor: buscaExibidor, bairro: buscaBairro });
+    carregarListasDependentesDaPraca(city.cidade);
+  }, [carregarPontosCidade, buscaExibidor, buscaBairro, carregarListasDependentesDaPraca]);
 
   const voltarBrasil = React.useCallback(() => {
     setCidadeSelecionada(null);
@@ -287,10 +333,279 @@ export const BancoDeAtivos: React.FC = () => {
 
   const handleZoom = React.useCallback((z: number) => setZoom(z), []);
 
+  const normalizar = React.useCallback((v: string) => (v || '').trim().toLowerCase(), []);
+
+  const aplicarBusca = React.useCallback(() => {
+    const praca = buscaPraca.trim() || cidadeSelecionada?.cidade || '';
+    if (!praca) return;
+
+    const match = centroids.find(c => normalizar(c.cidade) === normalizar(praca));
+    const cidadeAlvo: CityBubble = match || {
+      cidade: praca,
+      estado: '',
+      lat: -15.78,
+      lon: -47.93,
+      total_pontos: 0,
+      total_passantes: 0,
+      total_impactos: 0,
+      pontos_public: 0,
+      pontos_indoor: 0,
+    };
+
+    setCidadeSelecionada(cidadeAlvo);
+    setPontoSelecionado(null);
+    setHoveredCity(null);
+    carregarPontosCidade(cidadeAlvo.cidade, undefined, { exibidor: buscaExibidor, bairro: buscaBairro });
+    carregarListasDependentesDaPraca(cidadeAlvo.cidade);
+  }, [buscaPraca, cidadeSelecionada, centroids, normalizar, carregarPontosCidade, buscaExibidor, buscaBairro, carregarListasDependentesDaPraca]);
+
+  const limparBusca = React.useCallback(() => {
+    setBuscaPraca('');
+    setBuscaExibidor('');
+    setBuscaBairro('');
+    setSugestoesPraca([]);
+    setSugestoesExibidor([]);
+    setSugestoesBairro([]);
+    setBaseExibidoresPraca([]);
+    setBaseBairrosPraca([]);
+    if (cidadeSelecionada) {
+      carregarPontosCidade(cidadeSelecionada.cidade, undefined, { exibidor: '', bairro: '' });
+    }
+  }, [cidadeSelecionada, carregarPontosCidade]);
+
+  function carregarListasDependentesDaPraca(praca: string) {
+    const nomePraca = (praca || '').trim();
+    if (!nomePraca) {
+      setBaseExibidoresPraca([]);
+      setBaseBairrosPraca([]);
+      return;
+    }
+
+    api.get('/exibidores-praca', { params: { praca: nomePraca } })
+      .then(res => {
+        const lista = Array.isArray(res.data) ? res.data : [];
+        const exibs = lista.map((i: any) => i.nome_exibidor).filter(Boolean);
+        setBaseExibidoresPraca(exibs);
+      })
+      .catch(() => setBaseExibidoresPraca([]));
+
+    api.get('/bairros', { params: { praca: nomePraca } })
+      .then(res => {
+        const lista = Array.isArray(res.data) ? res.data : [];
+        const bairros = lista.map((i: any) => i.name).filter(Boolean);
+        setBaseBairrosPraca(bairros);
+      })
+      .catch(() => setBaseBairrosPraca([]));
+  }
+
+  const streetViewEmbedUrl = React.useMemo(() => {
+    if (!pontoSelecionado || !googleMapsApiKey) return null;
+    const params = new URLSearchParams({
+      key: googleMapsApiKey,
+      location: `${pontoSelecionado.latitude},${pontoSelecionado.longitude}`,
+      heading: '210',
+      pitch: '10',
+      fov: '80',
+    });
+    return `https://www.google.com/maps/embed/v1/streetview?${params.toString()}`;
+  }, [pontoSelecionado, googleMapsApiKey]);
+
+  React.useEffect(() => {
+    if (!pontoSelecionado) setMostrarStreetView(false);
+  }, [pontoSelecionado]);
+
+  React.useEffect(() => {
+    const q = buscaPraca.trim();
+    if (q.length < 1) {
+      setSugestoesPraca([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      api.get('/cidades-praca', { params: { search: q } })
+        .then(res => setSugestoesPraca(Array.isArray(res.data) ? res.data : []))
+        .catch(() => setSugestoesPraca([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [buscaPraca]);
+
+  const sugestoesPracaVisiveis = React.useMemo(() => {
+    const q = normalizeText(buscaPraca);
+
+    // Fallback local imediato com dados já carregados (centroids)
+    const locais = centroids
+      .filter(c => !q || normalizeText(c.cidade || '').includes(q))
+      .map(c => ({ nome_cidade: c.cidade, nome_estado: c.estado }))
+      .slice(0, 20);
+
+    // Merge com resultado da API, removendo duplicatas
+    const merged = [...locais, ...sugestoesPraca];
+    const seen = new Set<string>();
+    const unicos: SugestaoPraca[] = [];
+    for (const item of merged) {
+      const key = `${normalizeText(item.nome_cidade || '')}|${normalizeText(item.nome_estado || '')}`;
+      if (!item.nome_cidade || seen.has(key)) continue;
+      seen.add(key);
+      unicos.push(item);
+      if (unicos.length >= 20) break;
+    }
+    return unicos;
+  }, [buscaPraca, centroids, sugestoesPraca]);
+
+  React.useEffect(() => {
+    const q = buscaExibidor.trim();
+    if (q.length < 1) {
+      setSugestoesExibidor([]);
+      return;
+    }
+    const pracaFiltro = (buscaPraca || cidadeSelecionada?.cidade || '').trim();
+    const t = setTimeout(() => {
+      api.get('/exibidores-praca', { params: { search: q, praca: pracaFiltro } })
+        .then(res => {
+          const lista = Array.isArray(res.data) ? res.data : [];
+          setSugestoesExibidor(lista.map((i: any) => i.nome_exibidor).filter(Boolean));
+        })
+        .catch(() => setSugestoesExibidor([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [buscaExibidor, buscaPraca, cidadeSelecionada]);
+
+  React.useEffect(() => {
+    const q = buscaBairro.trim();
+    if (q.length < 1) {
+      setSugestoesBairro([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      api.get('/bairros', {
+        params: {
+          search: q,
+          praca: (buscaPraca || cidadeSelecionada?.cidade || '').trim(),
+        },
+      })
+        .then(res => {
+          const lista = Array.isArray(res.data) ? res.data : [];
+          setSugestoesBairro(lista.map((i: any) => i.name).filter(Boolean));
+        })
+        .catch(() => setSugestoesBairro([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [buscaBairro, buscaPraca, cidadeSelecionada]);
+
+  const sugestoesExibidorVisiveis = React.useMemo(() => {
+    const q = normalizeText(buscaExibidor);
+    if (!q) return baseExibidoresPraca.slice(0, 20);
+    const pracaFiltro = normalizeText(buscaPraca || cidadeSelecionada?.cidade || '');
+
+    const locais = [
+      ...baseExibidoresPraca,
+      ...pontos
+      .filter(p => !pracaFiltro || normalizeText(p.cidade || '').includes(pracaFiltro))
+      .map(p => p.exibidor)
+      .filter((v): v is string => Boolean(v && v.trim()))
+    ]
+      .filter(v => normalizeText(v).includes(q))
+      .slice(0, 40);
+
+    const merged = [...locais, ...sugestoesExibidor];
+    const seen = new Set<string>();
+    const unicos: string[] = [];
+    for (const item of merged) {
+      const key = normalizeText(item);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      unicos.push(item);
+      if (unicos.length >= 20) break;
+    }
+    return unicos;
+  }, [buscaExibidor, buscaPraca, cidadeSelecionada, pontos, sugestoesExibidor, baseExibidoresPraca]);
+
+  const sugestoesBairroVisiveis = React.useMemo(() => {
+    const q = normalizeText(buscaBairro);
+    if (!q) return baseBairrosPraca.slice(0, 20);
+    const pracaFiltro = normalizeText(buscaPraca || cidadeSelecionada?.cidade || '');
+
+    const locais = [
+      ...baseBairrosPraca,
+      ...pontos
+      .filter(p => !pracaFiltro || normalizeText(p.cidade || '').includes(pracaFiltro))
+      .map(p => p.bairro)
+      .filter((v): v is string => Boolean(v && v.trim() && v !== 'Não informado'))
+    ]
+      .filter(v => normalizeText(v).includes(q))
+      .slice(0, 40);
+
+    const merged = [...locais, ...sugestoesBairro];
+    const seen = new Set<string>();
+    const unicos: string[] = [];
+    for (const item of merged) {
+      const key = normalizeText(item);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      unicos.push(item);
+      if (unicos.length >= 20) break;
+    }
+    return unicos;
+  }, [buscaBairro, buscaPraca, cidadeSelecionada, pontos, sugestoesBairro, baseBairrosPraca]);
+
+  // Fallback de endereço por coordenada: quando o ponto não vier com rua no banco
+  React.useEffect(() => {
+    if (!pontoSelecionado) return;
+    const ruaAtual = (pontoSelecionado.rua || '').trim();
+    if (ruaAtual && ruaAtual !== 'Não informado') return;
+
+    const lat = Number(pontoSelecionado.latitude);
+    const lng = Number(pontoSelecionado.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+    const coordKey = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+    const ruaCache = ruaPorCoordenada[coordKey];
+    if (ruaCache) {
+      setPontoSelecionado(prev =>
+        prev && prev.id === pontoSelecionado.id
+          ? { ...prev, rua: ruaCache }
+          : prev
+      );
+      return;
+    }
+
+    let cancelado = false;
+    setBuscandoRua(true);
+    api.post('/consulta-endereco', {
+      rows: [{ id: pontoSelecionado.id, latitude: lat, longitude: lng }]
+    })
+      .then(res => {
+        if (cancelado) return;
+        const item = res.data?.results?.[0];
+        const ruaDetectada =
+          (item?.street && String(item.street).trim()) ||
+          (item?.formattedAddress && String(item.formattedAddress).split(',')[0].trim()) ||
+          '';
+        if (!ruaDetectada) return;
+
+        setRuaPorCoordenada(prev => ({ ...prev, [coordKey]: ruaDetectada }));
+        setPontoSelecionado(prev =>
+          prev && prev.id === pontoSelecionado.id
+            ? { ...prev, rua: ruaDetectada }
+            : prev
+        );
+      })
+      .catch(err => {
+        console.error('[BancoDeAtivos] Erro ao buscar rua por coordenada:', err);
+      })
+      .finally(() => {
+        if (!cancelado) setBuscandoRua(false);
+      });
+
+    return () => {
+      cancelado = true;
+    };
+  }, [pontoSelecionado, ruaPorCoordenada]);
+
   // ── Derived ────────────────────────────────────────────────────────
 
   const showBrazilView = !cidadeSelecionada;
   const maxPontos = React.useMemo(() => Math.max(...centroids.map(c => c.total_pontos), 1), [centroids]);
+  const pontosGrid = React.useMemo(() => pontos.slice(0, 200), [pontos]);
 
   // Map cidade_st → centroid para lookup rápido
   // Chave normalizada (trim + lowercase) para tolerar diferenças de case/espaços entre as duas queries
@@ -431,12 +746,20 @@ export const BancoDeAtivos: React.FC = () => {
 
                 {/* Card: Filtros */}
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-                  <div className="text-[10px] uppercase tracking-wide font-semibold text-gray-500 mb-2">Filtrar</div>
+                  <div className="text-[10px] uppercase tracking-wide font-semibold text-gray-500 mb-2">Filtros e busca</div>
                   <div className="flex gap-1 mb-2">
                     {(['todos', 'vias_publicas', 'indoor'] as const).map(opt => (
                       <button
                         key={opt}
-                        onClick={() => { setFiltroAmbiente(opt); if (cidadeSelecionada) carregarPontosCidade(cidadeSelecionada.cidade, opt); }}
+                        onClick={() => {
+                          setFiltroAmbiente(opt);
+                          if (cidadeSelecionada) {
+                            carregarPontosCidade(cidadeSelecionada.cidade, opt, {
+                              exibidor: buscaExibidor,
+                              bairro: buscaBairro,
+                            });
+                          }
+                        }}
                         className={`flex-1 text-[10px] py-1.5 rounded-lg font-medium transition ${
                           filtroAmbiente === opt
                             ? 'bg-[#ff4600] text-white shadow'
@@ -446,7 +769,127 @@ export const BancoDeAtivos: React.FC = () => {
                         {opt === 'todos' ? 'Todos' : opt === 'vias_publicas' ? 'VP' : 'Indoor'}
                       </button>
                     ))}
-                    </div>
+                  </div>
+                  <button
+                    onClick={() => setMostrarBuscaAvancada(v => !v)}
+                    className="w-full text-[10px] py-1.5 rounded-lg font-medium bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition mb-2 flex items-center justify-between px-2"
+                  >
+                    <span>Busca avançada</span>
+                    <span>{mostrarBuscaAvancada ? '−' : '+'}</span>
+                  </button>
+
+                  {mostrarBuscaAvancada && (
+                    <>
+                      <div className="space-y-1.5 mb-2">
+                        <div className="relative">
+                          <input
+                            value={buscaPraca}
+                            onChange={(e) => setBuscaPraca(e.target.value)}
+                            onFocus={() => {
+                              setCampoBuscaAtivo('praca');
+                              if (!buscaPraca.trim()) {
+                                // força abrir top praças mesmo sem digitar
+                                setSugestoesPraca([]);
+                              }
+                            }}
+                            onBlur={() => setTimeout(() => setCampoBuscaAtivo(null), 120)}
+                            placeholder="Buscar praça"
+                            className="w-full text-[11px] py-1.5 px-2 rounded-lg border border-gray-200 bg-white text-gray-700"
+                          />
+                          {campoBuscaAtivo === 'praca' && sugestoesPracaVisiveis.length > 0 && (
+                            <div className="absolute z-[650] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-32 overflow-auto">
+                              {sugestoesPracaVisiveis.map((c, idx) => (
+                                <button
+                                  key={`${c.nome_cidade}-${c.nome_estado}-${idx}`}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setBuscaPraca(c.nome_cidade);
+                                    carregarListasDependentesDaPraca(c.nome_cidade);
+                                    setCampoBuscaAtivo(null);
+                                  }}
+                                  className="w-full text-left px-2 py-1.5 text-[11px] hover:bg-gray-50 text-gray-700"
+                                >
+                                  {c.nome_cidade}{c.nome_estado ? `/${c.nome_estado}` : ''}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="relative">
+                          <input
+                            value={buscaExibidor}
+                            onChange={(e) => setBuscaExibidor(e.target.value)}
+                            onFocus={() => setCampoBuscaAtivo('exibidor')}
+                            onBlur={() => setTimeout(() => setCampoBuscaAtivo(null), 120)}
+                            placeholder="Buscar exibidor"
+                            className="w-full text-[11px] py-1.5 px-2 rounded-lg border border-gray-200 bg-white text-gray-700"
+                          />
+                          {campoBuscaAtivo === 'exibidor' && sugestoesExibidorVisiveis.length > 0 && (
+                            <div className="absolute z-[650] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-32 overflow-auto">
+                              {sugestoesExibidorVisiveis.map((nome, idx) => (
+                                <button
+                                  key={`${nome}-${idx}`}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setBuscaExibidor(nome);
+                                    setCampoBuscaAtivo(null);
+                                  }}
+                                  className="w-full text-left px-2 py-1.5 text-[11px] hover:bg-gray-50 text-gray-700"
+                                >
+                                  {nome}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="relative">
+                          <input
+                            value={buscaBairro}
+                            onChange={(e) => setBuscaBairro(e.target.value)}
+                            onFocus={() => setCampoBuscaAtivo('bairro')}
+                            onBlur={() => setTimeout(() => setCampoBuscaAtivo(null), 120)}
+                            placeholder="Buscar bairro"
+                            className="w-full text-[11px] py-1.5 px-2 rounded-lg border border-gray-200 bg-white text-gray-700"
+                          />
+                          {campoBuscaAtivo === 'bairro' && sugestoesBairroVisiveis.length > 0 && (
+                            <div className="absolute z-[650] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-32 overflow-auto">
+                              {sugestoesBairroVisiveis.map((nome, idx) => (
+                                <button
+                                  key={`${nome}-${idx}`}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setBuscaBairro(nome);
+                                    setCampoBuscaAtivo(null);
+                                  }}
+                                  className="w-full text-left px-2 py-1.5 text-[11px] hover:bg-gray-50 text-gray-700"
+                                >
+                                  {nome}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1 mb-2">
+                        <button
+                          onClick={aplicarBusca}
+                          className="text-[10px] py-1.5 rounded-lg font-medium bg-[#ff4600] text-white hover:bg-[#e23d00] transition"
+                        >
+                          Aplicar
+                        </button>
+                        <button
+                          onClick={limparBusca}
+                          className="text-[10px] py-1.5 rounded-lg font-medium bg-white text-gray-600 border border-gray-200 hover:bg-gray-100 transition"
+                        >
+                          Limpar
+                        </button>
+                      </div>
+                    </>
+                  )}
+
                   {cidadeSelecionada && (
                     <button
                       onClick={voltarBrasil}
@@ -455,7 +898,7 @@ export const BancoDeAtivos: React.FC = () => {
                       ← Voltar para visão Brasil
                     </button>
                   )}
-                    </div>
+                </div>
 
                 {/* Card: Cidade Selecionada */}
                 {cidadeSelecionada && (
@@ -476,15 +919,19 @@ export const BancoDeAtivos: React.FC = () => {
                     ) : (
                       <div className="grid grid-cols-3 gap-2 text-center">
                         <div>
-                          <div className="text-sm font-bold text-gray-800">{fmt(pontos.length)}</div>
+                          <div className="text-sm font-bold text-gray-800 truncate" title={fmt(pontos.length)}>{fmtCompact(pontos.length)}</div>
                           <div className="text-[9px] text-gray-400">Pontos</div>
                         </div>
                         <div>
-                          <div className="text-sm font-bold text-gray-800">{fmt(cidadeSelecionada.total_passantes)}</div>
+                          <div className="text-sm font-bold text-gray-800 truncate" title={fmt(cidadeSelecionada.total_passantes)}>
+                            {fmtCompact(cidadeSelecionada.total_passantes)}
+                          </div>
                           <div className="text-[9px] text-gray-400">Passantes</div>
                         </div>
                         <div>
-                          <div className="text-sm font-bold text-gray-800">{fmt(cidadeSelecionada.total_impactos)}</div>
+                          <div className="text-sm font-bold text-gray-800 truncate" title={fmt(cidadeSelecionada.total_impactos)}>
+                            {fmtCompact(cidadeSelecionada.total_impactos)}
+                          </div>
                           <div className="text-[9px] text-gray-400">Impactos</div>
                 </div>
               </div>
@@ -511,6 +958,18 @@ export const BancoDeAtivos: React.FC = () => {
                           </span>
                       </div>
                       <div className="flex justify-between"><span className="text-gray-400">Cidade</span><span className="font-medium text-gray-700">{pontoSelecionado.cidade || '-'}</span></div>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-gray-400">Rua</span>
+                        <span
+                          className="font-medium text-gray-700 text-right max-w-[160px] truncate"
+                          title={pontoSelecionado.rua || '-'}
+                        >
+                          {pontoSelecionado.rua && pontoSelecionado.rua !== 'Não informado' ? pontoSelecionado.rua : '-'}
+                        </span>
+                      </div>
+                      {!pontoSelecionado.rua && buscandoRua && (
+                        <div className="text-[10px] text-gray-400 text-right">Buscando logradouro...</div>
+                      )}
                       {pontoSelecionado.bairro && pontoSelecionado.bairro !== 'Não informado' && (
                         <div className="flex justify-between"><span className="text-gray-400">Bairro</span><span className="font-medium text-gray-700">{pontoSelecionado.bairro}</span></div>
                       )}
@@ -519,26 +978,74 @@ export const BancoDeAtivos: React.FC = () => {
                       )}
                       <div className="h-px bg-gray-100 my-1" />
                       <div className="grid grid-cols-3 gap-2 text-center pt-1">
-                        <div>
-                          <div className="text-sm font-bold text-gray-800">{fmt(pontoSelecionado.passantes || 0)}</div>
+                        <div className="min-w-0">
+                          <div
+                            className="text-sm font-bold text-gray-800 truncate"
+                            title={fmt(Number(pontoSelecionado.passantes || 0))}
+                          >
+                            {fmtCompact(Number(pontoSelecionado.passantes || 0))}
+                          </div>
                           <div className="text-[8px] text-gray-400 uppercase">Passantes</div>
-                            </div>
-                        <div>
-                          <div className="text-sm font-bold text-gray-800">{fmt(pontoSelecionado.impactos_ipv || 0)}</div>
+                        </div>
+                        <div className="min-w-0">
+                          <div
+                            className="text-sm font-bold text-gray-800 truncate"
+                            title={fmt(Number(pontoSelecionado.impactos_ipv || 0))}
+                          >
+                            {fmtCompact(Number(pontoSelecionado.impactos_ipv || 0))}
+                          </div>
                           <div className="text-[8px] text-gray-400 uppercase">Impactos</div>
-                            </div>
-                        <div>
-                          <div className="text-sm font-bold text-gray-800">{pontoSelecionado.rating || '-'}</div>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold text-gray-800 truncate" title={pontoSelecionado.rating || '-'}>
+                            {pontoSelecionado.rating || '-'}
+                          </div>
                           <div className="text-[8px] text-gray-400 uppercase">Rating</div>
                         </div>
-                          </div>
-                        </div>
+                      </div>
+                      <button
+                        onClick={() => setMostrarStreetView(true)}
+                        className="w-full mt-2 text-[11px] px-3 py-2 rounded-md bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 transition-colors font-semibold"
+                      >
+                        Ver Street View
+                      </button>
+                    </div>
                     </div>
                 )}
 
                 {loading && (
                   <div className="flex items-center justify-center py-8">
                     <div className="w-8 h-8 border-3 border-gray-200 border-t-[#ff4600] rounded-full animate-spin" />
+                  </div>
+                )}
+
+                {/* Card: Lista de pontos (grid) */}
+                {cidadeSelecionada && !loadingPontos && pontos.length > 0 && (
+                  <div className="rounded-xl border-2 border-gray-200 bg-white p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] uppercase tracking-wide font-semibold text-gray-500">Lista de pontos</span>
+                      <span className="text-[10px] text-gray-400">Mostrando {fmt(pontosGrid.length)} de {fmt(pontos.length)}</span>
+                    </div>
+                    <div className="max-h-56 overflow-auto border border-gray-100 rounded-lg">
+                      <div className="grid grid-cols-[1fr_1fr_70px] gap-2 text-[9px] font-semibold text-gray-400 uppercase px-2 py-1 border-b border-gray-100 bg-gray-50 sticky top-0">
+                        <span>Código</span>
+                        <span>Exibidor</span>
+                        <span className="text-right">Impactos</span>
+                      </div>
+                      {pontosGrid.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => setPontoSelecionado(p)}
+                          className={`w-full grid grid-cols-[1fr_1fr_70px] gap-2 text-[10px] px-2 py-1.5 border-b border-gray-50 hover:bg-gray-50 text-left ${
+                            pontoSelecionado?.id === p.id ? 'bg-orange-50' : 'bg-white'
+                          }`}
+                        >
+                          <span className="text-gray-700 truncate">{p.code || '-'}</span>
+                          <span className="text-gray-600 truncate">{p.exibidor || '-'}</span>
+                          <span className="text-gray-700 text-right font-medium">{fmt(Number(p.impactos_ipv || 0))}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
                     </div>
@@ -754,6 +1261,46 @@ export const BancoDeAtivos: React.FC = () => {
             © 2025 Colmeia. All rights are reserved to Be Mediatech OOH.
           </footer>
         </div>
+
+        {mostrarStreetView && pontoSelecionado && (
+          <div className="fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
+            <div className="w-full max-w-5xl h-[80vh] bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col">
+              <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Street View do ponto</h3>
+                  <p className="text-xs text-gray-500">
+                    {Number(pontoSelecionado.latitude).toFixed(5)}, {Number(pontoSelecionado.longitude).toFixed(5)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setMostrarStreetView(false)}
+                  className="w-8 h-8 rounded-full hover:bg-gray-100 text-gray-600"
+                  aria-label="Fechar Street View"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="flex-1 bg-gray-100">
+                {streetViewEmbedUrl ? (
+                  <iframe
+                    title="Street View"
+                    src={streetViewEmbedUrl}
+                    width="100%"
+                    height="100%"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    allowFullScreen
+                  />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center p-6 text-center text-sm text-gray-600">
+                    Defina `VITE_GOOGLE_MAPS_API_KEY` no `.env` para habilitar o Street View.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
