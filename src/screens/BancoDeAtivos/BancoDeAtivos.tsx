@@ -1,4 +1,5 @@
 import React from 'react';
+import * as XLSX from 'xlsx';
 import { Sidebar } from '../../components/Sidebar/Sidebar';
 import { Topbar } from '../../components/Topbar/Topbar';
 import api from '../../config/axios';
@@ -49,6 +50,8 @@ interface SugestaoPraca {
   nome_cidade: string;
   nome_estado?: string;
 }
+
+type GridSortKey = 'code' | 'exibidor' | 'impactos_ipv';
 
 interface Perimetro {
   city_id: number | null;
@@ -141,7 +144,25 @@ function FlyToCity({ lat, lon }: { lat: number; lon: number }) {
   return null;
 }
 
-function MarkerClusterLayer({ pontos, onSelect }: { pontos: PontoMidia[]; onSelect: (p: PontoMidia) => void }) {
+function FlyToPoint({ lat, lon }: { lat: number; lon: number }) {
+  const map = useMap();
+  React.useEffect(() => {
+    const currentZoom = map.getZoom();
+    map.flyTo([lat, lon], Math.max(currentZoom, 17), { duration: 0.9 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lat, lon]);
+  return null;
+}
+
+function MarkerClusterLayer({
+  pontos,
+  onSelect,
+  selectedPointId,
+}: {
+  pontos: PontoMidia[];
+  onSelect: (p: PontoMidia) => void;
+  selectedPointId?: number | null;
+}) {
   const map = useMap();
   const clusterRef = React.useRef<L.MarkerClusterGroup | null>(null);
 
@@ -165,9 +186,14 @@ function MarkerClusterLayer({ pontos, onSelect }: { pontos: PontoMidia[]; onSele
     pontos.forEach(p => {
       if (!p.latitude || !p.longitude) return;
       const isPublic = (p.ambiente || '').toUpperCase().includes('PUBLIC');
+      const isSelected = selectedPointId != null && p.id === selectedPointId;
       const color = isPublic ? '#3b82f6' : '#f97316';
       const marker = L.circleMarker([Number(p.latitude), Number(p.longitude)], {
-        radius: 5, fillColor: color, color: '#fff', weight: 1.5, fillOpacity: 0.85,
+        radius: isSelected ? 7 : 5,
+        fillColor: color,
+        color: isSelected ? '#111827' : '#fff',
+        weight: isSelected ? 2.2 : 1.5,
+        fillOpacity: isSelected ? 1 : 0.85,
       });
       marker.on('click', () => onSelect(p));
       cluster.addLayer(marker);
@@ -177,7 +203,7 @@ function MarkerClusterLayer({ pontos, onSelect }: { pontos: PontoMidia[]; onSele
     clusterRef.current = cluster;
     return () => { if (clusterRef.current) map.removeLayer(clusterRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pontos]);
+  }, [pontos, onSelect, selectedPointId]);
 
   return null;
 }
@@ -200,6 +226,17 @@ function normalizeText(value: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toLowerCase();
+}
+
+function coordKey(lat: number, lng: number): string {
+  return `${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}`;
+}
+
+function sanitizeSheetName(name: string): string {
+  const safe = (name || 'Pontos')
+    .replace(/[\\/*?:[\]]/g, ' ')
+    .trim();
+  return safe.slice(0, 31) || 'Pontos';
 }
 
 function bubbleRadius(total: number, max: number): number {
@@ -230,6 +267,9 @@ export const BancoDeAtivos: React.FC = () => {
   const [hoveredCity, setHoveredCity] = React.useState<HoveredCity | null>(null);
   const [ruaPorCoordenada, setRuaPorCoordenada] = React.useState<Record<string, string>>({});
   const [buscandoRua, setBuscandoRua] = React.useState(false);
+  const [exportandoExcel, setExportandoExcel] = React.useState(false);
+  const [exportProgress, setExportProgress] = React.useState(0);
+  const [exportStatusText, setExportStatusText] = React.useState('');
 
   // Filters
   const [filtroAmbiente, setFiltroAmbiente] = React.useState<'todos' | 'vias_publicas' | 'indoor'>('todos');
@@ -243,6 +283,9 @@ export const BancoDeAtivos: React.FC = () => {
   const [baseBairrosPraca, setBaseBairrosPraca] = React.useState<string[]>([]);
   const [mostrarBuscaAvancada, setMostrarBuscaAvancada] = React.useState(false);
   const [campoBuscaAtivo, setCampoBuscaAtivo] = React.useState<'praca' | 'exibidor' | 'bairro' | null>(null);
+  const [mostrarDadosModal, setMostrarDadosModal] = React.useState(false);
+  const [gridSortKey, setGridSortKey] = React.useState<GridSortKey>('impactos_ipv');
+  const [gridSortDir, setGridSortDir] = React.useState<'asc' | 'desc'>('desc');
 
   // Drag
   const painelRef = React.useRef<HTMLDivElement>(null);
@@ -334,6 +377,15 @@ export const BancoDeAtivos: React.FC = () => {
   const handleZoom = React.useCallback((z: number) => setZoom(z), []);
 
   const normalizar = React.useCallback((v: string) => (v || '').trim().toLowerCase(), []);
+
+  const alternarOrdenacaoGrid = React.useCallback((key: GridSortKey) => {
+    if (gridSortKey === key) {
+      setGridSortDir(prev => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setGridSortKey(key);
+    setGridSortDir(key === 'impactos_ipv' ? 'desc' : 'asc');
+  }, [gridSortKey]);
 
   const aplicarBusca = React.useCallback(() => {
     const praca = buscaPraca.trim() || cidadeSelecionada?.cidade || '';
@@ -605,7 +657,159 @@ export const BancoDeAtivos: React.FC = () => {
 
   const showBrazilView = !cidadeSelecionada;
   const maxPontos = React.useMemo(() => Math.max(...centroids.map(c => c.total_pontos), 1), [centroids]);
-  const pontosGrid = React.useMemo(() => pontos.slice(0, 200), [pontos]);
+  const pontosOrdenados = React.useMemo(() => {
+    const arr = [...pontos];
+    arr.sort((a, b) => {
+      let cmp = 0;
+      if (gridSortKey === 'impactos_ipv') {
+        cmp = Number(a.impactos_ipv || 0) - Number(b.impactos_ipv || 0);
+      } else if (gridSortKey === 'code') {
+        cmp = String(a.code || '').localeCompare(String(b.code || ''), 'pt-BR', { sensitivity: 'base' });
+      } else {
+        cmp = String(a.exibidor || '').localeCompare(String(b.exibidor || ''), 'pt-BR', { sensitivity: 'base' });
+      }
+      return gridSortDir === 'asc' ? cmp : -cmp;
+    });
+    return arr;
+  }, [pontos, gridSortKey, gridSortDir]);
+
+  const colunasDadosModal = React.useMemo(() => {
+    const preferredOrder = [
+      'id', 'code', 'exibidor', 'tipo_midia', 'ambiente', 'cidade', 'estado', 'bairro', 'rua',
+      'grupo_midia', 'subgrupo_midia', 'categoria', 'formato',
+      'passantes', 'impactos_ipv', 'rating', 'latitude', 'longitude'
+    ];
+    const allKeys = new Set<string>();
+    pontos.forEach((p) => Object.keys(p || {}).forEach((k) => allKeys.add(k)));
+    return [
+      ...preferredOrder.filter(k => allKeys.has(k)),
+      ...Array.from(allKeys).filter(k => !preferredOrder.includes(k)).sort()
+    ];
+  }, [pontos]);
+
+  const exportarPontosExcel = React.useCallback(async () => {
+    const source = pontos;
+    if (!source.length || exportandoExcel) return;
+    setExportandoExcel(true);
+    setExportProgress(5);
+    setExportStatusText('Preparando dados para exportação...');
+
+    try {
+      let sourceEnriquecido = source;
+
+      // Enriquecer logradouro por coordenadas quando estiver ausente
+      const ruasPorId: Record<number, string> = {};
+      const cacheUpdate: Record<string, string> = {};
+
+      const pendentes = source
+        .filter((p) => !p.rua || p.rua === 'Não informado')
+        .map((p) => {
+          const lat = Number(p.latitude);
+          const lng = Number(p.longitude);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+          const key = coordKey(lat, lng);
+          const ruaCache = ruaPorCoordenada[key];
+          if (ruaCache) {
+            ruasPorId[p.id] = ruaCache;
+            return null;
+          }
+          return { id: p.id, latitude: lat, longitude: lng };
+        })
+        .filter((x): x is { id: number; latitude: number; longitude: number } => Boolean(x));
+
+      if (pendentes.length === 0) {
+        setExportProgress(40);
+        setExportStatusText('Logradouro já disponível. Montando planilha...');
+      }
+
+      const chunkSize = 200;
+      const totalChunks = Math.max(1, Math.ceil(pendentes.length / chunkSize));
+      for (let i = 0; i < pendentes.length; i += chunkSize) {
+        const chunk = pendentes.slice(i, i + chunkSize);
+        try {
+          const chunkNumber = Math.floor(i / chunkSize) + 1;
+          setExportStatusText(`Consultando logradouro (${chunkNumber}/${totalChunks})...`);
+          const progressDuranteConsulta = 10 + Math.round((chunkNumber / totalChunks) * 55);
+          setExportProgress(progressDuranteConsulta);
+          const res = await api.post('/consulta-endereco', { rows: chunk });
+          const resultados = Array.isArray(res.data?.results) ? res.data.results : [];
+          for (const item of resultados) {
+            const ruaDetectada =
+              (item?.street && String(item.street).trim()) ||
+              (item?.formattedAddress && String(item.formattedAddress).split(',')[0].trim()) ||
+              '';
+            if (!ruaDetectada) continue;
+            ruasPorId[item.id] = ruaDetectada;
+            const key = coordKey(Number(item.latitude), Number(item.longitude));
+            cacheUpdate[key] = ruaDetectada;
+          }
+        } catch (err) {
+          console.error('[BancoDeAtivos] Falha ao enriquecer rua para export (chunk):', err);
+        }
+      }
+
+      if (Object.keys(cacheUpdate).length > 0) {
+        setRuaPorCoordenada((prev) => ({ ...prev, ...cacheUpdate }));
+      }
+
+      setExportProgress(75);
+      setExportStatusText('Organizando dados finais...');
+
+      sourceEnriquecido = source.map((p) => ({
+        ...p,
+        rua: p.rua && p.rua !== 'Não informado' ? p.rua : (ruasPorId[p.id] || p.rua || ''),
+      }));
+
+      // Ordem preferencial + campos extras dinâmicos que venham da API
+      const preferredOrder = [
+        'id', 'code', 'exibidor', 'tipo_midia', 'ambiente', 'cidade', 'estado', 'bairro', 'rua',
+        'grupo_midia', 'subgrupo_midia', 'categoria', 'formato',
+        'passantes', 'impactos_ipv', 'rating', 'latitude', 'longitude'
+      ];
+
+      const allKeys = new Set<string>();
+      sourceEnriquecido.forEach((p) => Object.keys(p || {}).forEach((k) => allKeys.add(k)));
+
+      const orderedKeys = [
+        ...preferredOrder.filter(k => allKeys.has(k)),
+        ...Array.from(allKeys).filter(k => !preferredOrder.includes(k)).sort()
+      ];
+
+      const data = sourceEnriquecido.map((p) => {
+        const row: Record<string, any> = {};
+        orderedKeys.forEach((k) => {
+          row[k] = (p as any)[k] ?? '';
+        });
+        return row;
+      });
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      const nomeAba = sanitizeSheetName(cidadeSelecionada?.cidade ? `Pontos ${cidadeSelecionada.cidade}` : 'Pontos Banco Ativos');
+      XLSX.utils.book_append_sheet(wb, ws, nomeAba);
+
+      setExportProgress(90);
+      setExportStatusText('Gerando arquivo Excel...');
+
+      const date = new Date();
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      const h = String(date.getHours()).padStart(2, '0');
+      const min = String(date.getMinutes()).padStart(2, '0');
+      const cidade = (cidadeSelecionada?.cidade || 'geral').replace(/\s+/g, '_');
+      const filename = `banco_ativos_pontos_${cidade}_${y}${m}${d}_${h}${min}.xlsx`;
+      XLSX.writeFile(wb, filename);
+      setExportProgress(100);
+      setExportStatusText('Exportação concluída.');
+    } finally {
+      setTimeout(() => {
+        setExportandoExcel(false);
+        setExportProgress(0);
+        setExportStatusText('');
+      }, 700);
+    }
+  }, [pontos, cidadeSelecionada, ruaPorCoordenada, exportandoExcel]);
 
   // Map cidade_st → centroid para lookup rápido
   // Chave normalizada (trim + lowercase) para tolerar diferenças de case/espaços entre as duas queries
@@ -641,10 +845,12 @@ export const BancoDeAtivos: React.FC = () => {
       <div className={`flex-1 transition-all duration-300 min-h-screen w-full ${menuReduzido ? 'ml-20' : 'ml-64'} flex flex-col`}>
           <Topbar 
             menuReduzido={menuReduzido} 
-          breadcrumbItems={[
-            { label: 'Home', path: '/' },
-            { label: 'Banco de Ativos' },
-          ]}
+          breadcrumb={{
+            items: [
+              { label: 'Home', path: '/' },
+              { label: 'Banco de Ativos' },
+            ]
+          }}
         />
 
         {/* Mapa fullscreen */}
@@ -936,6 +1142,14 @@ export const BancoDeAtivos: React.FC = () => {
                 </div>
               </div>
             )}
+                    {!loadingPontos && pontos.length > 0 && (
+                      <button
+                        onClick={() => setMostrarDadosModal(true)}
+                        className="w-full mt-2 text-[10px] py-1.5 rounded-lg font-medium bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition"
+                      >
+                        Ver dados completos
+                      </button>
+                    )}
               </div>
             )}
 
@@ -1019,35 +1233,6 @@ export const BancoDeAtivos: React.FC = () => {
                   </div>
                 )}
 
-                {/* Card: Lista de pontos (grid) */}
-                {cidadeSelecionada && !loadingPontos && pontos.length > 0 && (
-                  <div className="rounded-xl border-2 border-gray-200 bg-white p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] uppercase tracking-wide font-semibold text-gray-500">Lista de pontos</span>
-                      <span className="text-[10px] text-gray-400">Mostrando {fmt(pontosGrid.length)} de {fmt(pontos.length)}</span>
-                    </div>
-                    <div className="max-h-56 overflow-auto border border-gray-100 rounded-lg">
-                      <div className="grid grid-cols-[1fr_1fr_70px] gap-2 text-[9px] font-semibold text-gray-400 uppercase px-2 py-1 border-b border-gray-100 bg-gray-50 sticky top-0">
-                        <span>Código</span>
-                        <span>Exibidor</span>
-                        <span className="text-right">Impactos</span>
-                      </div>
-                      {pontosGrid.map((p) => (
-                        <button
-                          key={p.id}
-                          onClick={() => setPontoSelecionado(p)}
-                          className={`w-full grid grid-cols-[1fr_1fr_70px] gap-2 text-[10px] px-2 py-1.5 border-b border-gray-50 hover:bg-gray-50 text-left ${
-                            pontoSelecionado?.id === p.id ? 'bg-orange-50' : 'bg-white'
-                          }`}
-                        >
-                          <span className="text-gray-700 truncate">{p.code || '-'}</span>
-                          <span className="text-gray-600 truncate">{p.exibidor || '-'}</span>
-                          <span className="text-gray-700 text-right font-medium">{fmt(Number(p.impactos_ipv || 0))}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
                     </div>
                     </div>
                     </div>
@@ -1206,7 +1391,33 @@ export const BancoDeAtivos: React.FC = () => {
               {/* MarkerClusterLayer sempre montado quando há cidade selecionada;
                   renderiza vazio enquanto carrega e atualiza sozinho quando pontos chegam */}
               {cidadeSelecionada && (
-                <MarkerClusterLayer pontos={pontos} onSelect={setPontoSelecionado} />
+                <MarkerClusterLayer
+                  pontos={pontos}
+                  onSelect={setPontoSelecionado}
+                  selectedPointId={pontoSelecionado?.id}
+                />
+              )}
+              {pontoSelecionado && (
+                <FlyToPoint lat={Number(pontoSelecionado.latitude)} lon={Number(pontoSelecionado.longitude)} />
+              )}
+              {pontoSelecionado && (
+                <CircleMarker
+                  center={[Number(pontoSelecionado.latitude), Number(pontoSelecionado.longitude)]}
+                  radius={11}
+                  pathOptions={{
+                    color: '#111827',
+                    weight: 2.5,
+                    fillColor: '#ff4600',
+                    fillOpacity: 0.35,
+                  }}
+                >
+                  <Tooltip direction="top" offset={[0, -10]} opacity={1}>
+                    <div style={{ fontSize: 11, lineHeight: 1.4 }}>
+                      <strong>Ponto selecionado</strong><br />
+                      {pontoSelecionado.code || `ID ${pontoSelecionado.id}`}
+                    </div>
+                  </Tooltip>
+                </CircleMarker>
               )}
             </MapContainer>
                   </div>
@@ -1261,6 +1472,105 @@ export const BancoDeAtivos: React.FC = () => {
             © 2025 Colmeia. All rights are reserved to Be Mediatech OOH.
           </footer>
         </div>
+
+        {mostrarDadosModal && (
+          <div className="fixed inset-0 z-[1250] bg-black/50 flex items-center justify-center p-4">
+            <div className="w-full max-w-7xl h-[86vh] bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col">
+              <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Dados completos dos pontos</h3>
+                  <p className="text-xs text-gray-500">
+                    {cidadeSelecionada?.cidade || 'Praça'} · {fmt(pontosOrdenados.length)} registros
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={exportarPontosExcel}
+                    disabled={exportandoExcel}
+                    className="inline-flex items-center gap-1.5 text-[11px] py-1.5 px-2.5 rounded-lg font-medium bg-white text-gray-600 border border-gray-200 hover:bg-gray-100 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="text-gray-500">
+                      <path d="M14 2H7a2 2 0 0 0-2 2v7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M14 2v5h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M19 13v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M12 10v8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                      <path d="M9 15l3 3 3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    {exportandoExcel ? 'Exportando...' : 'Exportar'}
+                  </button>
+                  <button
+                    onClick={() => setMostrarDadosModal(false)}
+                    className="w-8 h-8 rounded-full hover:bg-gray-100 text-gray-600"
+                    aria-label="Fechar dados completos"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {exportandoExcel && (
+                <div className="px-4 py-2 border-b border-gray-100">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] text-gray-500">{exportStatusText || 'Exportando...'}</span>
+                    <span className="text-[11px] text-gray-500">{Math.max(0, Math.min(100, exportProgress))}%</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#ff4600] transition-all duration-300"
+                      style={{ width: `${Math.max(0, Math.min(100, exportProgress))}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex-1 overflow-auto">
+                <table className="min-w-full text-[11px]">
+                  <thead className="sticky top-0 bg-gray-50 border-b border-gray-200 z-10">
+                    <tr>
+                      {colunasDadosModal.map((col) => {
+                        const sortable = col === 'code' || col === 'exibidor' || col === 'impactos_ipv';
+                        return (
+                          <th key={col} className="px-2 py-2 text-left font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
+                            {sortable ? (
+                              <button
+                                onClick={() => alternarOrdenacaoGrid(col as GridSortKey)}
+                                className="hover:text-gray-700 transition-colors"
+                              >
+                                {col} {gridSortKey === col ? (gridSortDir === 'asc' ? '↑' : '↓') : ''}
+                              </button>
+                            ) : (
+                              col
+                            )}
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pontosOrdenados.map((p) => (
+                      <tr
+                        key={p.id}
+                        className={`border-b border-gray-50 hover:bg-gray-50 cursor-pointer ${
+                          pontoSelecionado?.id === p.id ? 'bg-orange-50' : ''
+                        }`}
+                        onClick={() => {
+                          setPontoSelecionado(p);
+                          setMostrarDadosModal(false);
+                        }}
+                      >
+                        {colunasDadosModal.map((col) => (
+                          <td key={`${p.id}-${col}`} className="px-2 py-1.5 text-gray-700 whitespace-nowrap max-w-[220px] truncate" title={String((p as any)[col] ?? '-')}>
+                            {String((p as any)[col] ?? '-')}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
 
         {mostrarStreetView && pontoSelecionado && (
           <div className="fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
