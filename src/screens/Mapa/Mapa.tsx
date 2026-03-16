@@ -32,6 +32,11 @@ interface Hexagono {
   grupo_st: string;
   count_vl: number;
   groupCount_vl: number;
+  valorLiquido_vl?: number;
+  totalFinal_vl?: number;
+  totalNegociado_vl?: number;
+  valorTotal_vl?: number;
+  cpmView_vl?: number;
 }
 
 // Tipo para os dados dos pontos de mídia individuais
@@ -397,7 +402,7 @@ export const Mapa: React.FC = () => {
     // Só mostrar debounce se realmente há mudança E não está usando cache
     if ((cidadeChanged || semanaChanged) && !isDebouncing) {
       setIsDebouncing(true);
-      showStatus("⏳ Aguardando...", "info");
+      showStatus("Atualizando dados selecionados...", "info");
     } else if (!cidadeChanged && !semanaChanged && isDebouncing) {
       // Resetar debounce quando valores estão sincronizados
       setIsDebouncing(false);
@@ -416,7 +421,7 @@ export const Mapa: React.FC = () => {
         setLoadingCidades(false);
         setLoadingDescPks(false);
         setIsDebouncing(false); // Resetar debounce quando usa cache
-        showStatus(`✅ Dados carregados do cache para grupo ${grupo}`, "success");
+        showStatus("Dados do grupo atualizados.", "success");
         return;
       }
 
@@ -425,7 +430,6 @@ export const Mapa: React.FC = () => {
       setLoadingCidades(true);
       setLoadingDescPks(true);
       setErro(null);
-      clearStatus();
       
       console.log("🗺️ [PERF] Carregando dados em paralelo para grupo:", grupo);
       
@@ -457,9 +461,9 @@ export const Mapa: React.FC = () => {
           setLoadingDescPks(false);
           
           if (cidadesRes.data.cidades && cidadesRes.data.cidades.length) {
-            showStatus(`✅ ${cidadesRes.data.cidades.length} praça(s) encontrada(s) para o grupo "${cidadesRes.data.nomeGrupo || grupo}"`, "success");
+            showStatus(`${cidadesRes.data.cidades.length} praça(s) encontrada(s) para o grupo "${cidadesRes.data.nomeGrupo || grupo}".`, "success");
           } else {
-            showStatus(`❌ Nenhuma praça encontrada para o grupo "${cidadesRes.data.nomeGrupo || grupo}". Verifique se o grupo possui dados cadastrados.`, "error");
+            showStatus(`Nenhuma praça encontrada para o grupo "${cidadesRes.data.nomeGrupo || grupo}".`, "error");
           }
         })
         .catch(err => {
@@ -467,7 +471,7 @@ export const Mapa: React.FC = () => {
           const errorMsg = err.response?.data?.error || 'Erro ao carregar cidades';
           setErro(errorMsg);
           setCidades([]);
-          showStatus(`❌ Erro ao carregar dados: ${errorMsg}`, "error");
+          showStatus(`Não foi possível carregar os dados do grupo: ${errorMsg}`, "error");
         })
         .finally(() => {
           setLoading(false);
@@ -475,7 +479,7 @@ export const Mapa: React.FC = () => {
           setLoadingDescPks(false);
         });
     } else {
-      showStatus("👋 Bem-vindo ao Mapa de Roteiros! Selecione um grupo para começar.", "info");
+      showStatus("Selecione um grupo para visualizar o mapa.", "info");
     }
   }, [grupo]);
 
@@ -521,11 +525,11 @@ export const Mapa: React.FC = () => {
         setSemanas(semanasCacheadas);
         setLoadingSemanas(false);
         setIsDebouncing(false); // Resetar debounce quando usa cache
-        showStatus(`✅ ${semanasCacheadas.length} semana(s) válida(s) do cache para ${debouncedCidadeSelecionada}`, "success");
+        showStatus(`${semanasCacheadas.length} semana(s) disponível(is) para ${debouncedCidadeSelecionada}.`, "success");
         return;
       }
 
-      showStatus(`📅 [DEBOUNCE] Carregando semanas disponíveis para ${debouncedCidadeSelecionada}...`, "info");
+      showStatus(`Carregando semanas disponíveis para ${debouncedCidadeSelecionada}...`, "info");
       setLoadingSemanas(true);
       console.log("🗺️ [CACHE] Carregando semanas para descPk:", descPk);
       api.get(`semanas?desc_pk=${descPk}`)
@@ -545,15 +549,15 @@ export const Mapa: React.FC = () => {
           setSemanas(semanasValidas);
           setCacheSemanas(prev => ({ ...prev, [descPk]: semanasValidas }));
           if (semanasValidas.length > 0) {
-            showStatus(`✅ ${semanasValidas.length} semana(s) válida(s) para ${cidadeSelecionada}`, "success");
+            showStatus(`${semanasValidas.length} semana(s) disponível(is) para ${cidadeSelecionada}.`, "success");
           } else {
-            showStatus(`⚠️ Nenhuma semana válida encontrada para ${cidadeSelecionada}. Esta praça pode não ter dados de planejamento.`, "warning");
+            showStatus(`Não há semanas disponíveis para ${cidadeSelecionada}.`, "warning");
           }
         })
         .catch(err => {
           console.error("Mapa: erro na API semanas:", err);
           setSemanas([]);
-          showStatus(`❌ Erro ao carregar semanas para ${cidadeSelecionada}`, "error");
+          showStatus(`Não foi possível carregar as semanas de ${cidadeSelecionada}.`, "error");
         })
         .finally(() => {
           setLoadingSemanas(false);
@@ -561,7 +565,7 @@ export const Mapa: React.FC = () => {
     } else {
       setSemanas([]);
       if (cidadeSelecionada && !descPks[cidadeSelecionada]) {
-        showStatus(`⚠️ Dados da praça ${cidadeSelecionada} não encontrados`, "warning");
+        showStatus(`Não encontramos dados para a praça ${cidadeSelecionada}.`, "warning");
       }
     }
   }, [debouncedCidadeSelecionada, descPks]);
@@ -591,14 +595,14 @@ export const Mapa: React.FC = () => {
         setLoadingHexagonos(false); // Garantir que loading está false
         setIsDebouncing(false); // Resetar debounce quando usa cache
         const semanaText = debouncedSemanaSelecionada ? `semana ${debouncedSemanaSelecionada}` : "todas as semanas";
-        showStatus(`⚡ Cache: ${cacheHexagonos[cacheKey].length} pontos para ${debouncedCidadeSelecionada} (${semanaText})`, "success");
+        showStatus(`Mapa atualizado com ${cacheHexagonos[cacheKey].length} ponto(s) para ${debouncedCidadeSelecionada} (${semanaText}).`, "success");
         return;
       }
       
       console.log("🗺️ [CACHE MISS] Não encontrado no cache:", cacheKey);
 
       const searchTerm = debouncedSemanaSelecionada ? `semana ${debouncedSemanaSelecionada}` : "todas as semanas";
-      showStatus(`🗺️ [DEBOUNCE] Carregando mapa para ${debouncedCidadeSelecionada} (${searchTerm})...`, "info");
+      showStatus(`Carregando mapa para ${debouncedCidadeSelecionada} (${searchTerm})...`, "info");
       setLoadingHexagonos(true);
       
       // Construir URL da API de forma otimizada
@@ -623,7 +627,7 @@ export const Mapa: React.FC = () => {
             const fluxoMedio = totalFluxo / hexagonosData.length;
             
             const semanaText = debouncedSemanaSelecionada ? `semana ${debouncedSemanaSelecionada}` : "todas as semanas";
-            showStatus(`✅ Carregado em ${loadTime}ms: ${formatNumber(hexagonosData.length)} pontos para ${debouncedCidadeSelecionada} (${semanaText}) - Fluxo médio: ${formatNumber(fluxoMedio)}`, "success");
+            showStatus(`Mapa atualizado com ${formatNumber(hexagonosData.length)} ponto(s) para ${debouncedCidadeSelecionada} (${semanaText}).`, "success");
             
             // Salvar informações da última busca
             setLastSearchInfo({
@@ -634,14 +638,14 @@ export const Mapa: React.FC = () => {
             });
           } else {
             const semanaText = debouncedSemanaSelecionada ? `semana ${debouncedSemanaSelecionada}` : "todas as semanas";
-            showStatus(`⚠️ Nenhum ponto encontrado para ${debouncedCidadeSelecionada} (${semanaText}). Esta combinação pode não ter dados de planejamento.`, "warning");
+            showStatus(`Nenhum ponto encontrado para ${debouncedCidadeSelecionada} (${semanaText}).`, "warning");
           }
         })
         .catch(err => {
           console.error("Erro ao carregar hexágonos:", err);
           setHexagonos([]);
           const semanaText = debouncedSemanaSelecionada ? `semana ${debouncedSemanaSelecionada}` : "todas as semanas";
-          showStatus(`❌ Erro ao carregar mapa para ${debouncedCidadeSelecionada} (${semanaText})`, "error");
+          showStatus(`Não foi possível carregar o mapa para ${debouncedCidadeSelecionada} (${semanaText}).`, "error");
         })
         .finally(() => {
           setLoadingHexagonos(false);
@@ -864,32 +868,32 @@ export const Mapa: React.FC = () => {
     
     const configs = {
       info: { 
-        bg: "bg-gradient-to-r from-blue-50 to-indigo-50", 
-        border: "border-blue-300", 
-        text: "text-blue-800",
+        bg: "bg-gray-50", 
+        border: "border-gray-300", 
+        text: "text-gray-700",
         icon: "ℹ️",
-        dotColor: "bg-blue-500"
+        dotColor: "bg-gray-500"
       },
       success: { 
-        bg: "bg-gradient-to-r from-green-50 to-emerald-50", 
-        border: "border-green-300", 
-        text: "text-green-800",
+        bg: "bg-gray-50", 
+        border: "border-gray-300", 
+        text: "text-gray-800",
         icon: "✅",
-        dotColor: "bg-green-500"
+        dotColor: "bg-gray-700"
       },
       warning: { 
-        bg: "bg-gradient-to-r from-yellow-50 to-amber-50", 
-        border: "border-yellow-300", 
-        text: "text-yellow-800",
+        bg: "bg-gray-100", 
+        border: "border-gray-400", 
+        text: "text-gray-800",
         icon: "⚠️",
-        dotColor: "bg-yellow-500"
+        dotColor: "bg-gray-600"
       },
       error: { 
-        bg: "bg-gradient-to-r from-red-50 to-pink-50", 
-        border: "border-red-300", 
-        text: "text-red-800",
+        bg: "bg-gray-100", 
+        border: "border-gray-400", 
+        text: "text-gray-900",
         icon: "❌",
-        dotColor: "bg-red-500"
+        dotColor: "bg-gray-800"
       }
     };
     
@@ -1473,32 +1477,22 @@ export const Mapa: React.FC = () => {
               {/* Otimizador */}
               {hexagonos.length > 0 && temDados && (
                 <div className="mt-3">
-                      <button
-                    onClick={() => { analisar(); setMostrarSugestoes(true); }}
-                    disabled={isAnalyzing}
-                    className="w-full bg-gradient-to-r from-[#ff4600] to-orange-500 text-white rounded-xl px-4 py-3 text-xs font-bold hover:from-[#e03700] hover:to-orange-400 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  <button
+                    onClick={() => {
+                      setMostrarSugestoes(false);
+                      setMostrarModalDetalhes(false);
+                      showStatus("Otimizar Plano está em desenvolvimento e em breve estará disponível.", "info");
+                    }}
+                    className="w-full bg-gradient-to-r from-[#ff4600] to-orange-500 text-white rounded-xl px-4 py-3 text-xs font-bold hover:from-[#e03700] hover:to-orange-400 transition-all flex items-center justify-center gap-2"
                   >
-                    {isAnalyzing ? (
-                      <><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" /><span>Analisando...</span></>
-                    ) : (
-                      <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg><span>Otimizar Plano</span><span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px]">BETA</span></>
-                    )}
-                      </button>
-                  {analise && mostrarSugestoes && (
-                    <div className="mt-2 p-3 border-2 border-gray-200 rounded-xl bg-white space-y-1.5">
-                      <div className="text-[10px] text-gray-400 uppercase font-semibold">Quick Insights</div>
-                      <div className="text-xs text-gray-700">{analise.planoAtual.totalHexagonos} hexágonos · {analise.planoOtimizado.sugestoes.length} sugestões</div>
-                      <div className="text-xs font-bold text-green-600">+{analise.planoOtimizado.ganhoPercentual.toFixed(1)}% ganho estimado</div>
-                      <button
-                        onClick={() => { setMostrarModalDetalhes(true); setMostrarSugestoes(false); }}
-                        className="w-full text-[10px] text-[#ff4600] font-semibold hover:underline text-left"
-                      >
-                        Ver detalhes →
-                      </button>
-                    </div>
-                  )}
-                  </div>
-                )}
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    <span>Otimizar Plano</span>
+                    <span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px]">BETA</span>
+                  </button>
+                </div>
+              )}
                 
               </div>{/* fim conteúdo colapsável */}
             </div>
@@ -1694,6 +1688,14 @@ export const Mapa: React.FC = () => {
         analise={analise}
         isOpen={mostrarModalDetalhes}
         onClose={() => setMostrarModalDetalhes(false)}
+        pontosContexto={pontosValidados.map(({ ponto }) => ponto)}
+        onSelectPoint={(planoMidiaPk) => {
+          const encontrado = pontosValidados.find(({ ponto }) => ponto.planoMidia_pk === planoMidiaPk);
+          if (encontrado) {
+            setPontoSelecionado(encontrado.ponto);
+            setMostrarModalDetalhes(false);
+          }
+        }}
       />
       {mostrarStreetView && pontoSelecionado && (
         <div className="fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">

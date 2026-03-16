@@ -11,6 +11,11 @@ interface Hexagono {
   geometry_8: string;
   planoMidia_pk: number;
   grupo_st: string;
+  valorLiquido_vl?: number;
+  totalFinal_vl?: number;
+  totalNegociado_vl?: number;
+  valorTotal_vl?: number;
+  cpmView_vl?: number;
 }
 
 interface HexagonoAnalise extends Hexagono {
@@ -18,6 +23,10 @@ interface HexagonoAnalise extends Hexagono {
   eficienciaPercentual: number;
   ranking: number;
   fluxoPorPonto: number;
+  investimentoEstimado: number;
+  custoPorPonto: number;
+  eficienciaFinanceira: number;
+  scorePriorizacao: number;
   sugestao: 'manter' | 'remover' | 'adicionar' | 'potencial';
 }
 
@@ -27,6 +36,7 @@ interface SugestaoRealocacao {
   pontosSugeridos: number;
   justificativa: string;
   impactoFluxo: number;
+  impactoInvestimento: number;
 }
 
 interface AnaliseCompleta {
@@ -38,19 +48,31 @@ interface AnaliseCompleta {
     eficienciaMedia: number;
     hexagonosBaixaPerformance: number;
     hexagonosAltaPerformance: number;
+    investimentoTotal: number;
+    eficienciaFinanceiraAtual: number;
+    dadosFinanceirosDisponiveis: boolean;
   };
   planoOtimizado: {
     sugestoes: SugestaoRealocacao[];
     ganhoFluxoEstimado: number;
     ganhoPercentual: number;
     pontosRealocados: number;
-    economiaEstimada: number;
+    economiaEstimada: number; // em moeda (R$) quando houver base financeira
+    variacaoInvestimento: number;
+    eficienciaFinanceiraOtimizada: number;
+    usaFinanceiro: boolean;
+    restricoesAplicadas: {
+      semAumentoInvestimento: boolean;
+      maxRealocacaoPorGrupo: number;
+    };
   };
   hexagonosAnalisados: HexagonoAnalise[];
 }
 
 export function usePlanoOptimizer(hexagonos: Hexagono[]) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const MAX_HEX_PARA_ACAO = 3;
+  const MAX_ADICOES_POR_GRUPO = 1;
 
   // Calcular análise completa - versão simplificada e segura
   const analise: AnaliseCompleta | null = useMemo(() => {
@@ -62,19 +84,35 @@ export function usePlanoOptimizer(hexagonos: Hexagono[]) {
       // 1. ANÁLISE BÁSICA DO PLANO
       const totalPontos = hexagonos.reduce((sum, h) => sum + (h.count_vl || 0), 0);
       const fluxoTotal = hexagonos.reduce((sum, h) => sum + h.calculatedFluxoEstimado_vl, 0);
-      const fluxoMedio = fluxoTotal / hexagonos.length;
+      const fluxoMedio = hexagonos.length > 0 ? fluxoTotal / hexagonos.length : 0;
 
-      // 2. CALCULAR EFICIÊNCIA SIMPLES
+      const investimentoTotal = hexagonos.reduce(
+        (sum, h) => sum + getInvestimentoEstimado(h),
+        0
+      );
+      const dadosFinanceirosDisponiveis = investimentoTotal > 0;
+      const eficienciaFinanceiraAtual = investimentoTotal > 0 ? fluxoTotal / investimentoTotal : 0;
+
+      // 2. CALCULAR EFICIÊNCIA V2 (alcance + financeiro opcional)
       const hexagonosComAnalise: HexagonoAnalise[] = hexagonos.map((hex) => {
-        const eficienciaScore = hex.calculatedFluxoEstimado_vl / fluxoMedio;
+        const investimentoEstimado = getInvestimentoEstimado(hex);
+        const eficienciaScore = fluxoMedio > 0 ? hex.calculatedFluxoEstimado_vl / fluxoMedio : 0;
         const eficienciaPercentual = eficienciaScore * 100;
-        const fluxoPorPonto = hex.count_vl > 0 ? hex.calculatedFluxoEstimado_vl / hex.count_vl : 0;
+        const pontosHex = Math.max(1, hex.count_vl || 0);
+        const fluxoPorPonto = hex.calculatedFluxoEstimado_vl / pontosHex;
+        const custoPorPonto = investimentoEstimado > 0 ? investimentoEstimado / pontosHex : 0;
+        const eficienciaFinanceira = investimentoEstimado > 0 ? hex.calculatedFluxoEstimado_vl / investimentoEstimado : 0;
+        const scorePriorizacao = investimentoEstimado > 0 ? eficienciaFinanceira : fluxoPorPonto;
 
         return {
           ...hex,
           eficienciaScore,
           eficienciaPercentual,
           fluxoPorPonto,
+          investimentoEstimado,
+          custoPorPonto,
+          eficienciaFinanceira,
+          scorePriorizacao,
           ranking: 0,
           sugestao: 'manter' as const
         };
@@ -88,7 +126,7 @@ export function usePlanoOptimizer(hexagonos: Hexagono[]) {
         hex.ranking = idx + 1;
       });
 
-      // 4. IDENTIFICAR PERFORMANCE (versão simplificada)
+      // 4. IDENTIFICAR PERFORMANCE
       const eficiencias = hexagonosComAnalise.map(h => h.eficienciaPercentual).sort((a, b) => a - b);
       const percentil25 = eficiencias[Math.floor(eficiencias.length * 0.25)];
       const percentil75 = eficiencias[Math.floor(eficiencias.length * 0.75)];
@@ -104,69 +142,85 @@ export function usePlanoOptimizer(hexagonos: Hexagono[]) {
         (sum, h) => sum + h.eficienciaPercentual, 0
       ) / hexagonosComAnalise.length;
 
-      // 5. GERAR SUGESTÕES SIMPLES
+      // 5. GERAR SUGESTÕES V2
       const sugestoes: SugestaoRealocacao[] = [];
 
-      // Remover hexágonos com menor fluxo por ponto
+      // Remover: piores score de priorização, com pelo menos 1 ponto
       const hexagonosParaRemover = hexagonosComAnalise
         .filter(h => h.count_vl > 0)
-        .sort((a, b) => a.fluxoPorPonto - b.fluxoPorPonto)
-        .slice(0, 3); // Top 3 piores
+        .sort((a, b) => a.scorePriorizacao - b.scorePriorizacao)
+        .slice(0, MAX_HEX_PARA_ACAO);
 
+      let pontosDisponiveis = 0;
       hexagonosParaRemover.forEach(hex => {
         hex.sugestao = 'remover';
+        const pontosRemovidos = Math.max(1, Math.floor((hex.count_vl || 0) * 0.5));
+        pontosDisponiveis += pontosRemovidos;
         sugestoes.push({
           tipo: 'remover',
           hexagono: hex,
-          pontosSugeridos: hex.count_vl,
-          justificativa: `Menor fluxo por ponto (${formatNumber(hex.fluxoPorPonto)} pessoas/ponto)`,
-          impactoFluxo: -hex.calculatedFluxoEstimado_vl
+          pontosSugeridos: pontosRemovidos,
+          justificativa: `Baixo rendimento (${formatNumber(hex.scorePriorizacao)} de score)`,
+          impactoFluxo: -(hex.fluxoPorPonto * pontosRemovidos),
+          impactoInvestimento: -(hex.custoPorPonto * pontosRemovidos)
         });
       });
 
-      // Adicionar pontos nos hexágonos com maior fluxo por ponto
-      const pontosDisponiveis = sugestoes.reduce((sum, s) => sum + s.pontosSugeridos, 0);
+      // Adicionar: melhores score, respeitando conservacao de pontos
+      const removidosSet = new Set(hexagonosParaRemover.map(h => h.hexagon_pk));
       const hexagonosParaAdicionar = hexagonosComAnalise
-        .filter(h => h.count_vl < 3)
-        .sort((a, b) => b.fluxoPorPonto - a.fluxoPorPonto)
-        .slice(0, 3); // Top 3 melhores
+        .filter(h => !removidosSet.has(h.hexagon_pk))
+        .sort((a, b) => b.scorePriorizacao - a.scorePriorizacao)
+        .slice(0, MAX_HEX_PARA_ACAO);
 
-      hexagonosParaAdicionar.forEach((hex, idx) => {
-        if (pontosDisponiveis > 0 && idx < sugestoes.length) {
+      const adicoesPorGrupo = new Map<string, number>();
+      hexagonosParaAdicionar.forEach((hex) => {
+        const grupo = hex.grupo_st || '__sem_grupo__';
+        const adicoesNoGrupo = adicoesPorGrupo.get(grupo) || 0;
+        if (adicoesNoGrupo >= MAX_ADICOES_POR_GRUPO) return;
+        if (pontosDisponiveis > 0) {
           hex.sugestao = 'adicionar';
-          const pontosAAdicionar = Math.min(2, pontosDisponiveis);
+          const limitePorCota = Math.max(1, MAX_ADICOES_POR_GRUPO - adicoesNoGrupo);
+          const pontosAAdicionar = Math.min(2, pontosDisponiveis, limitePorCota);
+          if (pontosAAdicionar <= 0) return;
+          pontosDisponiveis -= pontosAAdicionar;
+          adicoesPorGrupo.set(grupo, adicoesNoGrupo + pontosAAdicionar);
           sugestoes.push({
             tipo: 'adicionar',
             hexagono: hex,
             pontosSugeridos: pontosAAdicionar,
-            justificativa: `Maior fluxo por ponto (${formatNumber(hex.fluxoPorPonto)} pessoas/ponto)`,
-            impactoFluxo: hex.calculatedFluxoEstimado_vl * (pontosAAdicionar / (hex.count_vl + 1))
+            justificativa: `Alto rendimento (${formatNumber(hex.scorePriorizacao)} de score)`,
+            impactoFluxo: hex.fluxoPorPonto * pontosAAdicionar,
+            impactoInvestimento: hex.custoPorPonto * pontosAAdicionar
           });
         }
       });
 
-      // 6. CALCULAR GANHOS SIMPLES
-      const fluxoRemovido = sugestoes
-        .filter(s => s.tipo === 'remover')
-        .reduce((sum, s) => sum + Math.abs(s.impactoFluxo), 0);
-
-      const fluxoAdicionado = sugestoes
-        .filter(s => s.tipo === 'adicionar')
-        .reduce((sum, s) => sum + s.impactoFluxo, 0);
-
-      const ganhoFluxoEstimado = fluxoAdicionado - fluxoRemovido;
-      const ganhoPercentual = (ganhoFluxoEstimado / fluxoTotal) * 100;
-
+      // 6. IMPACTOS CONSOLIDADOS
+      const ganhoFluxoEstimado = sugestoes.reduce((sum, s) => sum + s.impactoFluxo, 0);
+      const ganhoPercentual = fluxoTotal > 0 ? (ganhoFluxoEstimado / fluxoTotal) * 100 : 0;
+      const variacaoInvestimentoBruta = sugestoes.reduce((sum, s) => sum + s.impactoInvestimento, 0);
       const pontosRealocados = sugestoes
         .filter(s => s.tipo === 'remover')
         .reduce((sum, s) => sum + s.pontosSugeridos, 0);
 
-      const economiaEstimada = (fluxoRemovido / fluxoTotal) * 100;
+      // Restrição orçamentária: não permitir aumento de investimento
+      let variacaoInvestimento = variacaoInvestimentoBruta;
+      if (dadosFinanceirosDisponiveis && variacaoInvestimento > 0) {
+        variacaoInvestimento = 0;
+      }
+      const economiaEstimada = variacaoInvestimento < 0 ? Math.abs(variacaoInvestimento) : 0;
+      const fluxoOtimizado = fluxoTotal + ganhoFluxoEstimado;
+      const investimentoOtimizado = Math.max(0, investimentoTotal + variacaoInvestimento);
+      const eficienciaFinanceiraOtimizada = investimentoOtimizado > 0 ? fluxoOtimizado / investimentoOtimizado : 0;
 
       console.log('🔍 [DEBUG] Análise simplificada:', {
         totalHexagonos: hexagonos.length,
         sugestoes: sugestoes.length,
-        ganhoPercentual: ganhoPercentual.toFixed(1) + '%'
+        ganhoPercentual: ganhoPercentual.toFixed(1) + '%',
+        usaFinanceiro: dadosFinanceirosDisponiveis,
+        variacaoInvestimentoBruta: variacaoInvestimentoBruta.toFixed(2),
+        variacaoInvestimentoAplicada: variacaoInvestimento.toFixed(2)
       });
 
       return {
@@ -177,14 +231,24 @@ export function usePlanoOptimizer(hexagonos: Hexagono[]) {
           fluxoMedio,
           eficienciaMedia,
           hexagonosBaixaPerformance: hexagonosBaixaPerformance.length,
-          hexagonosAltaPerformance: hexagonosAltaPerformance.length
+          hexagonosAltaPerformance: hexagonosAltaPerformance.length,
+          investimentoTotal,
+          eficienciaFinanceiraAtual,
+          dadosFinanceirosDisponiveis
         },
         planoOtimizado: {
           sugestoes,
           ganhoFluxoEstimado,
           ganhoPercentual,
           pontosRealocados,
-          economiaEstimada
+          economiaEstimada,
+          variacaoInvestimento,
+          eficienciaFinanceiraOtimizada,
+          usaFinanceiro: dadosFinanceirosDisponiveis,
+          restricoesAplicadas: {
+            semAumentoInvestimento: dadosFinanceirosDisponiveis,
+            maxRealocacaoPorGrupo: MAX_ADICOES_POR_GRUPO
+          }
         },
         hexagonosAnalisados: hexagonosComAnalise
       };
@@ -219,4 +283,19 @@ function formatNumber(num: number): string {
     return (num / 1000).toFixed(1) + 'K';
   }
   return num.toFixed(0);
+}
+
+function getInvestimentoEstimado(hex: Hexagono): number {
+  const candidatos = [
+    hex.totalFinal_vl,
+    hex.valorLiquido_vl,
+    hex.totalNegociado_vl,
+    hex.valorTotal_vl
+  ];
+  for (const valor of candidatos) {
+    if (typeof valor === 'number' && Number.isFinite(valor) && valor > 0) {
+      return valor;
+    }
+  }
+  return 0;
 }

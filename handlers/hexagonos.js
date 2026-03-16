@@ -49,7 +49,7 @@ module.exports = async (req, res) => {
       return `@pk${i}`;
     }).join(',');
 
-    const result = await hexRequest.query(`
+    const baseQuery = `
       SELECT 
         hexagon_pk,
         hex_centroid_lat,
@@ -69,7 +69,42 @@ module.exports = async (req, res) => {
         hexColor_st
       FROM serv_product_be180.BaseCalculadoraHexagonosJoin_dm
       WHERE planoMidia_pk IN (${pkParams})
-    `);
+    `;
+
+    const financeiroQuery = `
+      SELECT 
+        hexagon_pk,
+        hex_centroid_lat,
+        hex_centroid_lon,
+        geometry_8,
+        hexagon_8,
+        calculatedFluxoEstimado_vl,
+        fluxoEstimado_vl,
+        planoMidia_pk,
+        grupo_st,
+        count_vl,
+        groupCount_vl,
+        rgbColorR_vl,
+        rgbColorG_vl,
+        rgbColorB_vl,
+        grupoDesc_st,
+        hexColor_st,
+        valorLiquido_vl,
+        totalFinal_vl,
+        totalNegociado_vl,
+        valorTotal_vl,
+        cpmView_vl
+      FROM serv_product_be180.BaseCalculadoraHexagonosJoin_dm
+      WHERE planoMidia_pk IN (${pkParams})
+    `;
+
+    let result;
+    try {
+      result = await hexRequest.query(financeiroQuery);
+    } catch (financeiroErr) {
+      console.warn('[hexagonos] Colunas financeiras indisponíveis, usando query base:', financeiroErr.message);
+      result = await hexRequest.query(baseQuery);
+    }
     
     console.log(`[hexagonos] ${result.recordset.length} hexagonos retornados`);
     

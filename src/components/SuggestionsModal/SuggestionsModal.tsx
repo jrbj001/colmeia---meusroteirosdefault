@@ -6,10 +6,7 @@ interface HexagonoAnalise {
   hex_centroid_lon: number;
   calculatedFluxoEstimado_vl: number;
   count_vl: number;
-  eficienciaPercentual: number;
-  fluxoPorPonto: number;
-  ranking: number;
-  sugestao: 'manter' | 'remover' | 'adicionar' | 'potencial';
+  grupo_st?: string;
 }
 
 interface SugestaoRealocacao {
@@ -18,6 +15,7 @@ interface SugestaoRealocacao {
   pontosSugeridos: number;
   justificativa: string;
   impactoFluxo: number;
+  impactoInvestimento: number;
 }
 
 interface AnaliseCompleta {
@@ -25,10 +23,9 @@ interface AnaliseCompleta {
     totalPontos: number;
     totalHexagonos: number;
     fluxoTotal: number;
-    fluxoMedio: number;
-    eficienciaMedia: number;
-    hexagonosBaixaPerformance: number;
-    hexagonosAltaPerformance: number;
+    investimentoTotal: number;
+    eficienciaFinanceiraAtual: number;
+    dadosFinanceirosDisponiveis: boolean;
   };
   planoOtimizado: {
     sugestoes: SugestaoRealocacao[];
@@ -36,319 +33,319 @@ interface AnaliseCompleta {
     ganhoPercentual: number;
     pontosRealocados: number;
     economiaEstimada: number;
+    variacaoInvestimento: number;
+    eficienciaFinanceiraOtimizada: number;
+    restricoesAplicadas: {
+      semAumentoInvestimento: boolean;
+      maxRealocacaoPorGrupo: number;
+    };
   };
+}
+
+interface PontoContexto {
+  planoMidia_pk: number;
+  latitude_vl: number;
+  longitude_vl: number;
+  grupo_st?: string;
+  nome_st?: string;
+  tipo_st?: string;
+  formato_st?: string;
+  cidade_st?: string;
+  estado_st?: string;
+  bairro_st?: string;
+  [key: string]: any;
 }
 
 interface SuggestionsModalProps {
   analise: AnaliseCompleta | null;
   isOpen: boolean;
   onClose: () => void;
+  pontosContexto?: PontoContexto[];
+  onSelectPoint?: (planoMidiaPk: number) => void;
 }
 
-export const SuggestionsModal: React.FC<SuggestionsModalProps> = ({ 
-  analise, 
-  isOpen, 
-  onClose 
+type FiltroTipo = 'todos' | 'adicionar' | 'remover';
+
+function formatCompact(num: number): string {
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return num.toFixed(0);
+}
+
+function formatCurrency(num: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    maximumFractionDigits: 0
+  }).format(num);
+}
+
+function getExibidor(ponto: PontoContexto | null): string {
+  if (!ponto) return 'Não informado';
+  return (
+    ponto.exibidor_st ||
+    ponto.exibidor ||
+    ponto.operadora_st ||
+    ponto.operadora ||
+    ponto.owner_st ||
+    'Não informado'
+  );
+}
+
+function getEndereco(ponto: PontoContexto | null): string {
+  if (!ponto) return 'Endereço não informado';
+  const rua = ponto.logradouro_st || ponto.logradouro || ponto.endereco_st || ponto.endereco;
+  const bairro = ponto.bairro_st || ponto.bairro;
+  const cidade = ponto.cidade_st || ponto.cidade;
+  const uf = ponto.estado_st || ponto.estado;
+  return [rua, bairro, [cidade, uf].filter(Boolean).join('/')].filter(Boolean).join(' · ') || 'Endereço não informado';
+}
+
+function distanciaQuadratica(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const dLat = lat1 - lat2;
+  const dLon = lon1 - lon2;
+  return dLat * dLat + dLon * dLon;
+}
+
+function obterPontoReferencia(
+  sugestao: SugestaoRealocacao,
+  pontos: PontoContexto[]
+): PontoContexto | null {
+  if (!pontos.length) return null;
+  const mesmoGrupo = pontos.filter(p => p.grupo_st && p.grupo_st === sugestao.hexagono.grupo_st);
+  const candidatos = mesmoGrupo.length > 0 ? mesmoGrupo : pontos;
+  let melhor: PontoContexto | null = null;
+  let melhorDist = Number.POSITIVE_INFINITY;
+  for (const p of candidatos) {
+    const dist = distanciaQuadratica(
+      sugestao.hexagono.hex_centroid_lat,
+      sugestao.hexagono.hex_centroid_lon,
+      p.latitude_vl,
+      p.longitude_vl
+    );
+    if (dist < melhorDist) {
+      melhorDist = dist;
+      melhor = p;
+    }
+  }
+  return melhor;
+}
+
+export const SuggestionsModal: React.FC<SuggestionsModalProps> = ({
+  analise,
+  isOpen,
+  onClose,
+  pontosContexto = [],
+  onSelectPoint
 }) => {
+  const [filtro, setFiltro] = React.useState<FiltroTipo>('todos');
+  const [selecionada, setSelecionada] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setFiltro('todos');
+      setSelecionada(0);
+    }
+  }, [isOpen]);
+
   if (!isOpen || !analise) return null;
 
-  const formatNumber = (num: number): string => {
-    if (num >= 1000000) {
-      return (num / 1000000).toFixed(1) + 'M';
-    }
-    if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'K';
-    }
-    return num.toFixed(0);
-  };
+  const sugestoesFiltradas = analise.planoOtimizado.sugestoes.filter(s => {
+    if (filtro === 'todos') return true;
+    return s.tipo === filtro;
+  });
 
-  const sugestoesRemocao = analise.planoOtimizado.sugestoes.filter(s => s.tipo === 'remover');
-  const sugestoesAdicao = analise.planoOtimizado.sugestoes.filter(s => s.tipo === 'adicionar');
+  const sugestaoAtiva =
+    sugestoesFiltradas.length > 0 && selecionada != null
+      ? sugestoesFiltradas[Math.min(selecionada, sugestoesFiltradas.length - 1)]
+      : null;
+
+  const pontoAtivo = sugestaoAtiva ? obterPontoReferencia(sugestaoAtiva, pontosContexto) : null;
+  const nomePonto = pontoAtivo?.nome_st || pontoAtivo?.tipo_st || (pontoAtivo?.planoMidia_pk ? `Ponto #${pontoAtivo.planoMidia_pk}` : `Hexágono #${sugestaoAtiva?.hexagono.hexagon_pk ?? '-'}`);
 
   return (
-    <div 
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 2000,
-        padding: 20
-      }}
-      onClick={onClose}
-    >
-      <div 
-        style={{
-          background: 'white',
-          borderRadius: 16,
-          maxWidth: 900,
-          width: '100%',
-          maxHeight: '90vh',
-          overflow: 'hidden',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-        }}
+    <div className="fixed inset-0 z-[2000] bg-black/50 p-4 sm:p-6" onClick={onClose}>
+      <div
+        className="mx-auto h-[90vh] max-w-6xl rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div style={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          padding: '24px 32px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
+        <div className="border-b border-gray-200 px-5 py-4 flex items-center justify-between">
           <div>
-            <h2 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>
-              💡 Sugestões de Otimização do Plano
-            </h2>
-            <p style={{ margin: '8px 0 0 0', opacity: 0.9, fontSize: 16 }}>
-              Análise inteligente para maximizar o alcance da sua campanha
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Sugestões de Otimização</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {analise.planoOtimizado.sugestoes.length} recomendações · {analise.planoOtimizado.ganhoPercentual >= 0 ? '+' : ''}{analise.planoOtimizado.ganhoPercentual.toFixed(1)}% impacto estimado
             </p>
           </div>
           <button
             onClick={onClose}
-            style={{
-              background: 'rgba(255, 255, 255, 0.2)',
-              border: 'none',
-              borderRadius: 8,
-              color: 'white',
-              fontSize: 24,
-              width: 40,
-              height: 40,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
+            className="w-8 h-8 rounded-full border border-gray-300 text-gray-600 hover:bg-gray-100"
+            aria-label="Fechar modal"
           >
-            ×
+            ✕
           </button>
         </div>
 
-        {/* Content */}
-        <div style={{ padding: 32, maxHeight: 'calc(90vh - 120px)', overflowY: 'auto' }}>
-          
-          {/* Resumo Executivo */}
-          <div style={{
-            background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
-            borderRadius: 12,
-            padding: 24,
-            marginBottom: 32,
-            border: '1px solid #0ea5e9'
-          }}>
-            <h3 style={{ margin: '0 0 16px 0', color: '#0c4a6e', fontSize: 20 }}>
-              📊 Resumo Executivo
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <div>
-                <div style={{ fontSize: 14, color: '#64748b', marginBottom: 4 }}>Plano Atual</div>
-                <div style={{ fontSize: 18, fontWeight: 600, color: '#0c4a6e' }}>
-                  {formatNumber(analise.planoAtual.totalPontos)} pontos
-                </div>
-                <div style={{ fontSize: 14, color: '#64748b' }}>
-                  {analise.planoAtual.totalHexagonos} hexágonos • {formatNumber(analise.planoAtual.fluxoTotal)} pessoas
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 14, color: '#64748b', marginBottom: 4 }}>Potencial de Melhoria</div>
-                <div style={{ fontSize: 18, fontWeight: 600, color: '#059669' }}>
-                  +{analise.planoOtimizado.ganhoPercentual.toFixed(1)}% de alcance
-                </div>
-                <div style={{ fontSize: 14, color: '#64748b' }}>
-                  {analise.planoOtimizado.pontosRealocados} pontos realocados
-                </div>
-              </div>
+        <div className="px-5 py-3 border-b border-gray-200 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 text-xs">
+          <div className="rounded-lg border border-gray-200 p-2">
+            <div className="text-gray-500">Pontos realocados</div>
+            <div className="text-gray-900 font-semibold">{analise.planoOtimizado.pontosRealocados}</div>
+          </div>
+          <div className="rounded-lg border border-gray-200 p-2">
+            <div className="text-gray-500">Impacto incremental</div>
+            <div className="text-gray-900 font-semibold">{analise.planoOtimizado.ganhoFluxoEstimado >= 0 ? '+' : ''}{formatCompact(analise.planoOtimizado.ganhoFluxoEstimado)}</div>
+          </div>
+          <div className="rounded-lg border border-gray-200 p-2">
+            <div className="text-gray-500">Variação investimento</div>
+            <div className="text-gray-900 font-semibold">
+              {analise.planoAtual.dadosFinanceirosDisponiveis ? (
+                <>
+                  {analise.planoOtimizado.variacaoInvestimento >= 0 ? '+' : '-'}
+                  {formatCurrency(Math.abs(analise.planoOtimizado.variacaoInvestimento))}
+                </>
+              ) : 'N/A'}
             </div>
           </div>
-
-          {/* Sugestões de Remoção */}
-          {sugestoesRemocao.length > 0 && (
-            <div style={{ marginBottom: 32 }}>
-              <h3 style={{ margin: '0 0 16px 0', color: '#dc2626', fontSize: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
-                ❌ Remover Pontos (Baixa Eficiência)
-              </h3>
-              <div style={{ display: 'grid', gap: 12 }}>
-                {sugestoesRemocao.map((sugestao, idx) => (
-                  <div key={idx} style={{
-                    background: '#fef2f2',
-                    border: '1px solid #fecaca',
-                    borderRadius: 8,
-                    padding: 16,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 16
-                  }}>
-                    <div style={{
-                      background: '#dc2626',
-                      color: 'white',
-                      borderRadius: 6,
-                      padding: '8px 12px',
-                      fontSize: 14,
-                      fontWeight: 600,
-                      minWidth: 60,
-                      textAlign: 'center'
-                    }}>
-                      -{sugestao.pontosSugeridos}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 16, fontWeight: 600, color: '#991b1b', marginBottom: 4 }}>
-                        Hexágono #{sugestao.hexagono.hexagon_pk}
-                      </div>
-                      <div style={{ fontSize: 14, color: '#7f1d1d', marginBottom: 4 }}>
-                        {sugestao.justificativa}
-                      </div>
-                      <div style={{ fontSize: 12, color: '#64748b' }}>
-                        Fluxo atual: {formatNumber(sugestao.hexagono.calculatedFluxoEstimado_vl)} pessoas
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: '#dc2626' }}>
-                        -{formatNumber(Math.abs(sugestao.impactoFluxo))}
-                      </div>
-                      <div style={{ fontSize: 12, color: '#64748b' }}>pessoas</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Sugestões de Adição */}
-          {sugestoesAdicao.length > 0 && (
-            <div style={{ marginBottom: 32 }}>
-              <h3 style={{ margin: '0 0 16px 0', color: '#059669', fontSize: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
-                ✅ Adicionar Pontos (Alta Eficiência)
-              </h3>
-              <div style={{ display: 'grid', gap: 12 }}>
-                {sugestoesAdicao.map((sugestao, idx) => (
-                  <div key={idx} style={{
-                    background: '#f0fdf4',
-                    border: '1px solid #bbf7d0',
-                    borderRadius: 8,
-                    padding: 16,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 16
-                  }}>
-                    <div style={{
-                      background: '#059669',
-                      color: 'white',
-                      borderRadius: 6,
-                      padding: '8px 12px',
-                      fontSize: 14,
-                      fontWeight: 600,
-                      minWidth: 60,
-                      textAlign: 'center'
-                    }}>
-                      +{sugestao.pontosSugeridos}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 16, fontWeight: 600, color: '#065f46', marginBottom: 4 }}>
-                        Hexágono #{sugestao.hexagono.hexagon_pk}
-                      </div>
-                      <div style={{ fontSize: 14, color: '#047857', marginBottom: 4 }}>
-                        {sugestao.justificativa}
-                      </div>
-                      <div style={{ fontSize: 12, color: '#64748b' }}>
-                        Fluxo atual: {formatNumber(sugestao.hexagono.calculatedFluxoEstimado_vl)} pessoas
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: '#059669' }}>
-                        +{formatNumber(sugestao.impactoFluxo)}
-                      </div>
-                      <div style={{ fontSize: 12, color: '#64748b' }}>pessoas</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Impacto Financeiro */}
-          <div style={{
-            background: 'linear-gradient(135deg, #fefce8 0%, #fef3c7 100%)',
-            borderRadius: 12,
-            padding: 24,
-            marginBottom: 32,
-            border: '1px solid #f59e0b'
-          }}>
-            <h3 style={{ margin: '0 0 16px 0', color: '#92400e', fontSize: 20 }}>
-              💰 Impacto Financeiro Estimado
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 24, fontWeight: 700, color: '#92400e' }}>
-                  {formatNumber(analise.planoAtual.totalPontos)}
-                </div>
-                <div style={{ fontSize: 14, color: '#a16207' }}>Pontos Atuais</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 24, fontWeight: 700, color: '#059669' }}>
-                  +{analise.planoOtimizado.ganhoPercentual.toFixed(1)}%
-                </div>
-                <div style={{ fontSize: 14, color: '#047857' }}>Ganho de Alcance</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 24, fontWeight: 700, color: '#0ea5e9' }}>
-                  {formatNumber(analise.planoOtimizado.ganhoFluxoEstimado)}
-                </div>
-                <div style={{ fontSize: 14, color: '#0284c7' }}>Pessoas Adicionais</div>
-              </div>
+          <div className="rounded-lg border border-gray-200 p-2">
+            <div className="text-gray-500">Eficiência</div>
+            <div className="text-gray-900 font-semibold">
+              {analise.planoAtual.dadosFinanceirosDisponiveis
+                ? `${analise.planoAtual.eficienciaFinanceiraAtual.toFixed(2)}→${analise.planoOtimizado.eficienciaFinanceiraOtimizada.toFixed(2)}`
+                : `${analise.planoOtimizado.ganhoPercentual >= 0 ? '+' : ''}${analise.planoOtimizado.ganhoPercentual.toFixed(1)}%`}
             </div>
           </div>
+        </div>
 
-          {/* Ações */}
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+        <div className="px-5 py-3 border-b border-gray-200 flex items-center gap-2">
+          {(['todos', 'adicionar', 'remover'] as FiltroTipo[]).map((op) => (
             <button
-              onClick={onClose}
-              style={{
-                background: '#f3f4f6',
-                border: '1px solid #d1d5db',
-                borderRadius: 8,
-                padding: '12px 24px',
-                fontSize: 14,
-                fontWeight: 600,
-                color: '#374151',
-                cursor: 'pointer'
-              }}
+              key={op}
+              onClick={() => { setFiltro(op); setSelecionada(0); }}
+              className={`px-3 py-1.5 rounded-md text-xs border transition-colors ${
+                filtro === op
+                  ? 'bg-[#ff4600] text-white border-[#ff4600]'
+                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+              }`}
             >
-              Fechar
+              {op === 'todos' ? 'Todos' : op === 'adicionar' ? 'Adicionar' : 'Remover'}
             </button>
-            <button
-              style={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                border: 'none',
-                borderRadius: 8,
-                padding: '12px 24px',
-                fontSize: 14,
-                fontWeight: 600,
-                color: 'white',
-                cursor: 'pointer'
-              }}
-            >
-              Exportar Relatório
-            </button>
-            <button
-              style={{
-                background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-                border: 'none',
-                borderRadius: 8,
-                padding: '12px 24px',
-                fontSize: 14,
-                fontWeight: 600,
-                color: 'white',
-                cursor: 'pointer'
-              }}
-            >
-              Aplicar Sugestões
-            </button>
+          ))}
+          <div className="ml-auto text-[11px] text-gray-500">
+            Orçamento sem aumento: {analise.planoOtimizado.restricoesAplicadas.semAumentoInvestimento ? 'sim' : 'não'} · Max/grupo: {analise.planoOtimizado.restricoesAplicadas.maxRealocacaoPorGrupo}
+          </div>
+        </div>
+
+        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1.4fr_1fr]">
+          <div className="overflow-y-auto p-4 space-y-2 border-r border-gray-200">
+            {sugestoesFiltradas.length === 0 ? (
+              <div className="text-sm text-gray-500 p-4 border border-dashed border-gray-300 rounded-lg">
+                Nenhuma sugestão para o filtro selecionado.
+              </div>
+            ) : (
+              sugestoesFiltradas.map((sugestao, idx) => {
+                const ponto = obterPontoReferencia(sugestao, pontosContexto);
+                const nome = ponto?.nome_st || ponto?.tipo_st || (ponto?.planoMidia_pk ? `Ponto #${ponto.planoMidia_pk}` : `Hexágono #${sugestao.hexagono.hexagon_pk}`);
+                const exibidor = getExibidor(ponto);
+                const endereco = getEndereco(ponto);
+                const impacto = sugestao.impactoFluxo;
+                const isSelected = idx === selecionada;
+                return (
+                  <button
+                    key={`${sugestao.tipo}-${sugestao.hexagono.hexagon_pk}-${idx}`}
+                    onClick={() => setSelecionada(idx)}
+                    className={`w-full text-left p-3 rounded-xl border transition-colors ${
+                      isSelected ? 'border-[#ff4600] bg-orange-50' : 'border-gray-200 bg-white hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${
+                        sugestao.tipo === 'adicionar' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                      }`}>
+                        {sugestao.tipo === 'adicionar' ? 'Adicionar' : 'Remover'}
+                      </span>
+                      <span className="text-xs font-semibold text-gray-700">
+                        {impacto >= 0 ? '+' : '-'}{formatCompact(Math.abs(impacto))} impacto
+                      </span>
+                    </div>
+                    <div className="mt-2 text-sm font-semibold text-gray-900">{nome}</div>
+                    <div className="mt-1 text-xs text-gray-600">Exibidor: <span className="font-medium">{exibidor}</span></div>
+                    <div className="mt-0.5 text-xs text-gray-500 line-clamp-1">{endereco}</div>
+                    <div className="mt-1 text-[11px] text-gray-500 line-clamp-1">{sugestao.justificativa}</div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          <div className="p-4 overflow-y-auto">
+            {sugestaoAtiva ? (
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-gray-900">Detalhe da recomendação</h3>
+                <div className="rounded-xl border border-gray-200 p-3 space-y-2 text-xs">
+                  <div>
+                    <div className="text-gray-500">Nome do ponto</div>
+                    <div className="text-gray-900 font-semibold">{nomePonto}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Exibidor</div>
+                    <div className="text-gray-900">{getExibidor(pontoAtivo)}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Impacto estimado</div>
+                    <div className="text-gray-900 font-semibold">
+                      {sugestaoAtiva.impactoFluxo >= 0 ? '+' : '-'}{formatCompact(Math.abs(sugestaoAtiva.impactoFluxo))}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Endereço</div>
+                    <div className="text-gray-900">{getEndereco(pontoAtivo)}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Tipo / Formato</div>
+                    <div className="text-gray-900">{pontoAtivo?.tipo_st || 'Não informado'} · {pontoAtivo?.formato_st || 'N/D'}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Coordenadas</div>
+                    <div className="text-gray-900 font-mono">
+                      {pontoAtivo
+                        ? `${pontoAtivo.latitude_vl.toFixed(5)}, ${pontoAtivo.longitude_vl.toFixed(5)}`
+                        : `${sugestaoAtiva.hexagono.hex_centroid_lat.toFixed(5)}, ${sugestaoAtiva.hexagono.hex_centroid_lon.toFixed(5)}`}
+                    </div>
+                  </div>
+                </div>
+
+                {pontoAtivo?.planoMidia_pk && onSelectPoint && (
+                  <button
+                    onClick={() => onSelectPoint(pontoAtivo.planoMidia_pk)}
+                    className="w-full px-3 py-2 rounded-md bg-gray-100 border border-gray-300 text-gray-700 hover:bg-gray-200 text-xs font-medium"
+                  >
+                    Ver no mapa
+                  </button>
+                )}
+
+                <div className="pt-2 flex gap-2">
+                  <button
+                    onClick={onClose}
+                    className="flex-1 px-3 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-medium"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    className="flex-1 px-3 py-2 rounded-md bg-[#ff4600] text-white hover:bg-[#e23e00] text-xs font-semibold"
+                  >
+                    Aplicar sugestões
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500 border border-dashed border-gray-300 rounded-lg p-4">
+                Selecione uma recomendação para ver os detalhes.
+              </div>
+            )}
           </div>
         </div>
       </div>
