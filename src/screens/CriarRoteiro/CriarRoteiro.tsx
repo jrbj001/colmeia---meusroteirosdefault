@@ -30,7 +30,7 @@ interface Categoria {
 }
 
 interface Cidade {
-  id_cidade: number;
+  id_cidade: number | string;
   nome_cidade: string;
   nome_estado: string;
   codigo_ibge?: string;
@@ -335,7 +335,7 @@ export const CriarRoteiro: React.FC = () => {
   const [importPlanoData, setImportPlanoData] = useState<{ records: ParsedPlanoRow[]; filename: string } | null>(null);
   const [pracasSelecionadasSimulado, setPracasSelecionadasSimulado] = useState<any[]>([]);
   const [quantidadeSemanas, setQuantidadeSemanas] = useState<number>(12);
-  const [tabelaSimulado, setTabelaSimulado] = useState<Record<number, any[]>>({}); // Objeto: id_cidade -> array de linhas
+  const [tabelaSimulado, setTabelaSimulado] = useState<Record<string, any[]>>({}); // Objeto: chave da praça -> array de linhas
   
   // Estados para o novo fluxo pós-upload
   const [uploadCompleto, setUploadCompleto] = useState(false);
@@ -465,6 +465,19 @@ export const CriarRoteiro: React.FC = () => {
       .replace(/\s+/g, ' ');
   }, []);
 
+  const getCidadeIdKey = React.useCallback((cidade: Cidade) => {
+    const rawId = cidade?.id_cidade;
+    if (rawId !== undefined && rawId !== null && String(rawId).trim() !== '') {
+      return String(rawId).trim();
+    }
+    return `${cidade.nome_cidade}|${cidade.nome_estado}`
+      .toUpperCase()
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ');
+  }, []);
+
   // Filtrar cidades baseado na busca
   useEffect(() => {
     if (!searchPraca.trim()) {
@@ -519,7 +532,7 @@ export const CriarRoteiro: React.FC = () => {
       }
       
       // Objeto para armazenar tabelas por praça: id_cidade -> array de linhas
-      const tabelasPorPraca: Record<number, any[]> = {};
+      const tabelasPorPraca: Record<string, any[]> = {};
       
       // Gerar uma tabela separada para cada praça configurada na Aba 3
       for (const praca of cidadesSalvas) {
@@ -567,8 +580,8 @@ export const CriarRoteiro: React.FC = () => {
             });
           });
           
-          // Armazenar tabela desta praça - garantir que usamos número como chave
-          const idPraca = Number(praca.id_cidade);
+          // Armazenar tabela desta praça com chave estável (string)
+          const idPraca = getCidadeIdKey(praca);
           tabelasPorPraca[idPraca] = estruturaTabela;
           console.log(`✅ Tabela gerada para ${praca.nome_cidade}: ${estruturaTabela.length} subgrupos`);
           console.log(`✅ Tabela salva com chave ID: ${idPraca} (tipo: ${typeof idPraca})`);
@@ -701,10 +714,10 @@ export const CriarRoteiro: React.FC = () => {
         return;
       }
 
-      // Verificar se todas as praças configuradas têm tabela (usando número como chave)
+      // Verificar se todas as praças configuradas têm tabela
       const pracasSemTabela = cidadesSalvas.filter(p => {
-        const idPraca = Number(p.id_cidade);
-        const tabela = tabelaSimulado[idPraca] || tabelaSimulado[p.id_cidade as any];
+        const idPraca = getCidadeIdKey(p);
+        const tabela = tabelaSimulado[idPraca];
         return !tabela || tabela.length === 0;
       });
       if (pracasSemTabela.length > 0) {
@@ -727,17 +740,13 @@ export const CriarRoteiro: React.FC = () => {
       
       // Validar correspondência entre IDs das praças e tabelas
       cidadesSalvas.forEach(praca => {
-        const idNumero = Number(praca.id_cidade);
-        const idString = String(praca.id_cidade);
-        const tabelaPorNumero = tabelaSimulado[idNumero];
-        const tabelaPorString = tabelaSimulado[idString];
-        const tabelaPorIdOriginal = tabelaSimulado[praca.id_cidade as any];
+        const idKey = getCidadeIdKey(praca);
+        const tabelaPorChave = tabelaSimulado[idKey];
         
         console.log(`🔍 Validação para ${praca.nome_cidade}:`);
         console.log(`  - ID original: ${praca.id_cidade} (${typeof praca.id_cidade})`);
-        console.log(`  - Tabela por número (${idNumero}): ${tabelaPorNumero ? 'ENCONTRADA' : 'NÃO ENCONTRADA'}`);
-        console.log(`  - Tabela por string (${idString}): ${tabelaPorString ? 'ENCONTRADA' : 'NÃO ENCONTRADA'}`);
-        console.log(`  - Tabela por ID original: ${tabelaPorIdOriginal ? 'ENCONTRADA' : 'NÃO ENCONTRADA'}`);
+        console.log(`  - Chave usada: ${idKey}`);
+        console.log(`  - Tabela por chave: ${tabelaPorChave ? 'ENCONTRADA' : 'NÃO ENCONTRADA'}`);
       });
 
       const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
@@ -879,48 +888,8 @@ export const CriarRoteiro: React.FC = () => {
 
           // Coletar dados da tabela específica desta praça
           console.log(`🔍 Buscando tabela para praça ID ${praca.id_cidade} (tipo: ${typeof praca.id_cidade})...`);
-          
-          // Tentar buscar a tabela usando diferentes formatos de ID para garantir compatibilidade
-          let tabelaDaPraca = tabelaSimulado[praca.id_cidade as any];
-          
-          // Se não encontrou, tentar como número
-          if (!tabelaDaPraca) {
-            const idNumero = Number(praca.id_cidade);
-            tabelaDaPraca = tabelaSimulado[idNumero];
-            if (tabelaDaPraca) {
-              console.log(`✅ Tabela encontrada usando ID numérico: ${idNumero}`);
-            }
-          }
-          
-          // Se ainda não encontrou, tentar como string
-          if (!tabelaDaPraca) {
-            const idString = String(praca.id_cidade);
-            tabelaDaPraca = tabelaSimulado[idString as any];
-            if (tabelaDaPraca) {
-              console.log(`✅ Tabela encontrada usando ID string: ${idString}`);
-            }
-          }
-          
-          // Se ainda não encontrou, tentar todas as chaves disponíveis
-          if (!tabelaDaPraca) {
-            console.log(`⚠️ Tentando buscar tabela comparando IDs manualmente...`);
-            const todasChaves = Object.keys(tabelaSimulado);
-            console.log(`📋 Chaves disponíveis:`, todasChaves);
-            console.log(`📋 ID da praça (original):`, praca.id_cidade);
-            console.log(`📋 ID da praça (número):`, Number(praca.id_cidade));
-            console.log(`📋 ID da praça (string):`, String(praca.id_cidade));
-            
-            // Tentar comparar valores (não tipos)
-            for (const chave of todasChaves) {
-              if (Number(chave) === Number(praca.id_cidade) || String(chave) === String(praca.id_cidade)) {
-                tabelaDaPraca = tabelaSimulado[Number(chave) || chave as any];
-                if (tabelaDaPraca) {
-                  console.log(`✅ Tabela encontrada na chave: ${chave}`);
-                  break;
-                }
-              }
-            }
-          }
+          const pracaKey = getCidadeIdKey(praca);
+          const tabelaDaPraca = tabelaSimulado[pracaKey];
           
           if (!tabelaDaPraca) {
             const todasChaves = Object.keys(tabelaSimulado);
@@ -1209,7 +1178,8 @@ export const CriarRoteiro: React.FC = () => {
 
   // Funções para lidar com seleção de cidades
   const handleSelecionarCidade = (cidade: Cidade) => {
-    const jaExiste = cidadesSelecionadas.find(c => c.id_cidade === cidade.id_cidade);
+    const cidadeKey = getCidadeIdKey(cidade);
+    const jaExiste = cidadesSelecionadas.find(c => getCidadeIdKey(c) === cidadeKey);
     if (!jaExiste) {
       setCidadesSelecionadas([...cidadesSelecionadas, cidade]);
       // Buscar inventário da cidade selecionada
@@ -1219,8 +1189,9 @@ export const CriarRoteiro: React.FC = () => {
     setShowDropdownCidades(false);
   };
 
-  const handleRemoverCidade = (id_cidade: number) => {
-    setCidadesSelecionadas(cidadesSelecionadas.filter(c => c.id_cidade !== id_cidade));
+  const handleRemoverCidade = (id_cidade: number | string) => {
+    const idKey = String(id_cidade);
+    setCidadesSelecionadas(cidadesSelecionadas.filter(c => String(c.id_cidade) !== idKey));
   };
 
   // Função para verificar se as cidades mudaram desde o último salvamento
@@ -1228,7 +1199,7 @@ export const CriarRoteiro: React.FC = () => {
     if (cidadesSelecionadas.length !== cidadesSalvas.length) return true;
     
     return cidadesSelecionadas.some(cidade => 
-      !cidadesSalvas.find(salva => salva.id_cidade === cidade.id_cidade)
+      !cidadesSalvas.find(salva => getCidadeIdKey(salva) === getCidadeIdKey(cidade))
     );
   };
 
@@ -3937,9 +3908,8 @@ export const CriarRoteiro: React.FC = () => {
                         {Object.keys(tabelaSimulado).length > 0 && (
                           <div className="mb-8 space-y-8">
                             {cidadesSalvas.map((praca) => {
-                              // Buscar tabela usando número como chave
-                              const idPracaNumero = Number(praca.id_cidade);
-                              const tabelaDaPraca = tabelaSimulado[idPracaNumero] || tabelaSimulado[praca.id_cidade as any];
+                              const idPracaKey = getCidadeIdKey(praca);
+                              const tabelaDaPraca = tabelaSimulado[idPracaKey];
                               if (!tabelaDaPraca || tabelaDaPraca.length === 0) return null;
                               
                               return (
@@ -3994,8 +3964,8 @@ export const CriarRoteiro: React.FC = () => {
                                                   value={linha.visibilidade}
                                                   onChange={(e) => {
                                                     const novasTabelas = { ...tabelaSimulado };
-                                                    novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
-                                                    novasTabelas[idPracaNumero][index].visibilidade = e.target.value;
+                                                    novasTabelas[idPracaKey] = [...(novasTabelas[idPracaKey] || [])];
+                                                    novasTabelas[idPracaKey][index].visibilidade = e.target.value;
                                                     setTabelaSimulado(novasTabelas);
                                                   }}
                                                   className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
@@ -4018,8 +3988,8 @@ export const CriarRoteiro: React.FC = () => {
                                                 value={linha.seDigitalInsercoes_vl || 0}
                                                 onChange={(e) => {
                                                   const novasTabelas = { ...tabelaSimulado };
-                                                  novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
-                                                  novasTabelas[idPracaNumero][index].seDigitalInsercoes_vl = parseInt(e.target.value) || 0;
+                                                  novasTabelas[idPracaKey] = [...(novasTabelas[idPracaKey] || [])];
+                                                  novasTabelas[idPracaKey][index].seDigitalInsercoes_vl = parseInt(e.target.value) || 0;
                                                   setTabelaSimulado(novasTabelas);
                                                 }}
                                                 className="w-full px-3 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
@@ -4033,8 +4003,8 @@ export const CriarRoteiro: React.FC = () => {
                                                 value={linha.seDigitalMaximoInsercoes_vl || 0}
                                                 onChange={(e) => {
                                                   const novasTabelas = { ...tabelaSimulado };
-                                                  novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
-                                                  novasTabelas[idPracaNumero][index].seDigitalMaximoInsercoes_vl = parseInt(e.target.value) || 0;
+                                                  novasTabelas[idPracaKey] = [...(novasTabelas[idPracaKey] || [])];
+                                                  novasTabelas[idPracaKey][index].seDigitalMaximoInsercoes_vl = parseInt(e.target.value) || 0;
                                                   setTabelaSimulado(novasTabelas);
                                                 }}
                                                 className="w-full px-3 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
@@ -4055,9 +4025,9 @@ export const CriarRoteiro: React.FC = () => {
                                                   value={semana.insercaoComprada || 0}
                                                   onChange={(e) => {
                                                     const novasTabelas = { ...tabelaSimulado };
-                                                    novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
+                                                    novasTabelas[idPracaKey] = [...(novasTabelas[idPracaKey] || [])];
                                                     const valor = parseInt(e.target.value) || 0;
-                                                    novasTabelas[idPracaNumero][index].semanas[semanaIdx].insercaoComprada = valor;
+                                                    novasTabelas[idPracaKey][index].semanas[semanaIdx].insercaoComprada = valor;
                                                     setTabelaSimulado(novasTabelas);
                                                   }}
                                                   className="w-full px-2 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
