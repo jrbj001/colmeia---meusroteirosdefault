@@ -17,7 +17,7 @@ module.exports = async (req, res) => {
     }
 
     const result = await request.query(`
-      SELECT TOP 1000
+      SELECT TOP 6000
         cidade_st AS nome_cidade,
         estado_st AS nome_estado
       FROM [serv_product_be180].[bancoAtivosJoin_ft]

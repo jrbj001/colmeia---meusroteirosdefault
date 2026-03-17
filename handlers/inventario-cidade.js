@@ -30,7 +30,8 @@ module.exports = async (req, res) => {
         FROM serv_product_be180.baseAtivosJoinGrupoSubCount_ft_vw inv
         LEFT JOIN serv_product_be180.grupoSubDistinct_dm_vw g 
           ON inv.grupoSub_st = g.grupoSub_st
-        WHERE inv.cidade_st = @cidade
+        WHERE UPPER(LTRIM(RTRIM(inv.cidade_st))) COLLATE Latin1_General_CI_AI =
+              UPPER(LTRIM(RTRIM(@cidade))) COLLATE Latin1_General_CI_AI
         ORDER BY inv.grupo_st, inv.grupoSub_st
       `);
     

@@ -456,6 +456,15 @@ export const CriarRoteiro: React.FC = () => {
     fetchCidades();
   }, []);
 
+  const normalizeSearchText = React.useCallback((value: string) => {
+    return (value || '')
+      .toUpperCase()
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ');
+  }, []);
+
   // Filtrar cidades baseado na busca
   useEffect(() => {
     if (!searchPraca.trim()) {
@@ -463,12 +472,14 @@ export const CriarRoteiro: React.FC = () => {
       return;
     }
 
-    const filtered = cidades.filter(cidade =>
-      cidade.nome_cidade.toLowerCase().includes(searchPraca.toLowerCase()) ||
-      cidade.nome_estado.toLowerCase().includes(searchPraca.toLowerCase())
-    );
+    const termoBusca = normalizeSearchText(searchPraca);
+    const filtered = cidades.filter((cidade) => {
+      const nomeCidade = normalizeSearchText(cidade.nome_cidade);
+      const nomeEstado = normalizeSearchText(cidade.nome_estado);
+      return nomeCidade.includes(termoBusca) || nomeEstado.includes(termoBusca);
+    });
     setCidadesFiltradas(filtered);
-  }, [searchPraca, cidades]);
+  }, [searchPraca, cidades, normalizeSearchText]);
 
   // Fechar dropdown ao clicar fora
   useEffect(() => {
