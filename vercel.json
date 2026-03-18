@@ -8,6 +8,8 @@
   "rewrites": [
     { "source": "/callback", "destination": "/index.html" },
     { "source": "/login", "destination": "/index.html" },
+    { "source": "/home-dashboard", "destination": "/index.html" },
+    { "source": "/meus-roteiros", "destination": "/index.html" },
     { "source": "/mapa", "destination": "/index.html" },
     { "source": "/criar-roteiro", "destination": "/index.html" },
     { "source": "/visualizar-resultados", "destination": "/index.html" },
@@ -60,6 +62,8 @@
 
     { "source": "/api/banco-ativos-dashboard",        "destination": "/api/banco-ativos?action=dashboard" },
     { "source": "/banco-ativos-dashboard",             "destination": "/api/banco-ativos?action=dashboard" },
+    { "source": "/api/home-indicadores-operacao",      "destination": "/api/banco-ativos?action=home-indicadores-operacao" },
+    { "source": "/api/home-indicadores-v2",            "destination": "/api/banco-ativos?action=home-indicadores-v2" },
     { "source": "/api/banco-ativos-mapa",              "destination": "/api/banco-ativos?action=mapa" },
     { "source": "/banco-ativos-mapa",                  "destination": "/api/banco-ativos?action=mapa" },
     { "source": "/api/banco-ativos-centroids",         "destination": "/api/banco-ativos?action=centroids" },

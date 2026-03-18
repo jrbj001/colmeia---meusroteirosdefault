@@ -1,5 +1,7 @@
 const handlers = {
   'dashboard':         require('../handlers/banco-ativos-dashboard'),
+  'home-indicadores-operacao': require('../handlers/home-indicadores-operacao'),
+  'home-indicadores-v2': require('../handlers/home-indicadores-v2'),
   'mapa':              require('../handlers/banco-ativos-mapa'),
   'centroids':         require('../handlers/banco-ativos-centroids'),
   'perimetro':         require('../handlers/banco-ativos-perimetro'),

@@ -295,7 +295,7 @@ Email: suporte@be180.com.br`;
             breadcrumb={{
               items: [
                 { label: "Home", path: "/" },
-                { label: "Meus roteiros", path: "/" }
+                { label: "Meus roteiros", path: "/meus-roteiros" }
               ]
             }}
           />

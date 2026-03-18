@@ -7,6 +7,7 @@ import { useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute/ProtectedRoute";
 import { Login } from "./screens/Login";
 import { Callback } from "./screens/Callback";
+import { HomeDashboard } from "./screens/HomeDashboard";
 import { MeusRoteiros } from "./screens/MeusRoteiros";
 import { Mapa } from "./screens/Mapa";
 import { CriarRoteiro } from "./screens/CriarRoteiro";
@@ -27,7 +28,12 @@ function AppGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-createRoot(document.getElementById("app") as HTMLElement).render(
+const appContainer = document.getElementById("app") as HTMLElement;
+const globalRoot = (globalThis as any).__COLMEIA_APP_ROOT__;
+const root = globalRoot || createRoot(appContainer);
+(globalThis as any).__COLMEIA_APP_ROOT__ = root;
+
+root.render(
   <StrictMode>
     <Auth0Provider
       domain={import.meta.env.VITE_AUTH0_DOMAIN}
@@ -46,6 +52,22 @@ createRoot(document.getElementById("app") as HTMLElement).render(
           <Route path="/callback" element={<Callback />} />
           <Route 
             path="/" 
+            element={
+              <ProtectedRoute>
+                <HomeDashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route
+            path="/home-dashboard"
+            element={
+              <ProtectedRoute>
+                <HomeDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/meus-roteiros"
             element={
               <ProtectedRoute>
                 <MeusRoteiros />
