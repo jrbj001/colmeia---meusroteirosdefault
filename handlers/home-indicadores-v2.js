@@ -19,6 +19,20 @@ function daysFromPeriodo(periodo) {
   return map[periodo] || 30;
 }
 
+function toNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function clamp(value, min = 0, max = 100) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function round(value, decimals = 0) {
+  const factor = 10 ** decimals;
+  return Math.round((toNumber(value) + Number.EPSILON) * factor) / factor;
+}
+
 module.exports = async (req, res) => {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Método não permitido' });
@@ -101,6 +115,24 @@ module.exports = async (req, res) => {
         FROM exib_share;
       `;
 
+      const coberturaSql = `
+        WITH praca_counts AS (
+          SELECT cidade_st, COUNT(*) AS pontos
+          FROM [serv_product_be180].[bancoAtivosJoin_ft]
+          WHERE ${whereClause}
+          GROUP BY cidade_st
+        ),
+        stats AS (
+          SELECT AVG(CAST(pontos AS FLOAT)) AS avg_pontos FROM praca_counts
+        )
+        SELECT
+          COUNT(*) AS total_pracas_analisadas,
+          SUM(CASE WHEN pc.pontos >= (s.avg_pontos * 0.5) THEN 1 ELSE 0 END) AS pracas_equilibradas,
+          AVG(CAST(pc.pontos AS FLOAT)) AS media_pontos_praca
+        FROM praca_counts pc
+        CROSS JOIN stats s;
+      `;
+
       const lowInvSql = `
         WITH praca_counts AS (
           SELECT cidade_st, COUNT(*) AS pontos
@@ -145,7 +177,7 @@ module.exports = async (req, res) => {
         ORDER BY share_pct DESC;
       `;
 
-      const fullSql = kpiSql + rankPracasSql + rankExibSql + hhiSql + lowInvSql + concSql;
+      const fullSql = kpiSql + rankPracasSql + rankExibSql + hhiSql + coberturaSql + lowInvSql + concSql;
       const result = await r.query(fullSql);
       const sets = result.recordsets;
       return {
@@ -153,8 +185,9 @@ module.exports = async (req, res) => {
         rankingPracas: sets[1] || [],
         rankingExibidores: sets[2] || [],
         hhi: sets[3]?.[0]?.hhi ?? 1,
-        lowInventory: sets[4] || [],
-        concentration: sets[5] || [],
+        coberturaStats: sets[4]?.[0] || {},
+        lowInventory: sets[5] || [],
+        concentration: sets[6] || [],
       };
     };
 
@@ -196,6 +229,13 @@ module.exports = async (req, res) => {
         FROM [serv_product_be180].[planoMidiaGrupo_dm_vw]
         WHERE delete_bl = 0
           AND date_dh >= DATEADD(DAY, -@days, GETDATE());
+
+        SELECT
+          AVG(CAST(DATEDIFF(HOUR, date_dh, GETDATE()) AS FLOAT)) AS idade_media_horas_finalizados
+        FROM [serv_product_be180].[planoMidiaGrupo_dm_vw]
+        WHERE delete_bl = 0
+          AND inProgress_bl = 0
+          AND date_dh >= DATEADD(DAY, -@days, GETDATE());
       `;
 
       const result = await r.query(pipelineSql);
@@ -205,31 +245,61 @@ module.exports = async (req, res) => {
         recentes: sets[1] || [],
         travados: sets[2] || [],
         totalPeriodo: sets[3]?.[0]?.total_periodo || 0,
+        idadeMediaHorasFinalizados: sets[4]?.[0]?.idade_media_horas_finalizados || 0,
       };
     };
 
     // ── Query 3: Performance OOH (roteiros finalizados) ──
     const performanceQuery = async () => {
       const r = pool.request();
+      r.input('days', sql.Int, days);
 
       const perfSql = `
         SELECT
           COUNT(DISTINCT rpt.report_pk) AS total_roteiros_com_dados,
           SUM(CAST(ISNULL(rpt.impactosTotal_vl, 0) AS BIGINT)) AS impactos_total,
-          AVG(CAST(ISNULL(rpt.coberturaProp_vl, 0) AS FLOAT)) AS cobertura_media,
-          AVG(CAST(ISNULL(rpt.frequencia_vl, 0) AS FLOAT)) AS frequencia_media,
+          CASE
+            WHEN SUM(CAST(ISNULL(rpt.populacaoTotal_vl, 0) AS FLOAT)) > 0
+              THEN SUM(CAST(ISNULL(rpt.coberturaProp_vl, 0) AS FLOAT) * CAST(ISNULL(rpt.populacaoTotal_vl, 0) AS FLOAT))
+                / SUM(CAST(ISNULL(rpt.populacaoTotal_vl, 0) AS FLOAT))
+            ELSE AVG(CAST(ISNULL(rpt.coberturaProp_vl, 0) AS FLOAT))
+          END AS cobertura_media,
+          CASE
+            WHEN SUM(CAST(ISNULL(rpt.impactosTotal_vl, 0) AS FLOAT)) > 0
+              THEN SUM(CAST(ISNULL(rpt.frequencia_vl, 0) AS FLOAT) * CAST(ISNULL(rpt.impactosTotal_vl, 0) AS FLOAT))
+                / SUM(CAST(ISNULL(rpt.impactosTotal_vl, 0) AS FLOAT))
+            ELSE AVG(CAST(ISNULL(rpt.frequencia_vl, 0) AS FLOAT))
+          END AS frequencia_media,
           SUM(CAST(ISNULL(rpt.grp_vl, 0) AS FLOAT)) AS grp_acumulado,
           SUM(CAST(ISNULL(rpt.pontosPracaTotal_vl, 0) AS BIGINT)) AS pontos_total,
           SUM(CAST(ISNULL(rpt.populacaoTotal_vl, 0) AS BIGINT)) AS populacao_total
-        FROM [serv_product_be180].[reportDataIndicadoresViasPublicasTotal_dm_vw] rpt;
+        FROM [serv_product_be180].[reportDataIndicadoresViasPublicasTotal_dm_vw] rpt
+        INNER JOIN [serv_product_be180].[planoMidiaGrupo_dm_vw] pmg
+          ON pmg.planoMidiaGrupo_pk = rpt.report_pk
+        WHERE pmg.delete_bl = 0
+          AND pmg.date_dh >= DATEADD(DAY, -@days, GETDATE());
 
         SELECT TOP 10
           rpt.cidade_st AS cidade,
           SUM(CAST(ISNULL(rpt.impactosTotal_vl, 0) AS BIGINT)) AS impactos,
-          AVG(CAST(ISNULL(rpt.coberturaProp_vl, 0) AS FLOAT)) AS cobertura,
-          AVG(CAST(ISNULL(rpt.frequencia_vl, 0) AS FLOAT)) AS frequencia,
+          CASE
+            WHEN SUM(CAST(ISNULL(rpt.populacaoTotal_vl, 0) AS FLOAT)) > 0
+              THEN SUM(CAST(ISNULL(rpt.coberturaProp_vl, 0) AS FLOAT) * CAST(ISNULL(rpt.populacaoTotal_vl, 0) AS FLOAT))
+                / SUM(CAST(ISNULL(rpt.populacaoTotal_vl, 0) AS FLOAT))
+            ELSE AVG(CAST(ISNULL(rpt.coberturaProp_vl, 0) AS FLOAT))
+          END AS cobertura,
+          CASE
+            WHEN SUM(CAST(ISNULL(rpt.impactosTotal_vl, 0) AS FLOAT)) > 0
+              THEN SUM(CAST(ISNULL(rpt.frequencia_vl, 0) AS FLOAT) * CAST(ISNULL(rpt.impactosTotal_vl, 0) AS FLOAT))
+                / SUM(CAST(ISNULL(rpt.impactosTotal_vl, 0) AS FLOAT))
+            ELSE AVG(CAST(ISNULL(rpt.frequencia_vl, 0) AS FLOAT))
+          END AS frequencia,
           SUM(CAST(ISNULL(rpt.pontosPracaTotal_vl, 0) AS INT)) AS pontos
         FROM [serv_product_be180].[reportDataIndicadoresViasPublicasTotal_dm_vw] rpt
+        INNER JOIN [serv_product_be180].[planoMidiaGrupo_dm_vw] pmg
+          ON pmg.planoMidiaGrupo_pk = rpt.report_pk
+        WHERE pmg.delete_bl = 0
+          AND pmg.date_dh >= DATEADD(DAY, -@days, GETDATE())
         GROUP BY rpt.cidade_st
         ORDER BY SUM(CAST(ISNULL(rpt.impactosTotal_vl, 0) AS BIGINT)) DESC;
       `;
@@ -275,36 +345,51 @@ module.exports = async (req, res) => {
       filtrosQuery(),
     ]);
 
-    // ── Health Score Calculation ──
+    // ── Health Score Calculation (metodologia revisada) ──
     const kpi = ativos.kpi;
-    const totalPontos = Number(kpi.total_pontos || 0);
-    const totalPracas = Number(kpi.total_pracas || 0);
-    const totalExibidores = Number(kpi.total_exibidores || 0);
-    const comCoordenadas = Number(kpi.com_coordenadas || 0);
-    const comPassantes = Number(kpi.com_passantes || 0);
+    const totalPontos = toNumber(kpi.total_pontos);
+    const totalPracas = toNumber(kpi.total_pracas);
+    const totalExibidores = toNumber(kpi.total_exibidores);
+    const comCoordenadas = toNumber(kpi.com_coordenadas);
+    const comPassantes = toNumber(kpi.com_passantes);
+    const totalPublic = toNumber(kpi.total_public);
+    const totalIndoor = toNumber(kpi.total_indoor);
 
-    const coberturaScore = Math.min(100, totalPracas * 2);
+    const coberturaTotalPracas = toNumber(ativos.coberturaStats.total_pracas_analisadas);
+    const pracasEquilibradas = toNumber(ativos.coberturaStats.pracas_equilibradas);
+    const mediaPontosPraca = toNumber(ativos.coberturaStats.media_pontos_praca);
+    const coberturaScore = clamp(round(coberturaTotalPracas > 0 ? (pracasEquilibradas / coberturaTotalPracas) * 100 : 0));
 
-    const hhi = Number(ativos.hhi) || 1;
-    const diversidadeScore = Math.round((1 - hhi) * 100);
+    const hhi = clamp(toNumber(ativos.hhi, 1), 0, 1);
+    const diversidadeDenominador = totalExibidores > 1 ? (1 - (1 / totalExibidores)) : 0;
+    const diversidadeRaw = diversidadeDenominador > 0 ? ((1 - hhi) / diversidadeDenominador) * 100 : 0;
+    const diversidadeScore = clamp(round(diversidadeRaw));
 
     const qualidadeCoordenadas = totalPontos > 0 ? (comCoordenadas / totalPontos) * 100 : 0;
     const qualidadePassantes = totalPontos > 0 ? (comPassantes / totalPontos) * 100 : 0;
-    const qualidadeScore = Math.round((qualidadeCoordenadas * 0.6 + qualidadePassantes * 0.4));
+    const qualidadeScore = clamp(round((qualidadeCoordenadas * 0.5) + (qualidadePassantes * 0.5)));
 
     const pTotais = pipeline.totais;
-    const totalRoteiros = Number(pTotais.total_roteiros || 0);
-    const finalizados = Number(pTotais.finalizados || 0);
-    const capacidadeScore = totalRoteiros > 0
-      ? Math.round((finalizados / totalRoteiros) * 100)
-      : 50;
+    const totalRoteiros = toNumber(pTotais.total_roteiros);
+    const finalizados = toNumber(pTotais.finalizados);
+    const travados = Array.isArray(pipeline.travados) ? pipeline.travados.length : 0;
+    const finalizacaoRate = totalRoteiros > 0 ? (finalizados / totalRoteiros) * 100 : 50;
+    const travamentoPenalty = totalRoteiros > 0 ? ((travados / totalRoteiros) * 100) * 0.5 : 0;
+    const capacidadeScore = clamp(round(finalizacaoRate - travamentoPenalty));
 
-    const healthScore = Math.round(
-      coberturaScore * 0.25 +
-      diversidadeScore * 0.25 +
-      qualidadeScore * 0.25 +
-      capacidadeScore * 0.25
-    );
+    const pesos = {
+      cobertura: 0.30,
+      diversidade: 0.25,
+      qualidade: 0.25,
+      capacidade: 0.20,
+    };
+
+    const healthScore = clamp(round(
+      (coberturaScore * pesos.cobertura) +
+      (diversidadeScore * pesos.diversidade) +
+      (qualidadeScore * pesos.qualidade) +
+      (capacidadeScore * pesos.capacidade)
+    ));
 
     // ── Assemble alerts ──
     const alertas = [];
@@ -351,9 +436,6 @@ module.exports = async (req, res) => {
       return (order[a.severidade] ?? 3) - (order[b.severidade] ?? 3);
     });
 
-    const totalPublic = Number(kpi.total_public || 0);
-    const totalIndoor = Number(kpi.total_indoor || 0);
-
     return res.status(200).json({
       success: true,
       filtrosAplicados: { ambiente, praca: praca || null, exibidor: exibidor || null, periodo },
@@ -361,10 +443,26 @@ module.exports = async (req, res) => {
       healthScore: {
         score: healthScore,
         dimensoes: {
-          cobertura: { score: coberturaScore, label: 'Cobertura de Praças', detail: `${totalPracas} praças ativas` },
-          diversidade: { score: diversidadeScore, label: 'Diversidade de Exibidores', detail: `HHI: ${hhi.toFixed(3)}` },
-          qualidade: { score: qualidadeScore, label: 'Qualidade de Dados', detail: `${Math.round(qualidadeCoordenadas)}% com coordenadas` },
-          capacidade: { score: capacidadeScore, label: 'Capacidade Operacional', detail: `${finalizados}/${totalRoteiros} finalizados` },
+          cobertura: {
+            score: coberturaScore,
+            label: 'Cobertura de Praças',
+            detail: `${pracasEquilibradas}/${coberturaTotalPracas} praças com inventário >= 50% da média (${round(mediaPontosPraca)} pts)`,
+          },
+          diversidade: {
+            score: diversidadeScore,
+            label: 'Diversidade de Exibidores',
+            detail: `HHI normalizado: ${round(hhi, 3)} com ${totalExibidores} exibidores`,
+          },
+          qualidade: {
+            score: qualidadeScore,
+            label: 'Qualidade de Dados',
+            detail: `${round(qualidadeCoordenadas, 1)}% com coordenadas e ${round(qualidadePassantes, 1)}% com passantes`,
+          },
+          capacidade: {
+            score: capacidadeScore,
+            label: 'Capacidade Operacional',
+            detail: `${finalizados}/${totalRoteiros} finalizados | penalidade de travamento: ${round(travamentoPenalty, 1)} pts`,
+          },
         },
       },
 
@@ -373,59 +471,96 @@ module.exports = async (req, res) => {
           totalPontos,
           totalPracas,
           totalExibidores,
-          percVP: totalPontos > 0 ? Number(((totalPublic * 100) / totalPontos).toFixed(1)) : 0,
-          percIndoor: totalPontos > 0 ? Number(((totalIndoor * 100) / totalPontos).toFixed(1)) : 0,
-          avgPassantes: Math.round(Number(kpi.avg_passantes || 0)),
+          percVP: totalPontos > 0 ? round((totalPublic * 100) / totalPontos, 1) : 0,
+          percIndoor: totalPontos > 0 ? round((totalIndoor * 100) / totalPontos, 1) : 0,
+          avgPassantes: round(toNumber(kpi.avg_passantes)),
         },
         rankingPracas: ativos.rankingPracas.map(r => ({
           nome: r.nome,
-          pontos: r.pontos,
-          avgPassantes: Math.round(Number(r.avg_passantes || 0)),
+          pontos: toNumber(r.pontos),
+          avgPassantes: round(toNumber(r.avg_passantes)),
         })),
         rankingExibidores: ativos.rankingExibidores.map(r => ({
           nome: r.nome,
-          pontos: r.pontos,
-          pracasAtendidas: r.pracas_atendidas,
+          pontos: toNumber(r.pontos),
+          pracasAtendidas: toNumber(r.pracas_atendidas),
         })),
       },
 
       pipeline: {
-        totalRoteiros: Number(pTotais.total_roteiros || 0),
-        emProcessamento: Number(pTotais.em_processamento || 0),
-        finalizados: Number(pTotais.finalizados || 0),
-        totalPeriodo: pipeline.totalPeriodo,
+        totalRoteiros: toNumber(pTotais.total_roteiros),
+        emProcessamento: toNumber(pTotais.em_processamento),
+        finalizados: toNumber(pTotais.finalizados),
+        totalPeriodo: toNumber(pipeline.totalPeriodo),
+        idadeMediaHorasFinalizados: round(toNumber(pipeline.idadeMediaHorasFinalizados), 1),
         recentes: pipeline.recentes.map(r => ({
-          id: r.id,
+          id: toNumber(r.id),
           nome: r.nome,
           emProgresso: Boolean(r.em_progresso),
           dataCriacao: r.data_criacao,
-          semanas: r.semanas,
+          semanas: toNumber(r.semanas),
         })),
         travados: pipeline.travados.map(r => ({
-          id: r.id,
+          id: toNumber(r.id),
           nome: r.nome,
           dataCriacao: r.data_criacao,
-          horasEmProcessamento: r.horas_em_processamento,
+          horasEmProcessamento: toNumber(r.horas_em_processamento),
         })),
       },
 
       performance: {
         consolidado: {
-          totalRoteirosComDados: Number(performance.consolidado.total_roteiros_com_dados || 0),
-          impactosTotal: Number(performance.consolidado.impactos_total || 0),
-          coberturaMedia: Number(Number(performance.consolidado.cobertura_media || 0).toFixed(2)),
-          frequenciaMedia: Number(Number(performance.consolidado.frequencia_media || 0).toFixed(2)),
-          grpAcumulado: Number(Number(performance.consolidado.grp_acumulado || 0).toFixed(1)),
-          pontosTotal: Number(performance.consolidado.pontos_total || 0),
-          populacaoTotal: Number(performance.consolidado.populacao_total || 0),
+          totalRoteirosComDados: toNumber(performance.consolidado.total_roteiros_com_dados),
+          impactosTotal: toNumber(performance.consolidado.impactos_total),
+          coberturaMedia: round(toNumber(performance.consolidado.cobertura_media), 2),
+          frequenciaMedia: round(toNumber(performance.consolidado.frequencia_media), 2),
+          grpAcumulado: round(toNumber(performance.consolidado.grp_acumulado), 1),
+          pontosTotal: toNumber(performance.consolidado.pontos_total),
+          populacaoTotal: toNumber(performance.consolidado.populacao_total),
         },
         porCidade: performance.porCidade.map(c => ({
           cidade: c.cidade,
-          impactos: Number(c.impactos || 0),
-          cobertura: Number(Number(c.cobertura || 0).toFixed(2)),
-          frequencia: Number(Number(c.frequencia || 0).toFixed(2)),
-          pontos: Number(c.pontos || 0),
+          impactos: toNumber(c.impactos),
+          cobertura: round(toNumber(c.cobertura), 2),
+          frequencia: round(toNumber(c.frequencia), 2),
+          pontos: toNumber(c.pontos),
         })),
+      },
+
+      metodologia: {
+        healthScore: {
+          versao: '2.1',
+          pesos,
+          formulas: {
+            cobertura: 'pracas_equilibradas / total_pracas_analisadas * 100',
+            diversidade: '((1 - HHI) / (1 - 1/N_exibidores)) * 100',
+            qualidade: '0.5*(%com_coordenadas) + 0.5*(%com_passantes)',
+            capacidade: 'taxa_finalizacao - 0.5*(%roteiros_travados)',
+            scoreFinal: 'Σ(score_dimensao * peso_dimensao)',
+          },
+          insumos: {
+            totalPontos,
+            totalPracas,
+            totalExibidores,
+            pracasEquilibradas,
+            coberturaTotalPracas,
+            hhi: round(hhi, 4),
+            percentualComCoordenadas: round(qualidadeCoordenadas, 2),
+            percentualComPassantes: round(qualidadePassantes, 2),
+            totalRoteiros,
+            finalizados,
+            travados,
+            travamentoPenalty: round(travamentoPenalty, 2),
+          },
+        },
+        indicadores: {
+          percVP: 'total_public / total_pontos * 100',
+          percIndoor: 'total_indoor / total_pontos * 100',
+          coberturaMedia: 'media ponderada por populacao',
+          frequenciaMedia: 'media ponderada por impactos',
+          grpAcumulado: 'soma de grp_vl no periodo selecionado',
+          periodoAnaliseDias: days,
+        },
       },
 
       alertas: alertas.slice(0, 25),

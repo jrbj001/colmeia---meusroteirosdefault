@@ -108,6 +108,33 @@ interface DashboardV2Data {
     porCidade: PerformanceCidade[];
   };
   alertas: AlertaItem[];
+  metodologia?: {
+    healthScore?: {
+      versao?: string;
+      pesos?: {
+        cobertura: number;
+        diversidade: number;
+        qualidade: number;
+        capacidade: number;
+      };
+      formulas?: {
+        cobertura: string;
+        diversidade: string;
+        qualidade: string;
+        capacidade: string;
+        scoreFinal: string;
+      };
+      insumos?: Record<string, number | string>;
+    };
+    indicadores?: {
+      percVP?: string;
+      percIndoor?: string;
+      coberturaMedia?: string;
+      frequenciaMedia?: string;
+      grpAcumulado?: string;
+      periodoAnaliseDias?: number;
+    };
+  };
   opcoesFiltro: {
     pracas: string[];
     exibidores: string[];
@@ -136,12 +163,6 @@ const dimColor = (s: number) => {
   if (s >= 75) return "bg-emerald-500";
   if (s >= 50) return "bg-amber-500";
   return "bg-red-500";
-};
-
-const sevBadge = (sev: string) => {
-  if (sev === "Alto") return "bg-red-100 text-red-700";
-  if (sev === "Médio") return "bg-amber-100 text-amber-700";
-  return "bg-sky-100 text-sky-700";
 };
 
 const normalizeApiError = (err: any, fallback: string) => {
@@ -212,10 +233,23 @@ const DimBar: React.FC<{ dim: HealthDimension }> = ({ dim }) => (
 
 /* ─── Progress Bar (ranking) ─── */
 
-const RankBar: React.FC<{ value: number; max: number; color?: string }> = ({ value, max, color = "bg-indigo-500" }) => (
-  <div className="h-1.5 bg-gray-100 rounded-full flex-1 ml-2 overflow-hidden">
+const RankBar: React.FC<{ value: number; max: number; color?: string }> = ({ value, max, color = "bg-gray-500" }) => (
+  <div className="h-1.5 bg-gray-100 border border-gray-200 rounded-full flex-1 ml-2 overflow-hidden">
     <div className={`h-full rounded-full ${color}`} style={{ width: `${max > 0 ? (value / max) * 100 : 0}%` }} />
   </div>
+);
+
+const InfoIconButton: React.FC<{ onClick: () => void; title: string }> = ({ onClick, title }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    className="inline-flex items-center justify-center w-5 h-5 rounded-full border border-gray-300 text-gray-500 hover:text-gray-700 hover:border-gray-400 transition-colors"
+  >
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9h.01M11 12h1v4h1m-1 6a9 9 0 100-18 9 9 0 000 18z" />
+    </svg>
+  </button>
 );
 
 /* ─── Main Component ─── */
@@ -226,6 +260,7 @@ export const HomeDashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DashboardV2Data | null>(null);
   const [filtros, setFiltros] = useState({ ambiente: "", praca: "", exibidor: "", periodo: "30d" });
+  const [metodoModal, setMetodoModal] = useState<"health" | "indicadores" | null>(null);
 
   const debouncedPraca = useDebounce(filtros.praca, 300);
   const debouncedExibidor = useDebounce(filtros.exibidor, 300);
@@ -259,19 +294,11 @@ export const HomeDashboard: React.FC = () => {
     carregar();
   }, [carregar]);
 
-  const selectPraca = useCallback((nome: string) => {
-    setFiltros((f) => ({ ...f, praca: f.praca === nome ? "" : nome }));
-  }, []);
-
-  const selectExibidor = useCallback((nome: string) => {
-    setFiltros((f) => ({ ...f, exibidor: f.exibidor === nome ? "" : nome }));
-  }, []);
-
   const hs = data?.healthScore;
   const ativos = data?.ativos;
   const pipe = data?.pipeline;
   const perf = data?.performance;
-  const alertas = data?.alertas || [];
+  const metodologia = data?.metodologia;
 
   const maxPracaPontos = useMemo(
     () => Math.max(...(ativos?.rankingPracas || []).map((r) => r.pontos), 1),
@@ -298,7 +325,10 @@ export const HomeDashboard: React.FC = () => {
           {/* ═══ Header + Filtros ═══ */}
           <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
             <div>
-              <h1 className="text-lg font-bold text-[#222]">Dashboard Colmeia</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-bold text-[#222]">Dashboard Colmeia</h1>
+                <InfoIconButton onClick={() => setMetodoModal("indicadores")} title="Como calculamos os indicadores" />
+              </div>
               <p className="text-xs text-gray-500 mt-0.5">Visão consolidada de ativos, roteiros e performance OOH</p>
             </div>
             <button
@@ -369,7 +399,9 @@ export const HomeDashboard: React.FC = () => {
           )}
 
           {loading && !data && (
-            <div className="flex items-center justify-center py-24 text-gray-400 text-sm">Carregando indicadores…</div>
+            <div className="flex items-center justify-center py-24 text-gray-400 text-sm bg-gray-50 border border-gray-200 rounded-xl">
+              Carregando indicadores…
+            </div>
           )}
 
           {data && (
@@ -378,7 +410,10 @@ export const HomeDashboard: React.FC = () => {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
                 {/* Health Score */}
                 <div className="lg:col-span-4 bg-white border border-gray-200 rounded-xl p-5 flex flex-col items-center">
-                  <h2 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-3 self-start">Health Score</h2>
+                  <div className="w-full flex items-center justify-between mb-3">
+                    <h2 className="text-xs font-bold uppercase tracking-wide text-gray-500">Health Score</h2>
+                    <InfoIconButton onClick={() => setMetodoModal("health")} title="Metodologia do Health Score" />
+                  </div>
                   {hs && <HealthGauge score={hs.score} />}
                   <div className="w-full mt-4 space-y-3">
                     {hs &&
@@ -391,17 +426,53 @@ export const HomeDashboard: React.FC = () => {
                 {/* KPI cards */}
                 <div className="lg:col-span-8 grid grid-cols-2 md:grid-cols-3 gap-3">
                   {[
-                    { label: "Pontos Ativos", value: fmt(ativos?.kpis?.totalPontos || 0), sub: `Média ${fmtFull(ativos?.kpis?.avgPassantes || 0)} passantes/pto` },
-                    { label: "Praças Cobertas", value: fmtFull(ativos?.kpis?.totalPracas || 0), sub: `${fmtPct(ativos?.kpis?.percVP || 0)} Vias Públicas` },
-                    { label: "Exibidores Ativos", value: fmtFull(ativos?.kpis?.totalExibidores || 0), sub: `${fmtPct(ativos?.kpis?.percIndoor || 0)} Indoor` },
-                    { label: "Roteiros Totais", value: fmtFull(pipe?.totalRoteiros || 0), sub: `${pipe?.emProcessamento || 0} em processamento` },
-                    { label: "Finalizados", value: fmtFull(pipe?.finalizados || 0), sub: `${pipe?.totalPeriodo || 0} no período` },
-                    { label: "Impactos OOH", value: fmt(perf?.consolidado?.impactosTotal || 0), sub: `GRP: ${(perf?.consolidado?.grpAcumulado || 0).toFixed(0)}` },
+                    {
+                      label: "Pontos Ativos",
+                      value: fmt(ativos?.kpis?.totalPontos || 0),
+                      sub: `Média ${fmtFull(ativos?.kpis?.avgPassantes || 0)} passantes/pto`,
+                      tone: "bg-gray-600",
+                    },
+                    {
+                      label: "Praças Cobertas",
+                      value: fmtFull(ativos?.kpis?.totalPracas || 0),
+                      sub: `${fmtPct(ativos?.kpis?.percVP || 0)} Vias Públicas`,
+                      tone: "bg-gray-500",
+                    },
+                    {
+                      label: "Exibidores Ativos",
+                      value: fmtFull(ativos?.kpis?.totalExibidores || 0),
+                      sub: `${fmtPct(ativos?.kpis?.percIndoor || 0)} Indoor`,
+                      tone: "bg-gray-500",
+                    },
+                    {
+                      label: "Roteiros Totais",
+                      value: fmtFull(pipe?.totalRoteiros || 0),
+                      sub: `${pipe?.emProcessamento || 0} em processamento`,
+                      tone: "bg-gray-500",
+                    },
+                    {
+                      label: "Finalizados",
+                      value: fmtFull(pipe?.finalizados || 0),
+                      sub: `${pipe?.totalPeriodo || 0} no período`,
+                      tone: "bg-gray-500",
+                    },
+                    {
+                      label: "Impactos OOH",
+                      value: fmt(perf?.consolidado?.impactosTotal || 0),
+                      sub: `GRP: ${(perf?.consolidado?.grpAcumulado || 0).toFixed(0)}`,
+                      tone: "bg-gray-600",
+                    },
                   ].map((kpi) => (
-                    <div key={kpi.label} className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col justify-between">
-                      <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">{kpi.label}</p>
-                      <p className="text-2xl font-bold text-[#222] mt-1">{kpi.value}</p>
-                      <p className="text-[10px] text-gray-400 mt-1">{kpi.sub}</p>
+                    <div
+                      key={kpi.label}
+                      className="relative overflow-hidden rounded-xl border border-gray-200 bg-gradient-to-b from-white to-gray-50 p-4 flex flex-col justify-between shadow-[0_1px_2px_rgba(16,24,40,0.04)]"
+                    >
+                      <div className={`absolute left-0 top-0 h-1 w-full ${kpi.tone}`} />
+                      <p className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mt-1">{kpi.label}</p>
+                      <p className="text-3xl leading-none font-bold text-[#1f2937] mt-2">{kpi.value}</p>
+                      <div className="mt-4 border-t border-gray-200 pt-2">
+                        <p className="text-[10px] text-gray-500">{kpi.sub}</p>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -414,13 +485,9 @@ export const HomeDashboard: React.FC = () => {
                   <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-3">Top Praças</h3>
                   <div className="space-y-2">
                     {(ativos?.rankingPracas || []).map((item, i) => (
-                      <button
+                      <div
                         key={item.nome}
-                        type="button"
-                        onClick={() => selectPraca(item.nome)}
-                        className={`w-full flex items-center gap-2 text-left rounded-lg px-2 py-1.5 transition-colors ${
-                          filtros.praca === item.nome ? "bg-indigo-50 ring-1 ring-indigo-300" : "hover:bg-gray-50"
-                        }`}
+                        className="w-full flex items-center gap-2 text-left rounded-lg px-2 py-1.5 border border-gray-100 bg-white"
                       >
                         <span className="text-[10px] font-bold text-gray-400 w-4">{i + 1}</span>
                         <div className="flex-1 min-w-0">
@@ -430,10 +497,10 @@ export const HomeDashboard: React.FC = () => {
                           </div>
                           <RankBar value={item.pontos} max={maxPracaPontos} />
                         </div>
-                      </button>
+                      </div>
                     ))}
                     {(ativos?.rankingPracas || []).length === 0 && !loading && (
-                      <p className="text-xs text-gray-400">Sem dados.</p>
+                      <p className="text-xs text-gray-400 border border-gray-100 bg-gray-50 rounded-lg px-2 py-2">Sem dados.</p>
                     )}
                   </div>
                 </div>
@@ -443,13 +510,9 @@ export const HomeDashboard: React.FC = () => {
                   <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-3">Top Exibidores</h3>
                   <div className="space-y-2">
                     {(ativos?.rankingExibidores || []).map((item, i) => (
-                      <button
+                      <div
                         key={item.nome}
-                        type="button"
-                        onClick={() => selectExibidor(item.nome)}
-                        className={`w-full flex items-center gap-2 text-left rounded-lg px-2 py-1.5 transition-colors ${
-                          filtros.exibidor === item.nome ? "bg-violet-50 ring-1 ring-violet-300" : "hover:bg-gray-50"
-                        }`}
+                        className="w-full flex items-center gap-2 text-left rounded-lg px-2 py-1.5 border border-gray-100 bg-white"
                       >
                         <span className="text-[10px] font-bold text-gray-400 w-4">{i + 1}</span>
                         <div className="flex-1 min-w-0">
@@ -457,13 +520,13 @@ export const HomeDashboard: React.FC = () => {
                             <span className="text-xs text-gray-700 truncate">{item.nome}</span>
                             <span className="text-xs font-semibold text-[#222] ml-2">{fmt(item.pontos)}</span>
                           </div>
-                          <RankBar value={item.pontos} max={maxExibPontos} color="bg-violet-500" />
+                          <RankBar value={item.pontos} max={maxExibPontos} color="bg-gray-500" />
                           <p className="text-[10px] text-gray-400 mt-0.5">{item.pracasAtendidas} praças</p>
                         </div>
-                      </button>
+                      </div>
                     ))}
                     {(ativos?.rankingExibidores || []).length === 0 && !loading && (
-                      <p className="text-xs text-gray-400">Sem dados.</p>
+                      <p className="text-xs text-gray-400 border border-gray-100 bg-gray-50 rounded-lg px-2 py-2">Sem dados.</p>
                     )}
                   </div>
                 </div>
@@ -473,15 +536,15 @@ export const HomeDashboard: React.FC = () => {
                   <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-3">Pipeline de Roteiros</h3>
 
                   <div className="grid grid-cols-3 gap-2 mb-4">
-                    <div className="bg-gray-100 rounded-lg p-2.5 text-center">
+                    <div className="bg-gray-100 border border-gray-200 rounded-lg p-2.5 text-center">
                       <p className="text-lg font-bold text-[#222]">{pipe?.totalRoteiros || 0}</p>
                       <p className="text-[9px] uppercase text-gray-400 font-medium">Total</p>
                     </div>
-                    <div className="bg-gray-100 rounded-lg p-2.5 text-center">
+                    <div className="bg-gray-100 border border-gray-200 rounded-lg p-2.5 text-center">
                       <p className="text-lg font-bold text-gray-700">{pipe?.emProcessamento || 0}</p>
                       <p className="text-[9px] uppercase text-gray-400 font-medium">Processando</p>
                     </div>
-                    <div className="bg-gray-100 rounded-lg p-2.5 text-center">
+                    <div className="bg-gray-100 border border-gray-200 rounded-lg p-2.5 text-center">
                       <p className="text-lg font-bold text-gray-700">{pipe?.finalizados || 0}</p>
                       <p className="text-[9px] uppercase text-gray-400 font-medium">Finalizados</p>
                     </div>
@@ -501,7 +564,7 @@ export const HomeDashboard: React.FC = () => {
                   <p className="text-[10px] font-bold uppercase text-gray-400 mb-2">Recentes</p>
                   <div className="flex-1 overflow-auto space-y-1.5">
                     {(pipe?.recentes || []).map((r) => (
-                      <div key={r.id} className="flex items-center gap-2 text-xs">
+                      <div key={r.id} className="flex items-center gap-2 text-xs border border-gray-100 rounded-md px-2 py-1">
                         <span
                           className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                             r.emProgresso ? "bg-gray-500 animate-pulse" : "bg-gray-400"
@@ -514,113 +577,131 @@ export const HomeDashboard: React.FC = () => {
                       </div>
                     ))}
                     {(pipe?.recentes || []).length === 0 && !loading && (
-                      <p className="text-xs text-gray-400">Nenhum roteiro recente.</p>
+                      <p className="text-xs text-gray-400 border border-gray-100 bg-gray-50 rounded-lg px-2 py-2">Nenhum roteiro recente.</p>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* ═══ Row 3: Performance OOH + Alertas ═══ */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Performance */}
-                <div className="bg-white border border-gray-200 rounded-xl p-5">
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-4">Performance OOH Consolidada</h3>
+              {/* ═══ Row 3: Performance em Cards ═══ */}
+              <div className="bg-white border border-gray-200 rounded-xl p-5">
+                <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-4">Performance OOH Consolidada</h3>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-                    {[
-                      { label: "Impactos", value: fmt(perf?.consolidado?.impactosTotal || 0) },
-                      { label: "Cobertura", value: fmtPct(perf?.consolidado?.coberturaMedia || 0) },
-                      { label: "Frequência", value: (perf?.consolidado?.frequenciaMedia || 0).toFixed(1) },
-                      { label: "GRP", value: fmt(perf?.consolidado?.grpAcumulado || 0) },
-                    ].map((m) => (
-                      <div key={m.label} className="text-center">
-                        <p className="text-xl font-bold text-[#222]">{m.value}</p>
-                        <p className="text-[10px] uppercase text-gray-400 font-medium mt-0.5">{m.label}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <p className="text-[10px] font-bold uppercase text-gray-400 mb-2">Eficiência por Praça</p>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-xs">
-                      <thead>
-                        <tr className="text-left text-gray-400 border-b border-gray-100">
-                          <th className="py-1.5 pr-3 font-medium">Cidade</th>
-                          <th className="py-1.5 pr-3 font-medium text-right">Impactos</th>
-                          <th className="py-1.5 pr-3 font-medium text-right">Cobertura</th>
-                          <th className="py-1.5 font-medium text-right">Freq.</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(perf?.porCidade || []).map((c) => (
-                          <tr key={c.cidade} className="border-b border-gray-50">
-                            <td className="py-1.5 pr-3 text-gray-700">{c.cidade}</td>
-                            <td className="py-1.5 pr-3 text-right font-medium text-[#222]">{fmt(c.impactos)}</td>
-                            <td className="py-1.5 pr-3 text-right text-gray-600">{fmtPct(c.cobertura)}</td>
-                            <td className="py-1.5 text-right text-gray-600">{c.frequencia.toFixed(1)}</td>
-                          </tr>
-                        ))}
-                        {(perf?.porCidade || []).length === 0 && !loading && (
-                          <tr>
-                            <td colSpan={4} className="py-3 text-gray-400 text-center">
-                              Sem dados de performance disponíveis.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+                  {[
+                    { label: "Impactos", value: fmt(perf?.consolidado?.impactosTotal || 0) },
+                    { label: "Cobertura", value: fmtPct(perf?.consolidado?.coberturaMedia || 0) },
+                    { label: "Frequência", value: (perf?.consolidado?.frequenciaMedia || 0).toFixed(1) },
+                    { label: "GRP", value: fmt(perf?.consolidado?.grpAcumulado || 0) },
+                    { label: "Roteiros com dados", value: fmtFull(perf?.consolidado?.totalRoteirosComDados || 0) },
+                    { label: "População", value: fmt(perf?.consolidado?.populacaoTotal || 0) },
+                  ].map((m) => (
+                    <div key={m.label} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <p className="text-lg font-bold text-[#222]">{m.value}</p>
+                      <p className="text-[10px] uppercase text-gray-400 font-medium mt-1">{m.label}</p>
+                    </div>
+                  ))}
                 </div>
 
-                {/* Alertas */}
-                <div className="bg-white border border-gray-200 rounded-xl p-5">
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-4">
-                    Alertas Inteligentes
-                    {alertas.length > 0 && (
-                      <span className="ml-2 inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-700 text-[10px] font-bold">
-                        {alertas.length}
-                      </span>
-                    )}
-                  </h3>
-
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-xs">
-                      <thead>
-                        <tr className="text-left text-gray-400 border-b border-gray-100">
-                          <th className="py-1.5 pr-2 font-medium">Sev.</th>
-                          <th className="py-1.5 pr-2 font-medium">Módulo</th>
-                          <th className="py-1.5 pr-2 font-medium">Praça</th>
-                          <th className="py-1.5 pr-2 font-medium">Descrição</th>
-                          <th className="py-1.5 font-medium">Ação Recomendada</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {alertas.slice(0, 12).map((a, idx) => (
-                          <tr key={`${a.tipo}-${idx}`} className="border-b border-gray-50">
-                            <td className="py-1.5 pr-2">
-                              <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${sevBadge(a.severidade)}`}>
-                                {a.severidade}
-                              </span>
-                            </td>
-                            <td className="py-1.5 pr-2 text-gray-500">{a.modulo}</td>
-                            <td className="py-1.5 pr-2 text-gray-700">{a.praca}</td>
-                            <td className="py-1.5 pr-2 text-gray-700">{a.descricao}</td>
-                            <td className="py-1.5 text-gray-500 italic">{a.acao}</td>
-                          </tr>
-                        ))}
-                        {alertas.length === 0 && !loading && (
-                          <tr>
-                            <td colSpan={5} className="py-3 text-gray-400 text-center">
-                              Nenhum alerta no momento.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                <p className="text-[10px] font-bold uppercase text-gray-400 mb-2">Top praças por impacto</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {(perf?.porCidade || []).slice(0, 6).map((c) => (
+                    <div key={c.cidade} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <p className="text-xs font-semibold text-gray-700 truncate">{c.cidade}</p>
+                      <div className="mt-2 space-y-1">
+                        <p className="text-[11px] text-gray-500">Impactos: <span className="font-semibold text-gray-700">{fmt(c.impactos)}</span></p>
+                        <p className="text-[11px] text-gray-500">Cobertura: <span className="font-semibold text-gray-700">{fmtPct(c.cobertura)}</span></p>
+                        <p className="text-[11px] text-gray-500">Frequência: <span className="font-semibold text-gray-700">{c.frequencia.toFixed(1)}</span></p>
+                      </div>
+                    </div>
+                  ))}
+                  {(perf?.porCidade || []).length === 0 && !loading && (
+                    <p className="text-xs text-gray-400 border border-gray-100 bg-gray-50 rounded-lg px-2 py-2">
+                      Sem dados de performance disponíveis.
+                    </p>
+                  )}
                 </div>
               </div>
             </>
+          )}
+
+          {metodoModal && (
+            <div
+              className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center px-4"
+              onClick={() => setMetodoModal(null)}
+            >
+              <div
+                className="w-full max-w-2xl max-h-[85vh] overflow-auto rounded-xl bg-white border border-gray-200 shadow-xl p-5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-bold text-gray-800">
+                    {metodoModal === "health" ? "Metodologia do Health Score" : "Metodologia dos Indicadores"}
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setMetodoModal(null)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {metodoModal === "health" ? (
+                  <div className="space-y-4 text-sm text-gray-700">
+                    <div className="text-xs text-gray-500">
+                      Versão: {metodologia?.healthScore?.versao || "2.1"} | Score final = soma ponderada das 4 dimensões.
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                        <p className="text-[11px] uppercase font-semibold text-gray-500 mb-1">Cobertura</p>
+                        <p className="text-xs">{metodologia?.healthScore?.formulas?.cobertura || "pracas_equilibradas / total_pracas_analisadas * 100"}</p>
+                      </div>
+                      <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                        <p className="text-[11px] uppercase font-semibold text-gray-500 mb-1">Diversidade</p>
+                        <p className="text-xs">{metodologia?.healthScore?.formulas?.diversidade || "((1 - HHI) / (1 - 1/N_exibidores)) * 100"}</p>
+                      </div>
+                      <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                        <p className="text-[11px] uppercase font-semibold text-gray-500 mb-1">Qualidade</p>
+                        <p className="text-xs">{metodologia?.healthScore?.formulas?.qualidade || "0.5*(%com_coordenadas) + 0.5*(%com_passantes)"}</p>
+                      </div>
+                      <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                        <p className="text-[11px] uppercase font-semibold text-gray-500 mb-1">Capacidade</p>
+                        <p className="text-xs">{metodologia?.healthScore?.formulas?.capacidade || "taxa_finalizacao - 0.5*(%roteiros_travados)"}</p>
+                      </div>
+                    </div>
+
+                    <div className="border border-gray-200 rounded-lg p-3">
+                      <p className="text-[11px] uppercase font-semibold text-gray-500 mb-2">Pesos</p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                        <div className="bg-gray-50 border border-gray-200 rounded px-2 py-1">Cobertura: {Math.round((metodologia?.healthScore?.pesos?.cobertura || 0.3) * 100)}%</div>
+                        <div className="bg-gray-50 border border-gray-200 rounded px-2 py-1">Diversidade: {Math.round((metodologia?.healthScore?.pesos?.diversidade || 0.25) * 100)}%</div>
+                        <div className="bg-gray-50 border border-gray-200 rounded px-2 py-1">Qualidade: {Math.round((metodologia?.healthScore?.pesos?.qualidade || 0.25) * 100)}%</div>
+                        <div className="bg-gray-50 border border-gray-200 rounded px-2 py-1">Capacidade: {Math.round((metodologia?.healthScore?.pesos?.capacidade || 0.2) * 100)}%</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3 text-sm text-gray-700">
+                    <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                      <p className="text-[11px] uppercase font-semibold text-gray-500 mb-1">Indicadores de Ativos</p>
+                      <p className="text-xs">% VP: {metodologia?.indicadores?.percVP || "total_public / total_pontos * 100"}</p>
+                      <p className="text-xs">% Indoor: {metodologia?.indicadores?.percIndoor || "total_indoor / total_pontos * 100"}</p>
+                    </div>
+                    <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                      <p className="text-[11px] uppercase font-semibold text-gray-500 mb-1">Performance OOH</p>
+                      <p className="text-xs">Cobertura média: {metodologia?.indicadores?.coberturaMedia || "média ponderada por população"}</p>
+                      <p className="text-xs">Frequência média: {metodologia?.indicadores?.frequenciaMedia || "média ponderada por impactos"}</p>
+                      <p className="text-xs">GRP acumulado: {metodologia?.indicadores?.grpAcumulado || "soma de grp_vl no período selecionado"}</p>
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      Janela de análise do período atual: {metodologia?.indicadores?.periodoAnaliseDias || 30} dias.
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>
