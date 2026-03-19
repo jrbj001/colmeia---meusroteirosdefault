@@ -177,9 +177,48 @@ module.exports = async (req, res) => {
         ORDER BY share_pct DESC;
       `;
 
-      const fullSql = kpiSql + rankPracasSql + rankExibSql + hhiSql + coberturaSql + lowInvSql + concSql;
+      const heatmapSql = `
+        SELECT TOP 1200
+          ROUND(CAST(latitude AS FLOAT), 2) AS lat,
+          ROUND(CAST(longitude AS FLOAT), 2) AS lng,
+          COUNT(*) AS oferta,
+          SUM(CAST(ISNULL(pedestrian_flow, 0) AS FLOAT)) AS demanda,
+          COUNT(DISTINCT cidade_st) AS cidades_no_cluster
+        FROM [serv_product_be180].[bancoAtivosJoin_ft]
+        WHERE ${whereClause}
+          AND latitude IS NOT NULL
+          AND longitude IS NOT NULL
+          AND latitude BETWEEN -35 AND 6
+          AND longitude BETWEEN -75 AND -30
+        GROUP BY
+          ROUND(CAST(latitude AS FLOAT), 2),
+          ROUND(CAST(longitude AS FLOAT), 2)
+        ORDER BY COUNT(*) DESC;
+      `;
+
+      const fullSql = kpiSql + rankPracasSql + rankExibSql + hhiSql + coberturaSql + lowInvSql + concSql + heatmapSql;
       const result = await r.query(fullSql);
       const sets = result.recordsets;
+      const heatRows = sets[7] || [];
+      const maxOferta = Math.max(...heatRows.map((r2) => toNumber(r2.oferta)), 1);
+      const maxDemanda = Math.max(...heatRows.map((r2) => toNumber(r2.demanda)), 1);
+
+      const heatmap = heatRows.map((r2) => {
+        const ofertaNorm = clamp(toNumber(r2.oferta) / maxOferta, 0, 1);
+        const demandaNorm = clamp(toNumber(r2.demanda) / maxDemanda, 0, 1);
+        const oportunidade = clamp((demandaNorm - ofertaNorm + 1) / 2, 0, 1);
+        return {
+          lat: toNumber(r2.lat),
+          lng: toNumber(r2.lng),
+          oferta: round(ofertaNorm, 4),
+          demanda: round(demandaNorm, 4),
+          oportunidade: round(oportunidade, 4),
+          ofertaBruta: toNumber(r2.oferta),
+          demandaBruta: round(toNumber(r2.demanda), 0),
+          cidadesNoCluster: toNumber(r2.cidades_no_cluster),
+        };
+      });
+
       return {
         kpi: sets[0]?.[0] || {},
         rankingPracas: sets[1] || [],
@@ -188,6 +227,7 @@ module.exports = async (req, res) => {
         coberturaStats: sets[4]?.[0] || {},
         lowInventory: sets[5] || [],
         concentration: sets[6] || [],
+        heatmap,
       };
     };
 
@@ -485,6 +525,7 @@ module.exports = async (req, res) => {
           pontos: toNumber(r.pontos),
           pracasAtendidas: toNumber(r.pracas_atendidas),
         })),
+        heatmap: ativos.heatmap,
       },
 
       pipeline: {

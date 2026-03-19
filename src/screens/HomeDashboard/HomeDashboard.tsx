@@ -3,6 +3,8 @@ import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { Topbar } from "../../components/Topbar/Topbar";
 import api from "../../config/axios";
 import { useDebounce } from "../../hooks/useDebounce";
+import { Circle, MapContainer, TileLayer, useMap, ZoomControl } from "react-leaflet";
+import L from "leaflet";
 
 /* ─── Types ─── */
 
@@ -29,6 +31,17 @@ interface AtivosKpis {
   percVP: number;
   percIndoor: number;
   avgPassantes: number;
+}
+
+interface HeatPoint {
+  lat: number;
+  lng: number;
+  oferta: number;
+  demanda: number;
+  oportunidade: number;
+  ofertaBruta: number;
+  demandaBruta: number;
+  cidadesNoCluster: number;
 }
 
 interface RankingPraca {
@@ -101,6 +114,7 @@ interface DashboardV2Data {
     kpis: AtivosKpis;
     rankingPracas: RankingPraca[];
     rankingExibidores: RankingExibidor[];
+    heatmap: HeatPoint[];
   };
   pipeline: PipelineData;
   performance: {
@@ -239,6 +253,16 @@ const RankBar: React.FC<{ value: number; max: number; color?: string }> = ({ val
   </div>
 );
 
+const HeatFitBounds: React.FC<{ points: HeatPoint[] }> = ({ points }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (!points.length) return;
+    const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng] as [number, number]));
+    map.fitBounds(bounds, { padding: [24, 24], maxZoom: 10 });
+  }, [map, points]);
+  return null;
+};
+
 const InfoIconButton: React.FC<{ onClick: () => void; title: string }> = ({ onClick, title }) => (
   <button
     type="button"
@@ -261,6 +285,7 @@ export const HomeDashboard: React.FC = () => {
   const [data, setData] = useState<DashboardV2Data | null>(null);
   const [filtros, setFiltros] = useState({ ambiente: "", praca: "", exibidor: "", periodo: "30d" });
   const [metodoModal, setMetodoModal] = useState<"health" | "indicadores" | null>(null);
+  const [heatMode, setHeatMode] = useState<"oferta" | "demanda" | "oportunidade">("oportunidade");
 
   const debouncedPraca = useDebounce(filtros.praca, 300);
   const debouncedExibidor = useDebounce(filtros.exibidor, 300);
@@ -299,6 +324,45 @@ export const HomeDashboard: React.FC = () => {
   const pipe = data?.pipeline;
   const perf = data?.performance;
   const metodologia = data?.metodologia;
+  const heatmapPoints = ativos?.heatmap || [];
+
+  const displayedHeatPoints = useMemo(() => {
+    const sorted = [...heatmapPoints].sort((a, b) => {
+      if (heatMode === "oferta") return b.oferta - a.oferta;
+      if (heatMode === "demanda") return b.demanda - a.demanda;
+      return b.oportunidade - a.oportunidade;
+    });
+    return sorted.slice(0, 700);
+  }, [heatmapPoints, heatMode]);
+
+  const heatColor = useCallback((weight: number, mode: "oferta" | "demanda" | "oportunidade") => {
+    const w = Math.max(0, Math.min(1, weight));
+    if (mode === "oferta") {
+      if (w > 0.8) return "#dc2626";
+      if (w > 0.6) return "#ea580c";
+      if (w > 0.4) return "#f59e0b";
+      if (w > 0.2) return "#facc15";
+      return "#fde68a";
+    }
+    if (mode === "demanda") {
+      if (w > 0.8) return "#7c2d12";
+      if (w > 0.6) return "#b45309";
+      if (w > 0.4) return "#d97706";
+      if (w > 0.2) return "#f59e0b";
+      return "#fde68a";
+    }
+    if (w > 0.8) return "#b91c1c";
+    if (w > 0.6) return "#ea580c";
+    if (w > 0.4) return "#f59e0b";
+    if (w > 0.2) return "#fbbf24";
+    return "#fde68a";
+  }, []);
+
+  const heatWeight = useCallback((point: HeatPoint, mode: "oferta" | "demanda" | "oportunidade") => {
+    if (mode === "oferta") return point.oferta;
+    if (mode === "demanda") return point.demanda;
+    return point.oportunidade;
+  }, []);
 
   const maxPracaPontos = useMemo(
     () => Math.max(...(ativos?.rankingPracas || []).map((r) => r.pontos), 1),
@@ -584,6 +648,79 @@ export const HomeDashboard: React.FC = () => {
               </div>
 
               {/* ═══ Row 3: Performance em Cards ═══ */}
+              <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">Mapa de Calor Geoespacial</h3>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-gray-400 uppercase">Camada</span>
+                    <select
+                      value={heatMode}
+                      onChange={(e) => setHeatMode(e.target.value as "oferta" | "demanda" | "oportunidade")}
+                      className="h-8 px-2.5 text-xs border border-gray-200 rounded-lg bg-white"
+                    >
+                      <option value="oferta">Oferta (inventário)</option>
+                      <option value="demanda">Demanda (passantes)</option>
+                      <option value="oportunidade">Oportunidade (demanda - oferta)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-gray-500 mb-3">
+                  {heatMode === "oferta" && "Mostra concentração de inventário por célula geográfica."}
+                  {heatMode === "demanda" && "Mostra concentração de fluxo estimado de passantes por célula."}
+                  {heatMode === "oportunidade" && "Mostra áreas com potencial de demanda superior à oferta atual."}
+                </div>
+
+                <div className="h-[360px] rounded-xl border border-gray-200 overflow-hidden">
+                  {displayedHeatPoints.length > 0 ? (
+                    <MapContainer center={[-15.78, -47.93]} zoom={5} style={{ height: "100%", width: "100%" }} zoomControl={false}>
+                      <ZoomControl position="bottomright" />
+                      <TileLayer
+                        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                      />
+                      <HeatFitBounds points={displayedHeatPoints} />
+                      {displayedHeatPoints.map((point, idx) => {
+                        const w = heatWeight(point, heatMode);
+                        const radius = 1800 + (w * 6800);
+                        const color = heatColor(w, heatMode);
+                        const opacity = 0.12 + (w * 0.3);
+                        return (
+                          <Circle
+                            key={`${point.lat}-${point.lng}-${idx}`}
+                            center={[point.lat, point.lng]}
+                            radius={radius}
+                            pathOptions={{
+                              color,
+                              weight: 0,
+                              fillColor: color,
+                              fillOpacity: opacity,
+                            }}
+                          />
+                        );
+                      })}
+                    </MapContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-xs text-gray-400 bg-gray-50">
+                      Sem dados geográficos para os filtros selecionados.
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between text-[10px] text-gray-500">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-3 h-3 rounded-full bg-[#fde68a]" />
+                    <span>Baixa intensidade</span>
+                    <span className="inline-block w-3 h-3 rounded-full bg-[#f59e0b] ml-3" />
+                    <span>Média</span>
+                    <span className="inline-block w-3 h-3 rounded-full bg-[#b91c1c] ml-3" />
+                    <span>Alta intensidade</span>
+                  </div>
+                  <span>{displayedHeatPoints.length} células exibidas</span>
+                </div>
+              </div>
+
+              {/* ═══ Row 4: Performance em Cards ═══ */}
               <div className="bg-white border border-gray-200 rounded-xl p-5">
                 <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-4">Performance OOH Consolidada</h3>
 
