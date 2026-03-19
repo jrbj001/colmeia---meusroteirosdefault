@@ -2,286 +2,112 @@
   "regions": ["iad1"],
   "functions": {
     "api/*.js": {
-      "maxDuration": 600,
-      "memory": 1024
+      "maxDuration": 600
     }
   },
   "rewrites": [
-    {
-      "source": "/callback",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/login",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/mapa",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/criar-roteiro",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/visualizar-resultados",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/upload-roteiros-plano-midia",
-      "destination": "/api/upload-roteiros-plano-midia.js"
-    },
-    {
-      "source": "/sp-plano-midia-insert",
-      "destination": "/api/sp-plano-midia-insert.js"
-    },
-    {
-      "source": "/upload-pontos-unicos",
-      "destination": "/api/upload-pontos-unicos.js"
-    },
-    {
-      "source": "/sp-upload-roteiros-inventario-insert",
-      "destination": "/api/sp-upload-roteiros-inventario-insert.js"
-    },
-    {
-      "source": "/databricks-run-job",
-      "destination": "/api/databricks-run-job.js"
-    },
-    {
-      "source": "/upload-roteiros",
-      "destination": "/api/upload-roteiros.js"
-    },
-    {
-      "source": "/plano-midia-grupo",
-      "destination": "/api/plano-midia-grupo.js"
-    },
-    {
-      "source": "/plano-midia-desc",
-      "destination": "/api/plano-midia-desc.js"
-    },
-    {
-      "source": "/plano-midia",
-      "destination": "/api/plano-midia.js"
-    },
-    {
-      "source": "/cidades",
-      "destination": "/api/cidades.js"
-    },
-    {
-      "source": "/cidades-praca",
-      "destination": "/api/cidades-praca.js"
-    },
-    {
-      "source": "/semanas",
-      "destination": "/api/semanas.js"
-    },
-    {
-      "source": "/pivot-descpks",
-      "destination": "/api/pivot-descpks.js"
-    },
-    {
-      "source": "/inventario-cidade",
-      "destination": "/api/inventario-cidade.js"
-    },
-    {
-      "source": "/agencia",
-      "destination": "/api/agencia.js"
-    },
-    {
-      "source": "/marca",
-      "destination": "/api/marca.js"
-    },
-    {
-      "source": "/categoria",
-      "destination": "/api/categoria.js"
-    },
-    {
-      "source": "/target-genero",
-      "destination": "/api/target-genero.js"
-    },
-    {
-      "source": "/target-classe",
-      "destination": "/api/target-classe.js"
-    },
-    {
-      "source": "/target-faixa-etaria",
-      "destination": "/api/target-faixa-etaria.js"
-    },
-    {
-      "source": "/debug-grupo",
-      "destination": "/api/debug-grupo.js"
-    },
-    {
-      "source": "/hexagonos",
-      "destination": "/api/hexagonos.js"
-    },
-    {
-      "source": "/debug",
-      "destination": "/api/debug.js"
-    },
-    {
-      "source": "/plano-midia-desc-cleanup",
-      "destination": "/api/plano-midia-desc-cleanup.js"
-    },
-    {
-      "source": "/matrix-data-query",
-      "destination": "/api/matrix-data-query.js"
-    },
-    {
-      "source": "/matrix-data-row-query",
-      "destination": "/api/matrix-data-row-query.js"
-    },
-    {
-      "source": "/grupo-sub-distinct",
-      "destination": "/api/grupo-sub-distinct.js"
-    },
-    {
-      "source": "/report-indicadores-vias-publicas",
-      "destination": "/api/report-indicadores-vias-publicas.js"
-    },
-    {
-      "source": "/report-indicadores-summary",
-      "destination": "/api/report-indicadores-summary.js"
-    },
-    {
-      "source": "/report-indicadores-week",
-      "destination": "/api/report-indicadores-week.js"
-    },
-    {
-      "source": "/report-indicadores-week-summary",
-      "destination": "/api/report-indicadores-week-summary.js"
-    },
-    {
-      "source": "/roteiro-completo",
-      "destination": "/api/roteiro-completo.js"
-    },
-    {
-      "source": "/report-indicadores-target",
-      "destination": "/api/report-indicadores-target.js"
-    },
-    {
-      "source": "/report-indicadores-target-summary",
-      "destination": "/api/report-indicadores-target-summary.js"
-    },
-    {
-      "source": "/report-indicadores-week-target",
-      "destination": "/api/report-indicadores-week-target.js"
-    },
-    {
-      "source": "/report-indicadores-week-target-summary",
-      "destination": "/api/report-indicadores-week-target-summary.js"
-    },
-    {
-      "source": "/roteiro-simulado",
-      "destination": "/api/roteiro-simulado.js"
-    },
-    {
-      "source": "/databricks-roteiro-simulado",
-      "destination": "/api/databricks-roteiro-simulado.js"
-    },
-    {
-      "source": "/teste-rapido",
-      "destination": "/api/teste-rapido.js"
-    },
-    {
-      "source": "/banco-ativos-controle",
-      "destination": "/api/banco-ativos-controle.js"
-    },
-    {
-      "source": "/debug-roteiro-simulado",
-      "destination": "/api/debug-roteiro-simulado.js"
-    },
-    {
-      "source": "/descobrir-tabelas",
-      "destination": "/api/descobrir-tabelas.js"
-    },
-    {
-      "source": "/teste-view-resultados",
-      "destination": "/api/teste-view-resultados.js"
-    },
-    {
-      "source": "/ver-sp-codigo",
-      "destination": "/api/ver-sp-codigo.js"
-    },
-    {
-      "source": "/verificar-desc-salvos",
-      "destination": "/api/verificar-desc-salvos.js"
-    },
-    {
-      "source": "/verificar-dados-para-databricks",
-      "destination": "/api/verificar-dados-para-databricks.js"
-    },
-    {
-      "source": "/ver-sp-planomidiadesc",
-      "destination": "/api/ver-sp-planomidiadesc.js"
-    },
-    {
-      "source": "/atualizar-grupo-desc-pks",
-      "destination": "/api/atualizar-grupo-desc-pks.js"
-    },
-    {
-      "source": "/banco-ativos-relatorio-exibidor",
-      "destination": "/api/banco-ativos-relatorio-exibidor.js"
-    },
-    {
-      "source": "/exibidores-praca",
-      "destination": "/api/exibidores-praca.js"
-    },
-    {
-      "source": "/busca-pontos-midia",
-      "destination": "/api/busca-pontos-midia.js"
-    },
-    {
-      "source": "/exibidores",
-      "destination": "/api/exibidores.js"
-    },
-    {
-      "source": "/bairros",
-      "destination": "/api/bairros.js"
-    },
-    {
-      "source": "/banco-ativos-dashboard",
-      "destination": "/api/banco-ativos-dashboard.js"
-    },
-    {
-      "source": "/banco-ativos-relatorio-praca",
-      "destination": "/api/banco-ativos-relatorio-praca.js"
-    },
-    {
-      "source": "/tipos-midia-indoor",
-      "destination": "/api/tipos-midia-indoor.js"
-    },
-    {
-      "source": "/tipos-midia-vias-publicas",
-      "destination": "/api/tipos-midia-vias-publicas.js"
-    },
-    {
-      "source": "/grupos-midia",
-      "destination": "/api/grupos-midia.js"
-    },
-    {
-      "source": "/teste-cidades",
-      "destination": "/api/teste-cidades.js"
-    },
-    {
-      "source": "/banco-ativos-mapa",
-      "destination": "/api/banco-ativos-mapa.js"
-    },
-    {
-      "source": "/roteiros",
-      "destination": "/api/roteiros.js"
-    },
-    {
-      "source": "/roteiros-search",
-      "destination": "/api/roteiros-search.js"
-    },
-    {
-      "source": "/roteiros-delete",
-      "destination": "/api/roteiros-delete.js"
-    },
-    {
-      "source": "/roteiro-status",
-      "destination": "/api/roteiro-status.js"
-    }
+    { "source": "/callback", "destination": "/index.html" },
+    { "source": "/login", "destination": "/index.html" },
+    { "source": "/home-dashboard", "destination": "/index.html" },
+    { "source": "/meus-roteiros", "destination": "/index.html" },
+    { "source": "/mapa", "destination": "/index.html" },
+    { "source": "/criar-roteiro", "destination": "/index.html" },
+    { "source": "/visualizar-resultados", "destination": "/index.html" },
+    { "source": "/consulta-endereco", "destination": "/index.html" },
+    { "source": "/banco-de-ativos", "destination": "/index.html" },
+    { "source": "/banco-de-ativos/:path*", "destination": "/index.html" },
+    { "source": "/admin/:path*", "destination": "/index.html" },
+
+    { "source": "/api/roteiros-search", "destination": "/api/roteiros?action=search" },
+    { "source": "/api/roteiros-delete", "destination": "/api/roteiros?action=delete" },
+    { "source": "/api/roteiro-status", "destination": "/api/roteiros?action=status" },
+    { "source": "/api/roteiros-check-update", "destination": "/api/roteiros?action=check-update" },
+    { "source": "/api/roteiro-simulado", "destination": "/api/roteiros?action=simulado" },
+    { "source": "/api/roteiro-completo", "destination": "/api/roteiros?action=completo" },
+
+    { "source": "/api/plano-midia-desc", "destination": "/api/plano-midia?action=desc" },
+    { "source": "/api/plano-midia-grupo", "destination": "/api/plano-midia?action=grupo" },
+    { "source": "/api/plano-midia-grupo-target", "destination": "/api/plano-midia?action=grupo-target" },
+    { "source": "/api/plano-midia-desc-cleanup", "destination": "/api/plano-midia?action=desc-cleanup" },
+    { "source": "/api/atualizar-grupo-desc-pks", "destination": "/api/plano-midia?action=atualizar-desc-pks" },
+    { "source": "/api/sp-plano-midia-insert", "destination": "/api/plano-midia?action=sp-insert" },
+    { "source": "/api/sp-plano-midia-ooh-insert", "destination": "/api/plano-midia?action=sp-ooh-insert" },
+    { "source": "/api/sp-plano-midia-from-import", "destination": "/api/plano-midia?action=sp-from-import" },
+
+    { "source": "/api/upload-roteiros", "destination": "/api/uploads?action=roteiros" },
+    { "source": "/api/upload-roteiros-plano-midia", "destination": "/api/uploads?action=plano-midia" },
+    { "source": "/api/upload-pontos-unicos", "destination": "/api/uploads?action=pontos-unicos" },
+    { "source": "/api/sp-upload-roteiros-inventario-insert", "destination": "/api/uploads?action=inventario-insert" },
+
+    { "source": "/api/databricks-run-job", "destination": "/api/databricks?action=run-job" },
+    { "source": "/api/databricks-roteiro-simulado", "destination": "/api/databricks?action=roteiro-simulado" },
+
+    { "source": "/api/cidades", "destination": "/api/mapa?action=cidades" },
+    { "source": "/api/pivot-descpks", "destination": "/api/mapa?action=pivot-descpks" },
+    { "source": "/api/semanas", "destination": "/api/mapa?action=semanas" },
+    { "source": "/api/hexagonos", "destination": "/api/mapa?action=hexagonos" },
+    { "source": "/api/pontos-midia", "destination": "/api/mapa?action=pontos-midia" },
+    { "source": "/api/inventario-cidade", "destination": "/api/mapa?action=inventario-cidade" },
+    { "source": "/api/pracas-centros", "destination": "/api/mapa?action=pracas-centros" },
+
+    { "source": "/api/report-indicadores-vias-publicas", "destination": "/api/reports?action=vias-publicas" },
+    { "source": "/api/report-indicadores-summary", "destination": "/api/reports?action=summary" },
+    { "source": "/api/report-indicadores-target", "destination": "/api/reports?action=target" },
+    { "source": "/api/report-indicadores-target-summary", "destination": "/api/reports?action=target-summary" },
+    { "source": "/api/report-indicadores-week", "destination": "/api/reports?action=week" },
+    { "source": "/api/report-indicadores-week-summary", "destination": "/api/reports?action=week-summary" },
+    { "source": "/api/report-indicadores-week-target", "destination": "/api/reports?action=week-target" },
+    { "source": "/api/report-indicadores-week-target-summary", "destination": "/api/reports?action=week-target-summary" },
+    { "source": "/api/matrix-data-query", "destination": "/api/reports?action=matrix-data" },
+    { "source": "/api/matrix-data-row-query", "destination": "/api/reports?action=matrix-data-row" },
+    { "source": "/api/grupo-sub-distinct", "destination": "/api/reports?action=grupo-sub-distinct" },
+
+    { "source": "/api/banco-ativos-dashboard",        "destination": "/api/banco-ativos?action=dashboard" },
+    { "source": "/banco-ativos-dashboard",             "destination": "/api/banco-ativos?action=dashboard" },
+    { "source": "/api/home-indicadores-operacao",      "destination": "/api/banco-ativos?action=home-indicadores-operacao" },
+    { "source": "/api/home-indicadores-v2",            "destination": "/api/banco-ativos?action=home-indicadores-v2" },
+    { "source": "/api/banco-ativos-mapa",              "destination": "/api/banco-ativos?action=mapa" },
+    { "source": "/banco-ativos-mapa",                  "destination": "/api/banco-ativos?action=mapa" },
+    { "source": "/api/banco-ativos-centroids",         "destination": "/api/banco-ativos?action=centroids" },
+    { "source": "/banco-ativos-centroids",             "destination": "/api/banco-ativos?action=centroids" },
+    { "source": "/api/banco-ativos-perimetro",         "destination": "/api/banco-ativos?action=perimetro" },
+    { "source": "/banco-ativos-perimetro",             "destination": "/api/banco-ativos?action=perimetro" },
+    { "source": "/api/busca-pontos-midia",             "destination": "/api/banco-ativos?action=busca" },
+    { "source": "/api/banco-ativos-relatorio-praca",   "destination": "/api/banco-ativos?action=relatorio-praca" },
+    { "source": "/banco-ativos-relatorio-praca",       "destination": "/api/banco-ativos?action=relatorio-praca" },
+    { "source": "/api/banco-ativos-relatorio-exibidor","destination": "/api/banco-ativos?action=relatorio-exibidor" },
+    { "source": "/banco-ativos-relatorio-exibidor",    "destination": "/api/banco-ativos?action=relatorio-exibidor" },
+
+    { "source": "/api/agencia", "destination": "/api/referencia?action=agencia" },
+    { "source": "/api/marca", "destination": "/api/referencia?action=marca" },
+    { "source": "/api/categoria", "destination": "/api/referencia?action=categoria" },
+    { "source": "/api/target-genero", "destination": "/api/referencia?action=target-genero" },
+    { "source": "/api/target-classe", "destination": "/api/referencia?action=target-classe" },
+    { "source": "/api/target-faixa-etaria", "destination": "/api/referencia?action=target-faixa-etaria" },
+    { "source": "/api/cidades-praca", "destination": "/api/referencia?action=cidades-praca" },
+    { "source": "/api/cidades-ibge", "destination": "/api/referencia?action=cidades-ibge" },
+    { "source": "/api/cidade-ibge", "destination": "/api/referencia?action=cidade-ibge" },
+    { "source": "/api/exibidores", "destination": "/api/referencia?action=exibidores" },
+    { "source": "/api/exibidores-praca", "destination": "/api/referencia?action=exibidores-praca" },
+    { "source": "/api/bairros", "destination": "/api/referencia?action=bairros" },
+    { "source": "/api/grupos-midia", "destination": "/api/referencia?action=grupos-midia" },
+    { "source": "/api/tipos-midia-indoor", "destination": "/api/referencia?action=tipos-midia-indoor" },
+    { "source": "/api/tipos-midia-vias-publicas", "destination": "/api/referencia?action=tipos-midia-vias-publicas" },
+
+    { "source": "/usuarios", "destination": "/api/admin?action=usuarios" },
+    { "source": "/usuarios-permissoes", "destination": "/api/admin?action=usuarios-permissoes" },
+    { "source": "/perfis", "destination": "/api/admin?action=perfis" },
+    { "source": "/perfis-permissoes", "destination": "/api/admin?action=perfis-permissoes" },
+    { "source": "/api/usuarios", "destination": "/api/admin?action=usuarios" },
+    { "source": "/api/usuarios-permissoes", "destination": "/api/admin?action=usuarios-permissoes" },
+    { "source": "/api/perfis", "destination": "/api/admin?action=perfis" },
+    { "source": "/api/perfis-permissoes", "destination": "/api/admin?action=perfis-permissoes" },
+    { "source": "/api/areas", "destination": "/api/admin?action=areas" },
+    { "source": "/api/verificar-acesso", "destination": "/api/admin?action=verificar-acesso" },
+
+    { "source": "/api/sharepoint-download", "destination": "/api/integracoes?action=sharepoint" },
+    { "source": "/api/consulta-endereco", "destination": "/api/integracoes?action=consulta-endereco" },
+    { "source": "/api/busca-coordenada", "destination": "/api/integracoes?action=busca-coordenada" },
+    { "source": "/api/user-profile", "destination": "/api/integracoes?action=user-profile" }
   ]
-} 
+}

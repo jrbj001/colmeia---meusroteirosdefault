@@ -1,212 +1,123 @@
-# 🍯 Colmeia - Meus Roteiros
+# Colmeia - Meus Roteiros
 
-**Aplicação 100% Serverless na Vercel** - Frontend React + API Serverless Functions
+Aplicacao 100% Serverless na Vercel — Frontend React + API Serverless Functions.
 
-## 📋 Visão Geral
+Sistema de gestao de roteiros de midia desenvolvido com React (Vite + TypeScript) no frontend e Node.js serverless functions no backend.
 
-Sistema de gestão de roteiros de mídia desenvolvido com React (Vite + TypeScript) no frontend e Node.js serverless functions no backend, totalmente hospedado na Vercel.
-
-### 🏗️ Arquitetura
+## Arquitetura
 
 ```
-├── api/                    # 🚀 Serverless Functions (Vercel)
-│   ├── debug.js           # Endpoint de debug/health check
-│   ├── roteiros.js        # Listagem de roteiros paginada
-│   ├── cidades.js         # Busca cidades por grupo
-│   ├── semanas.js         # Busca semanas por desc_pk
-│   ├── pivot-descpks.js   # Pivot de descrições
-│   └── db.js              # Configuração do SQL Server
-├── src/                   # 🎨 Frontend React
-│   ├── components/        # Componentes reutilizáveis
-│   ├── screens/           # Páginas principais
-│   ├── icons/             # Ícones SVG
-│   └── config/            # Configuração Axios
-├── vercel.json            # ⚙️ Configuração Vercel (vazio = convenções padrão)
-└── package.json           # 📦 Dependências e scripts
+colmeia---meusroteirosdefault/
+├── api/                        # 10 Serverless Function Routers (Vercel)
+│   ├── roteiros.js             # Listagem, busca, delete, status, simulado (7 handlers)
+│   ├── plano-midia.js          # Criar plano, desc, grupo, cleanup (6 handlers)
+│   ├── uploads.js              # Upload roteiros, pontos unicos (4 handlers)
+│   ├── databricks.js           # Run job, roteiro simulado (2 handlers)
+│   ├── mapa.js                 # Cidades, semanas, hexagonos, pontos (6 handlers)
+│   ├── reports.js              # Indicadores, matrix data (11 handlers)
+│   ├── banco-ativos.js         # Dashboard, mapa, busca, relatorios (5 handlers)
+│   ├── referencia.js           # Agencia, marca, target, cidades (15 handlers)
+│   ├── admin.js                # Usuarios, perfis, permissoes (6 handlers)
+│   └── integracoes.js          # SharePoint, endereco, user-profile (3 handlers)
+│
+├── handlers/                   # Logica de negocio (65 handlers + 3 utilitarios)
+│   ├── db.js                   # Pool de conexao SQL Server
+│   ├── auth-middleware.js       # Middleware de autenticacao JWT
+│   ├── banco-ativos-passantes.js  # Pool PostgreSQL
+│   ├── roteiros.js             # Handler: listar roteiros
+│   ├── cidades.js              # Handler: buscar cidades
+│   └── ...                     # (demais handlers)
+│
+├── src/                        # Frontend React
+│   ├── components/             # Componentes reutilizaveis
+│   ├── screens/                # Paginas da aplicacao
+│   ├── hooks/                  # Custom hooks
+│   ├── contexts/               # React contexts (Auth)
+│   ├── config/                 # Configuracao Axios
+│   ├── icons/                  # Icones SVG
+│   └── index.tsx               # Entry point + rotas
+│
+├── public/                     # Assets estaticos
+├── docs/                       # Documentacao tecnica
+├── sql/                        # Scripts SQL e procedures
+├── vercel.json                 # Configuracao Vercel (rewrites, functions)
+└── package.json                # Dependencias e scripts
 ```
 
-## 🚀 Deploy Rápido
+### Como funciona o roteamento
 
-**1 comando para publicar na Vercel:**
+Cada router em `api/` recebe um parametro `?action=` via rewrites do `vercel.json` e despacha para o handler correspondente em `handlers/`:
 
-```bash
-vercel --prod
+```
+Frontend: GET /api/roteiros-search?q=teste
+  → Vercel rewrite: /api/roteiros?action=search&q=teste
+    → api/roteiros.js: dispatch para handlers/roteiros-search.js
 ```
 
-## 🛠️ Desenvolvimento Local
+Os 68 handlers originais estao em `handlers/` sem nenhuma modificacao — apenas os 10 routers em `api/` sao deployados como serverless functions.
 
-### **Pré-requisitos**
+## Desenvolvimento Local
+
+### Pre-requisitos
 - Node.js 18+
-- Acesso ao SQL Server (variáveis de ambiente)
+- Vercel CLI (`npm i -g vercel`)
+- Acesso ao SQL Server e PostgreSQL (variaveis de ambiente)
 
-### **1. Configurar Variáveis de Ambiente**
-Crie `.env.local` na raiz:
-```env
-DB_SERVER=seu_servidor_sql
-DB_DATABASE=seu_banco
-DB_USER=seu_usuario  
-DB_PASSWORD=sua_senha
-```
+### Configurar
 
-### **2. Instalar e Rodar**
 ```bash
-# Instalar dependências
+# Instalar dependencias
 npm install
 
-# Rodar em modo desenvolvimento
-vercel dev
+# Criar .env na raiz (veja docs/ENV_TEMPLATE.md)
 ```
 
-✅ **Acesse:** http://localhost:3000  
-✅ **APIs:** http://localhost:3000/api/*
+### Rodar
 
-## 📡 API Endpoints
-
-### **GET /api/debug**
-```json
-{
-  "ok": true,
-  "msg": "Debug endpoint funcionando!",
-  "timestamp": "2025-07-10T12:17:52.052Z"
-}
-```
-
-### **GET /api/roteiros?page=1**
-```json
-{
-  "data": [...],
-  "pagination": {
-    "currentPage": 1,
-    "totalPages": 25,
-    "totalItems": 1234,
-    "pageSize": 50
-  }
-}
-```
-
-### **GET /api/cidades?grupo=GRUPO_ID**
-```json
-{
-  "cidades": ["CIDADE1", "CIDADE2"],
-  "nomeGrupo": "Nome do Grupo"
-}
-```
-
-### **GET /api/semanas?desc_pk=123**
-```json
-{
-  "semanas": [
-    {"semanaInicial_vl": 1, "semanaFinal_vl": 4}
-  ]
-}
-```
-
-## 🗄️ Banco de Dados
-
-**SQL Server** - Views utilizadas:
-- `serv_product_be180.planoMidiaGrupo_dm_vw`
-- Outras views relacionadas para cidades e semanas
-
-## 📱 Frontend
-
-**Tecnologias:**
-- ⚛️ React 18 + TypeScript  
-- 🏗️ Vite (build ultra-rápido)
-- 🎨 Tailwind CSS
-- 🧭 React Router
-- 📡 Axios (requisições API)
-
-**Páginas:**
-- `/` - Lista de roteiros (tabela paginada)
-- `/mapa?grupo=ID` - Visualização em mapa
-
-## 🚀 Vercel Deploy
-
-### **Configuração Automática**
 ```bash
-# Deploy de produção
-vercel --prod
+# Desenvolvimento full-stack (recomendado)
+vercel dev
 
-# Deploy de preview
-vercel
+# Acesse http://localhost:3000
 ```
 
-### **Variáveis de Ambiente na Vercel**
-Configure no dashboard da Vercel:
-- `DB_SERVER`
-- `DB_DATABASE` 
-- `DB_USER`
-- `DB_PASSWORD`
+## Deploy
 
-### **URLs de Deploy**
-- **Produção:** `https://colmeia-meusroteirosdefault.vercel.app`
-- **Preview:** `https://colmeia-meusroteirosdefault-*.vercel.app`
+```bash
+# Preview
+vercel
 
-## 🔧 Scripts Disponíveis
+# Producao
+vercel --prod
+```
+
+### Variaveis de Ambiente (Vercel Dashboard)
+
+**SQL Server:**
+- `DB_SERVER`, `DB_DATABASE`, `DB_USER`, `DB_PASSWORD`
+
+**PostgreSQL (Banco de Ativos):**
+- `PG_HOST`, `PG_PORT`, `PG_DATABASE`, `PG_USER`, `PG_PASSWORD`
+
+**Databricks:**
+- `DATABRICKS_URL`, `DATABRICKS_JOB_ID`, `DATABRICKS_AUTH_TOKEN`
+
+**Azure/SharePoint:**
+- `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`
+
+## Stack
+
+**Frontend:** React 18, TypeScript, Vite, Tailwind CSS, React Router, Leaflet, Axios
+
+**Backend:** Node.js Serverless Functions, mssql, pg, jsonwebtoken, xlsx
+
+**Infra:** Vercel (hosting + serverless), SQL Server, PostgreSQL, Databricks, SharePoint
+
+## Scripts
 
 ```bash
 npm run dev      # Vite dev (apenas frontend)
-npm run build    # Build para produção
+npm run build    # Build para producao
 npm run preview  # Preview do build local
-vercel dev       # Desenvolvimento full-stack (recomendado)
+vercel dev       # Full-stack local (recomendado)
 ```
-
-## 📦 Dependências
-
-**Frontend:**
-- `react`, `react-dom`, `react-router-dom`
-- `axios` (HTTP client)
-- `tailwindcss` (CSS framework)
-
-**Backend:**
-- `mssql` (SQL Server driver)
-
-**Dev:**
-- `vite`, `typescript`
-- `@types/*` (tipos TypeScript)
-
-## 🎯 Funcionalidades
-
-✅ **Listagem de roteiros paginada**  
-✅ **Busca de cidades por grupo**  
-✅ **Visualização de semanas**  
-✅ **Interface responsiva**  
-✅ **100% Serverless (Vercel)**  
-✅ **TypeScript**  
-✅ **Hot reload em desenvolvimento**
-
-## 🔄 Fluxo de Desenvolvimento
-
-1. **Desenvolvimento:** `vercel dev` (frontend + API local)
-2. **Test:** Deploy preview com `vercel`  
-3. **Produção:** Deploy com `vercel --prod`
-
-## 🆘 Troubleshooting
-
-### **API não funciona localmente**
-```bash
-# Verificar se vercel dev está rodando
-vercel dev
-
-# Testar endpoint
-curl http://localhost:3000/api/debug
-```
-
-### **Erro de banco**
-- Verificar variáveis de ambiente em `.env.local`
-- Confirmar acesso ao SQL Server
-- Verificar firewall/VPN
-
-### **Build falha**
-```bash
-# Limpar cache
-rm -rf node_modules package-lock.json
-npm install
-
-# Rebuild
-npm run build
-```
-
----
-
-**💡 Dica:** Este projeto usa as convenções padrão da Vercel, mantendo a configuração mínima para máxima compatibilidade.

@@ -1,26 +1,18 @@
-const { getPool } = require('./db.js');
-
-module.exports = async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
-  }
-
-  try {
-    const { periodsJson } = req.body;
-    
-    if (!periodsJson) {
-      return res.status(400).json({ error: 'periodsJson é obrigatório' });
-    }
-
-    const pool = await getPool();
-    const result = await pool.request()
-      .input('periodsJson', JSON.stringify(periodsJson))
-      .execute('[serv_product_be180].[sp_planoMidiaInsert]');
-
-    res.status(200).json(result.recordset);
-  } catch (error) {
-    console.error('Erro ao criar plano mídia:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
+const handlers = {
+  'create': require('../handlers/plano-midia'),
+  'desc': require('../handlers/plano-midia-desc'),
+  'grupo': require('../handlers/plano-midia-grupo'),
+  'grupo-target': require('../handlers/plano-midia-grupo-target'),
+  'desc-cleanup': require('../handlers/plano-midia-desc-cleanup'),
+  'atualizar-desc-pks': require('../handlers/atualizar-grupo-desc-pks'),
+  'sp-insert': require('../handlers/sp-plano-midia-insert'),
+  'sp-ooh-insert': require('../handlers/sp-plano-midia-ooh-insert'),
+  'sp-from-import': require('../handlers/sp-plano-midia-from-import'),
 };
 
+module.exports = async (req, res) => {
+  const action = req.query.action || 'create';
+  const handler = handlers[action];
+  if (!handler) return res.status(400).json({ error: `Action '${action}' not found` });
+  return handler(req, res);
+};

@@ -1,1134 +1,1617 @@
-import React, { useState, useEffect } from "react";
-import { Sidebar } from "../../components/Sidebar/Sidebar";
-import { Topbar } from "../../components/Topbar/Topbar";
-import { MapaDashboardBancoAtivos } from "../../components/MapaDashboardBancoAtivos";
-import api from "../../config/axios";
+import React from 'react';
+import * as XLSX from 'xlsx';
+import { Sidebar } from '../../components/Sidebar/Sidebar';
+import { Topbar } from '../../components/Topbar/Topbar';
+import api from '../../config/axios';
+import { MapContainer, TileLayer, CircleMarker, ZoomControl, Tooltip, Rectangle, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet.markercluster';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
+
+// ── Types ──────────────────────────────────────────────────────────────
 
 interface DashboardData {
-  total: {
-    pontos_midia: number;
-    pracas: number;
-    exibidores: number;
-  };
-  vias_publicas: {
-    pontos_midia: number;
-    pracas: number;
-    exibidores: number;
-  };
-  indoor: {
-    pontos_midia: number;
-    pracas: number;
-    exibidores: number;
-  };
+  total: { pontos_midia: number; pracas: number; exibidores: number };
+  vias_publicas: { pontos_midia: number; pracas: number; exibidores: number };
+  indoor: { pontos_midia: number; pracas: number; exibidores: number };
 }
 
-interface PontoMidiaResultado {
-  codigo_ponto: number;
-  code: string;
-  latitude: number | string;
-  longitude: number | string;
-  exibidor: string;
-  categoria_exibidor: string;
-  ambiente: string;
-  formato: string;
-  grupo_midia: string;
-  tipo_midia: string;
+interface CityBubble {
   cidade: string;
   estado: string;
-  endereco: string;
+  lat: number;
+  lon: number;
+  total_pontos: number;
+  total_passantes: number;
+  total_impactos: number;
+  pontos_public: number;
+  pontos_indoor: number;
+}
+
+interface PontoMidia {
+  id: number;
+  code: string;
+  latitude: number;
+  longitude: number;
+  exibidor: string;
+  tipo_midia: string;
+  ambiente: string;
+  cidade: string;
   bairro: string;
-  cep: string;
   rating: string;
   passantes: number;
   impactos_ipv: number;
+  grupo_midia: string;
+  rua?: string;
 }
 
-// Chave para o cache
-const CACHE_KEY = 'banco_ativos_dashboard_cache';
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
-
-interface CacheData {
-  data: DashboardData;
-  timestamp: number;
+interface SugestaoPraca {
+  nome_cidade: string;
+  nome_estado?: string;
 }
 
-// Componente de Loading estilo Apple
-const AppleLoading: React.FC = () => {
-  return (
-    <>
-      <style>{`
-        @keyframes apple-spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        @keyframes apple-fade-in {
-          from { opacity: 0; transform: scale(0.95); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        @keyframes apple-pulse {
-          0%, 100% { opacity: 0.4; }
-          50% { opacity: 1; }
-        }
-      `}</style>
-      <div 
-        className="flex flex-col items-center justify-center"
-        style={{ animation: 'apple-fade-in 0.4s cubic-bezier(0.4, 0, 0.2, 1)' }}
-      >
-        <div className="relative mb-6">
-          {/* Background blur circle */}
-          <div 
-            className="absolute inset-0 rounded-full blur-2xl"
-            style={{
-              background: 'radial-gradient(circle, rgba(255, 107, 53, 0.2) 0%, rgba(255, 107, 53, 0.05) 100%)',
-              width: '80px',
-              height: '80px',
-              margin: '-10px',
-              animation: 'apple-pulse 2s ease-in-out infinite'
-            }}
-          />
-          
-          {/* Spinner */}
-          <div 
-            className="relative"
-            style={{ 
-              width: 56, 
-              height: 56,
-              animation: 'apple-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite'
-            }}
-          >
-            <svg width="56" height="56" viewBox="0 0 24 24">
-              <circle
-                cx="12"
-                cy="12"
-                r="10"
-                fill="none"
-                stroke="#ff4600"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeDasharray="60 158"
-                opacity="0.8"
-              />
-            </svg>
-          </div>
-        </div>
-        
-        <span 
-          className="text-[#ff4600] font-medium text-base tracking-tight"
-          style={{ letterSpacing: '-0.01em' }}
-        >
-          Carregando...
-        </span>
-      </div>
-    </>
-  );
-};
+type GridSortKey = 'code' | 'exibidor' | 'impactos_ipv';
+
+interface Perimetro {
+  city_id: number | null;
+  cidade_st: string;
+  estado_st?: string;
+  latitude_min_vl: number;
+  latitude_max_vl: number;
+  longitude_min_vl: number;
+  longitude_max_vl: number;
+  latitude_center_vl: number;
+  longitude_center_vl: number;
+}
+
+interface HoveredCity {
+  cidade_st: string;
+  estado_st?: string;
+  total_pontos: number;
+  pontos_public: number;
+  pontos_indoor: number;
+  total_passantes: number;
+  total_impactos: number;
+}
+
+// ── Choropleth helpers ─────────────────────────────────────────────────
+
+function choroplethStyle(pontos: number, maxPontos: number, isSelecionada: boolean) {
+  if (isSelecionada) {
+    return { color: '#ff4600', weight: 3, opacity: 1, fillColor: '#ff4600', fillOpacity: 0.15, dashArray: undefined };
+  }
+  if (maxPontos <= 0 || pontos <= 0) {
+    return { color: '#94a3b8', weight: 1, opacity: 0.4, fillColor: '#94a3b8', fillOpacity: 0.03, dashArray: '4 3' };
+  }
+  const ratio = Math.log(pontos + 1) / Math.log(maxPontos + 1);
+
+  let fillColor: string;
+  let fillOpacity: number;
+  if (ratio < 0.15) { fillColor = '#fed7aa'; fillOpacity = 0.18; }
+  else if (ratio < 0.30) { fillColor = '#fb923c'; fillOpacity = 0.22; }
+  else if (ratio < 0.50) { fillColor = '#f97316'; fillOpacity = 0.28; }
+  else if (ratio < 0.70) { fillColor = '#ea580c'; fillOpacity = 0.34; }
+  else if (ratio < 0.85) { fillColor = '#c2410c'; fillOpacity = 0.40; }
+  else                    { fillColor = '#9a3412'; fillOpacity = 0.48; }
+
+  const borderOpacity = 0.45 + ratio * 0.45;
+  return {
+    color: fillColor,
+    weight: 1.5,
+    opacity: borderOpacity,
+    fillColor,
+    fillOpacity,
+    dashArray: undefined,
+  };
+}
+
+// ── Map helpers ────────────────────────────────────────────────────────
+
+function ZoomTracker({ onZoom }: { onZoom: (z: number) => void }) {
+  const map = useMap();
+  React.useEffect(() => {
+    onZoom(map.getZoom());
+    const handler = () => onZoom(map.getZoom());
+    map.on('zoomend', handler);
+    return () => { map.off('zoomend', handler); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map]);
+  return null;
+}
+
+function AjustarMapaBrasil({ cidades }: { cidades: CityBubble[] }) {
+  const map = useMap();
+  React.useEffect(() => {
+    if (cidades.length === 0) return;
+    if (cidades.length === 1) {
+      map.setView([cidades[0].lat, cidades[0].lon], 8);
+    } else {
+      const bounds = L.latLngBounds(cidades.map(c => [c.lat, c.lon] as [number, number]));
+      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 6 });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cidades.length]);
+  return null;
+}
+
+function FlyToCity({ lat, lon }: { lat: number; lon: number }) {
+  const map = useMap();
+  React.useEffect(() => {
+    map.flyTo([lat, lon], 12, { duration: 1.2 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lat, lon]);
+  return null;
+}
+
+function FlyToPoint({ lat, lon }: { lat: number; lon: number }) {
+  const map = useMap();
+  React.useEffect(() => {
+    const currentZoom = map.getZoom();
+    map.flyTo([lat, lon], Math.max(currentZoom, 17), { duration: 0.9 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lat, lon]);
+  return null;
+}
+
+function MarkerClusterLayer({
+  pontos,
+  onSelect,
+  selectedPointId,
+}: {
+  pontos: PontoMidia[];
+  onSelect: (p: PontoMidia) => void;
+  selectedPointId?: number | null;
+}) {
+  const map = useMap();
+  const clusterRef = React.useRef<L.MarkerClusterGroup | null>(null);
+
+  React.useEffect(() => {
+    if (clusterRef.current) map.removeLayer(clusterRef.current);
+    // @ts-ignore
+    const cluster = L.markerClusterGroup({
+      maxClusterRadius: 50,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      iconCreateFunction: (c: any) => {
+        const count = c.getChildCount();
+        return L.divIcon({
+          html: `<div style="background:#ff4600;color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.25)">${count > 999 ? Math.round(count / 1000) + 'k' : count}</div>`,
+          className: '',
+          iconSize: [36, 36],
+        });
+      },
+    });
+
+    pontos.forEach(p => {
+      if (!p.latitude || !p.longitude) return;
+      const isPublic = (p.ambiente || '').toUpperCase().includes('PUBLIC');
+      const isSelected = selectedPointId != null && p.id === selectedPointId;
+      const color = isPublic ? '#3b82f6' : '#f97316';
+      const marker = L.circleMarker([Number(p.latitude), Number(p.longitude)], {
+        radius: isSelected ? 7 : 5,
+        fillColor: color,
+        color: isSelected ? '#111827' : '#fff',
+        weight: isSelected ? 2.2 : 1.5,
+        fillOpacity: isSelected ? 1 : 0.85,
+      });
+      marker.on('click', () => onSelect(p));
+      cluster.addLayer(marker);
+    });
+
+    map.addLayer(cluster);
+    clusterRef.current = cluster;
+    return () => { if (clusterRef.current) map.removeLayer(clusterRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pontos, onSelect, selectedPointId]);
+
+  return null;
+}
+
+// ── Formatters ─────────────────────────────────────────────────────────
+
+function fmt(n: number): string { return n.toLocaleString('pt-BR'); }
+
+function fmtCompact(n: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    notation: 'compact',
+    compactDisplay: 'short',
+    maximumFractionDigits: 1,
+  }).format(n || 0);
+}
+
+function normalizeText(value: string): string {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function coordKey(lat: number, lng: number): string {
+  return `${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}`;
+}
+
+function sanitizeSheetName(name: string): string {
+  const safe = (name || 'Pontos')
+    .replace(/[\\/*?:[\]]/g, ' ')
+    .trim();
+  return safe.slice(0, 31) || 'Pontos';
+}
+
+function bubbleRadius(total: number, max: number): number {
+  if (max <= 0) return 6;
+  return Math.max(4, Math.min(16, 4 + (total / max) * 12));
+}
+
+// ── Main Component ─────────────────────────────────────────────────────
 
 export const BancoDeAtivos: React.FC = () => {
-  const [menuReduzido, setMenuReduzido] = useState(false);
-  const [abaAtiva, setAbaAtiva] = useState<'dashboard' | 'busca'>('dashboard');
-  const [dados, setDados] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
-  const [usandoCache, setUsandoCache] = useState(false);
+  const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  const [menuReduzido, setMenuReduzido] = React.useState(false);
 
-  // Estados para a aba de busca
-  const [filtros, setFiltros] = useState({
-    praca: '',
-    exibidor: '',
-    bairro: '',
-    rating: '',
-    ambiente: '',
-    grupo_midia: '',
-    tipo_ambiente_indoor: '',
-    tipo_midia_vias_publicas: '',
-    formato: ''
-  });
-  const [resultadosBusca, setResultadosBusca] = useState<PontoMidiaResultado[]>([]);
-  const [loadingBusca, setLoadingBusca] = useState(false);
-  const [erroBusca, setErroBusca] = useState<string | null>(null);
-  
-  // Estados para as opções dos dropdowns (todas as opções disponíveis)
-  const [todasOpcoesPracas, setTodasOpcoesPracas] = useState<string[]>([]);
-  const [todasOpcoesExibidores, setTodasOpcoesExibidores] = useState<string[]>([]);
-  const [todasOpcoesBairros, setTodasOpcoesBairros] = useState<string[]>([]);
-  
-  // Estados para as opções filtradas (baseadas nos outros filtros selecionados)
-  const [opcoesPracas, setOpcoesPracas] = useState<string[]>([]);
-  const [opcoesExibidores, setOpcoesExibidores] = useState<string[]>([]);
-  const [opcoesBairros, setOpcoesBairros] = useState<string[]>([]);
-  const [opcoesGruposMidia, setOpcoesGruposMidia] = useState<Array<{id: number, name: string}>>([]);
-  const [opcoesTiposMidiaIndoor, setOpcoesTiposMidiaIndoor] = useState<Array<{id: number, name: string}>>([]);
-  const [opcoesTiposMidiaViasPublicas, setOpcoesTiposMidiaViasPublicas] = useState<Array<{id: number, name: string}>>([]);
-  
-  // Estados para o autocomplete de Praça
-  const [inputPraca, setInputPraca] = useState('');
-  const [mostrarSugestoesPraca, setMostrarSugestoesPraca] = useState(false);
-  const [pracasFiltradas, setPracasFiltradas] = useState<string[]>([]);
+  // Data
+  const [dados, setDados] = React.useState<DashboardData | null>(null);
+  const [centroids, setCentroids] = React.useState<CityBubble[]>([]);
+  const [pontos, setPontos] = React.useState<PontoMidia[]>([]);
+  const [perimetros, setPerimetros] = React.useState<Perimetro[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [loadingPontos, setLoadingPontos] = React.useState(false);
 
-  // Função para obter dados do cache
-  const getCachedData = (): DashboardData | null => {
-    try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
-        const cacheData: CacheData = JSON.parse(cached);
-        const now = Date.now();
-        
-        // Verificar se o cache ainda é válido
-        if (now - cacheData.timestamp < CACHE_DURATION) {
-          return cacheData.data;
-        } else {
-          // Cache expirado, remover
-          localStorage.removeItem(CACHE_KEY);
-        }
-      }
-    } catch (error) {
-      console.error('Erro ao ler cache:', error);
-    }
-    return null;
-  };
+  // Interaction
+  const [cidadeSelecionada, setCidadeSelecionada] = React.useState<CityBubble | null>(null);
+  const [pontoSelecionado, setPontoSelecionado] = React.useState<PontoMidia | null>(null);
+  const [mostrarStreetView, setMostrarStreetView] = React.useState(false);
+  const [painelColapsado, setPainelColapsado] = React.useState(false);
+  const [zoom, setZoom] = React.useState(4);
+  const [hoveredCity, setHoveredCity] = React.useState<HoveredCity | null>(null);
+  const [ruaPorCoordenada, setRuaPorCoordenada] = React.useState<Record<string, string>>({});
+  const [buscandoRua, setBuscandoRua] = React.useState(false);
+  const [exportandoExcel, setExportandoExcel] = React.useState(false);
+  const [exportProgress, setExportProgress] = React.useState(0);
+  const [exportStatusText, setExportStatusText] = React.useState('');
 
-  // Função para salvar dados no cache
-  const setCachedData = (data: DashboardData) => {
-    try {
-      const cacheData: CacheData = {
-        data,
-        timestamp: Date.now()
-      };
-      localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
-    } catch (error) {
-      console.error('Erro ao salvar cache:', error);
-    }
-  };
+  // Filters
+  const [filtroAmbiente, setFiltroAmbiente] = React.useState<'todos' | 'vias_publicas' | 'indoor'>('todos');
+  const [buscaPraca, setBuscaPraca] = React.useState('');
+  const [buscaExibidor, setBuscaExibidor] = React.useState('');
+  const [buscaBairro, setBuscaBairro] = React.useState('');
+  const [sugestoesPraca, setSugestoesPraca] = React.useState<SugestaoPraca[]>([]);
+  const [sugestoesExibidor, setSugestoesExibidor] = React.useState<string[]>([]);
+  const [sugestoesBairro, setSugestoesBairro] = React.useState<string[]>([]);
+  const [baseExibidoresPraca, setBaseExibidoresPraca] = React.useState<string[]>([]);
+  const [baseBairrosPraca, setBaseBairrosPraca] = React.useState<string[]>([]);
+  const [mostrarBuscaAvancada, setMostrarBuscaAvancada] = React.useState(false);
+  const [campoBuscaAtivo, setCampoBuscaAtivo] = React.useState<'praca' | 'exibidor' | 'bairro' | null>(null);
+  const [mostrarDadosModal, setMostrarDadosModal] = React.useState(false);
+  const [gridSortKey, setGridSortKey] = React.useState<GridSortKey>('impactos_ipv');
+  const [gridSortDir, setGridSortDir] = React.useState<'asc' | 'desc'>('desc');
 
-  useEffect(() => {
-    carregarDados();
+  // Drag
+  const painelRef = React.useRef<HTMLDivElement>(null);
+  const painelPos = React.useRef({ x: 16, y: 16 });
+  const dragState = React.useRef({ dragging: false, startX: 0, startY: 0, origX: 16, origY: 16 });
+
+  const onDragHandleMouseDown = React.useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragState.current = { dragging: true, startX: e.clientX, startY: e.clientY, origX: painelPos.current.x, origY: painelPos.current.y };
+    const onMove = (ev: MouseEvent) => {
+      if (!dragState.current.dragging || !painelRef.current) return;
+      const nx = Math.max(0, dragState.current.origX + ev.clientX - dragState.current.startX);
+      const ny = Math.max(0, dragState.current.origY + ev.clientY - dragState.current.startY);
+      painelPos.current = { x: nx, y: ny };
+      painelRef.current.style.left = `${nx}px`;
+      painelRef.current.style.top = `${ny}px`;
+    };
+    const onUp = () => {
+      dragState.current.dragging = false;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   }, []);
 
-  const carregarDados = async (forcarAtualizacao: boolean = false) => {
-    try {
-      // Verificar cache primeiro (se não forçar atualização)
-      if (!forcarAtualizacao) {
-        const cachedData = getCachedData();
-        if (cachedData) {
-          setDados(cachedData);
-          setUsandoCache(true);
-          setLoading(false);
-          
-          // Carregar dados atualizados em background (sem mostrar loading)
-          carregarDadosDoServidor(false);
-          return;
-        }
-      }
+  // ── Data fetching ──────────────────────────────────────────────────
 
-      // Se não há cache ou está forçando atualização, carregar do servidor
-      await carregarDadosDoServidor();
-    } catch (err: any) {
-      console.error('❌ Erro ao carregar dados:', err);
-      setErro(err.response?.data?.message || 'Erro ao carregar os dados do dashboard. Tente novamente.');
-      setLoading(false);
+  React.useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      api.get('/banco-ativos-dashboard'),
+      api.get('/banco-ativos-centroids'),
+      api.get('/banco-ativos-perimetro'),
+    ])
+      .then(([dashRes, centRes, perRes]) => {
+        if (dashRes.data.success) setDados(dashRes.data.data);
+        if (centRes.data.success) setCentroids(centRes.data.data || []);
+        if (perRes.data.success)  setPerimetros(perRes.data.data || []);
+      })
+      .catch(err => console.error('Erro ao carregar dados:', err))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Aceita `ambienteParam` para evitar stale closure quando o filtro muda e
+  // a função é chamada no mesmo ciclo de render (antes do re-render com novo valor)
+  const carregarPontosCidade = React.useCallback((
+    cidade: string,
+    ambienteParam?: string,
+    filtrosParam?: { exibidor?: string; bairro?: string }
+  ) => {
+    console.log('[carregarPontosCidade] buscando:', cidade, '| ambiente:', ambienteParam ?? filtroAmbiente, '| filtros:', filtrosParam);
+    setLoadingPontos(true);
+    setPontos([]);
+    setPontoSelecionado(null);
+    const ambiente = ambienteParam ?? filtroAmbiente;
+    const params: Record<string, string> = { cidade };
+    if (ambiente !== 'todos') params.tipo_ambiente = ambiente;
+    const exibidorFiltro = (filtrosParam?.exibidor ?? buscaExibidor).trim();
+    const bairroFiltro = (filtrosParam?.bairro ?? buscaBairro).trim();
+    if (exibidorFiltro) params.exibidor = exibidorFiltro;
+    if (bairroFiltro) params.bairro = bairroFiltro;
+    api.get('/banco-ativos-mapa', { params })
+      .then(res => {
+        console.log('[carregarPontosCidade] resposta:', res.data.success, '| pontos:', res.data.data?.length);
+        if (res.data.success) setPontos(res.data.data);
+      })
+      .catch(err => console.error('[carregarPontosCidade] erro:', err))
+      .finally(() => setLoadingPontos(false));
+  }, [filtroAmbiente, buscaExibidor, buscaBairro]);
+
+  const handleClickCidade = React.useCallback((city: CityBubble) => {
+    console.log('[handleClickCidade] cidade:', city.cidade, '| lat:', city.lat, '| lon:', city.lon);
+    setCidadeSelecionada(city);
+    setBuscaPraca(city.cidade);
+    setPontoSelecionado(null);
+    setHoveredCity(null);
+    carregarPontosCidade(city.cidade, undefined, { exibidor: buscaExibidor, bairro: buscaBairro });
+    carregarListasDependentesDaPraca(city.cidade);
+  }, [carregarPontosCidade, buscaExibidor, buscaBairro, carregarListasDependentesDaPraca]);
+
+  const voltarBrasil = React.useCallback(() => {
+    setCidadeSelecionada(null);
+    setPontos([]);
+    setPontoSelecionado(null);
+    setHoveredCity(null);
+  }, []);
+
+  const handleZoom = React.useCallback((z: number) => setZoom(z), []);
+
+  const normalizar = React.useCallback((v: string) => (v || '').trim().toLowerCase(), []);
+
+  const alternarOrdenacaoGrid = React.useCallback((key: GridSortKey) => {
+    if (gridSortKey === key) {
+      setGridSortDir(prev => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
     }
-  };
+    setGridSortKey(key);
+    setGridSortDir(key === 'impactos_ipv' ? 'desc' : 'asc');
+  }, [gridSortKey]);
 
-  const carregarDadosDoServidor = async (mostrarLoading: boolean = true) => {
-    try {
-      if (mostrarLoading) {
-        setLoading(true);
-      }
-      setErro(null);
-      setUsandoCache(false);
-      
-      const response = await api.get('/banco-ativos-dashboard');
-      console.log('📊 Resposta da API:', response.data);
-      
-      if (response.data && response.data.success && response.data.data) {
-        setDados(response.data.data);
-        setCachedData(response.data.data);
-        setUsandoCache(false);
-      } else {
-        setErro('Formato de resposta inválido da API');
-      }
-    } catch (err: any) {
-      console.error('❌ Erro ao carregar dados do servidor:', err);
-      // Se estava usando cache e deu erro, manter os dados do cache
-      if (!usandoCache) {
-        throw err;
-      }
-    } finally {
-      if (mostrarLoading) {
-        setLoading(false);
-      }
+  const aplicarBusca = React.useCallback(() => {
+    const praca = buscaPraca.trim() || cidadeSelecionada?.cidade || '';
+    if (!praca) return;
+
+    const match = centroids.find(c => normalizar(c.cidade) === normalizar(praca));
+    const cidadeAlvo: CityBubble = match || {
+      cidade: praca,
+      estado: '',
+      lat: -15.78,
+      lon: -47.93,
+      total_pontos: 0,
+      total_passantes: 0,
+      total_impactos: 0,
+      pontos_public: 0,
+      pontos_indoor: 0,
+    };
+
+    setCidadeSelecionada(cidadeAlvo);
+    setPontoSelecionado(null);
+    setHoveredCity(null);
+    carregarPontosCidade(cidadeAlvo.cidade, undefined, { exibidor: buscaExibidor, bairro: buscaBairro });
+    carregarListasDependentesDaPraca(cidadeAlvo.cidade);
+  }, [buscaPraca, cidadeSelecionada, centroids, normalizar, carregarPontosCidade, buscaExibidor, buscaBairro, carregarListasDependentesDaPraca]);
+
+  const limparBusca = React.useCallback(() => {
+    setBuscaPraca('');
+    setBuscaExibidor('');
+    setBuscaBairro('');
+    setSugestoesPraca([]);
+    setSugestoesExibidor([]);
+    setSugestoesBairro([]);
+    setBaseExibidoresPraca([]);
+    setBaseBairrosPraca([]);
+    if (cidadeSelecionada) {
+      carregarPontosCidade(cidadeSelecionada.cidade, undefined, { exibidor: '', bairro: '' });
     }
-  };
+  }, [cidadeSelecionada, carregarPontosCidade]);
 
-  const formatarNumero = (numero: number): string => {
-    return new Intl.NumberFormat('pt-BR').format(numero);
-  };
-
-  // Função para carregar opções dos filtros e dados completos para filtragem encadeada
-  const carregarOpcoesFiltros = async () => {
-    try {
-      console.log('🔄 Carregando opções dos filtros...');
-      
-      // Carregar todas as opções em paralelo
-      const [
-        responsePracas,
-        responseExibidores,
-        responseBairros,
-        responseGruposMidia,
-        responseTiposMidiaIndoor,
-        responseTiposMidiaViasPublicas
-      ] = await Promise.all([
-        api.get('/cidades-praca').catch(err => { console.error('❌ Erro cidades-praca:', err); return { data: [] }; }),
-        api.get('/exibidores').catch(err => { console.error('❌ Erro exibidores:', err); return { data: [] }; }),
-        api.get('/bairros').catch(err => { console.error('❌ Erro bairros:', err); return { data: [] }; }),
-        api.get('/grupos-midia').catch(err => { console.error('❌ Erro grupos-midia:', err); return { data: [] }; }),
-        api.get('/tipos-midia-indoor').catch(err => { console.error('❌ Erro tipos-midia-indoor:', err); return { data: [] }; }),
-        api.get('/tipos-midia-vias-publicas').catch(err => { console.error('❌ Erro tipos-midia-vias-publicas:', err); return { data: [] }; })
-      ]);
-
-      console.log('📊 Respostas recebidas:', {
-        pracas: responsePracas.data?.length || 0,
-        exibidores: responseExibidores.data?.length || 0,
-        bairros: responseBairros.data?.length || 0,
-        gruposMidia: responseGruposMidia.data?.length || 0,
-        tiposMidiaIndoor: responseTiposMidiaIndoor.data?.length || 0,
-        tiposMidiaViasPublicas: responseTiposMidiaViasPublicas.data?.length || 0
-      });
-
-      // Processar praças - usar nome_cidade da estrutura existente
-      const pracas = (responsePracas.data || []).map((c: any) => c.nome_cidade || c.name || c);
-      const pracasUnicas = [...new Set(pracas)].filter(Boolean).sort();
-      setTodasOpcoesPracas(pracasUnicas);
-      setOpcoesPracas(pracasUnicas);
-
-      // Processar exibidores
-      const exibidores = (responseExibidores.data || []).map((e: any) => e.name || e);
-      const exibidoresUnicos = [...new Set(exibidores)].filter(Boolean).sort();
-      setTodasOpcoesExibidores(exibidoresUnicos);
-      setOpcoesExibidores(exibidoresUnicos);
-
-      // Processar bairros
-      const bairros = (responseBairros.data || []).map((b: any) => b.name || b);
-      const bairrosUnicos = [...new Set(bairros)].filter(Boolean).sort();
-      setTodasOpcoesBairros(bairrosUnicos);
-      setOpcoesBairros(bairrosUnicos);
-
-      // Processar grupos de mídia
-      setOpcoesGruposMidia(responseGruposMidia.data || []);
-
-      // Processar tipos de mídia indoor
-      setOpcoesTiposMidiaIndoor(responseTiposMidiaIndoor.data || []);
-
-      // Processar tipos de mídia vias públicas
-      setOpcoesTiposMidiaViasPublicas(responseTiposMidiaViasPublicas.data || []);
-
-      console.log('✅ Opções de filtros carregadas com sucesso!');
-    } catch (err: any) {
-      console.error('❌ Erro geral ao carregar opções dos filtros:', err);
-      alert('Erro ao carregar opções dos filtros. Verifique o console.');
-    }
-  };
-
-  // Função para atualizar as opções disponíveis baseado nos filtros selecionados
-  // Agora busca do backend em tempo real
-  const atualizarOpcoesFiltradas = async () => {
-    try {
-      // Se nenhum filtro está selecionado, mostrar todas as opções
-      if (!filtros.praca && !filtros.exibidor && !filtros.bairro && !filtros.rating) {
-        setOpcoesPracas(todasOpcoesPracas);
-        setOpcoesExibidores(todasOpcoesExibidores);
-        setOpcoesBairros(todasOpcoesBairros);
-        return;
-      }
-
-      // Construir filtros para buscar opções disponíveis
-      const params = new URLSearchParams();
-      if (filtros.praca) params.append('praca', filtros.praca);
-      if (filtros.exibidor) params.append('exibidor', filtros.exibidor);
-      if (filtros.bairro) params.append('bairro', filtros.bairro);
-      if (filtros.rating) params.append('rating', filtros.rating);
-      
-      // Buscar com limite alto para pegar todas as combinações possíveis
-      params.append('limite', '50000');
-
-      console.log('🔄 Buscando opções filtradas com:', params.toString());
-
-      const response = await api.get(`/busca-pontos-midia?${params.toString()}`);
-      const dados = response.data.data || [];
-
-      // Extrair opções únicas dos dados retornados
-      const pracasDisponiveis = [...new Set(dados.map((d: any) => d.cidade).filter(Boolean))].sort();
-      const exibidoresDisponiveis = [...new Set(dados.map((d: any) => d.exibidor).filter(Boolean))].sort();
-      const bairrosDisponiveis = [...new Set(dados.map((d: any) => d.bairro).filter(Boolean))].sort();
-
-      // Atualizar opções baseadas nos filtros
-      // Se praça não está selecionada, mostrar praças disponíveis pelos outros filtros
-      if (!filtros.praca) {
-        setOpcoesPracas(pracasDisponiveis.length > 0 ? pracasDisponiveis : todasOpcoesPracas);
-      }
-      
-      // Se exibidor não está selecionado, mostrar exibidores disponíveis pelos outros filtros
-      if (!filtros.exibidor) {
-        setOpcoesExibidores(exibidoresDisponiveis.length > 0 ? exibidoresDisponiveis : todasOpcoesExibidores);
-      }
-      
-      // Se bairro não está selecionado, mostrar bairros disponíveis pelos outros filtros
-      if (!filtros.bairro) {
-        setOpcoesBairros(bairrosDisponiveis.length > 0 ? bairrosDisponiveis : todasOpcoesBairros);
-      }
-
-      console.log('✅ Opções filtradas atualizadas:', {
-        pracas: pracasDisponiveis.length,
-        exibidores: exibidoresDisponiveis.length,
-        bairros: bairrosDisponiveis.length
-      });
-    } catch (err) {
-      console.error('❌ Erro ao atualizar opções filtradas:', err);
-      // Em caso de erro, manter as opções atuais
-    }
-  };
-
-  // Função para realizar a busca
-  const realizarBusca = async (e?: React.MouseEvent) => {
-    // Prevenir qualquer comportamento padrão
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    
-    try {
-      console.log('🔍 [Frontend] Iniciando busca...');
-      setLoadingBusca(true);
-      setErroBusca(null);
-
-      // Montar query params
-      const params = new URLSearchParams();
-      Object.entries(filtros).forEach(([key, value]) => {
-        if (value) params.append(key, value);
-      });
-
-      console.log('🔍 [Frontend] Filtros aplicados:', filtros);
-      console.log('🔍 [Frontend] Query string:', params.toString());
-      
-      const response = await api.get(`/busca-pontos-midia?${params.toString()}`);
-      
-      console.log('✅ [Frontend] Resposta recebida:', response.data);
-      console.log('✅ [Frontend] Dados:', response.data.data);
-      console.log('✅ [Frontend] Total de resultados:', response.data.data?.length || 0);
-      
-      if (response.data.data && Array.isArray(response.data.data)) {
-        setResultadosBusca(response.data.data);
-        console.log('✅ [Frontend] State atualizado com', response.data.data.length, 'resultados');
-      } else {
-        console.error('❌ [Frontend] Dados não são um array:', typeof response.data.data);
-        setResultadosBusca([]);
-      }
-    } catch (err: any) {
-      console.error('❌ [Frontend] Erro ao buscar pontos:', err);
-      setErroBusca(err.response?.data?.message || 'Erro ao buscar pontos de mídia');
-    } finally {
-      setLoadingBusca(false);
-      console.log('🏁 [Frontend] Busca finalizada');
-    }
-  };
-
-  // Função para exportar para Excel
-  const exportarExcel = async () => {
-    if (resultadosBusca.length === 0) {
-      alert('Não há dados para exportar');
+  function carregarListasDependentesDaPraca(praca: string) {
+    const nomePraca = (praca || '').trim();
+    if (!nomePraca) {
+      setBaseExibidoresPraca([]);
+      setBaseBairrosPraca([]);
       return;
     }
 
+    api.get('/exibidores-praca', { params: { praca: nomePraca } })
+      .then(res => {
+        const lista = Array.isArray(res.data) ? res.data : [];
+        const exibs = lista.map((i: any) => i.nome_exibidor).filter(Boolean);
+        setBaseExibidoresPraca(exibs);
+      })
+      .catch(() => setBaseExibidoresPraca([]));
+
+    api.get('/bairros', { params: { praca: nomePraca } })
+      .then(res => {
+        const lista = Array.isArray(res.data) ? res.data : [];
+        const bairros = lista.map((i: any) => i.name).filter(Boolean);
+        setBaseBairrosPraca(bairros);
+      })
+      .catch(() => setBaseBairrosPraca([]));
+  }
+
+  const streetViewEmbedUrl = React.useMemo(() => {
+    if (!pontoSelecionado || !googleMapsApiKey) return null;
+    const params = new URLSearchParams({
+      key: googleMapsApiKey,
+      location: `${pontoSelecionado.latitude},${pontoSelecionado.longitude}`,
+      heading: '210',
+      pitch: '10',
+      fov: '80',
+    });
+    return `https://www.google.com/maps/embed/v1/streetview?${params.toString()}`;
+  }, [pontoSelecionado, googleMapsApiKey]);
+
+  React.useEffect(() => {
+    if (!pontoSelecionado) setMostrarStreetView(false);
+  }, [pontoSelecionado]);
+
+  React.useEffect(() => {
+    const q = buscaPraca.trim();
+    if (q.length < 1) {
+      setSugestoesPraca([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      api.get('/cidades-praca', { params: { search: q } })
+        .then(res => setSugestoesPraca(Array.isArray(res.data) ? res.data : []))
+        .catch(() => setSugestoesPraca([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [buscaPraca]);
+
+  const sugestoesPracaVisiveis = React.useMemo(() => {
+    const q = normalizeText(buscaPraca);
+
+    // Fallback local imediato com dados já carregados (centroids)
+    const locais = centroids
+      .filter(c => !q || normalizeText(c.cidade || '').includes(q))
+      .map(c => ({ nome_cidade: c.cidade, nome_estado: c.estado }))
+      .slice(0, 20);
+
+    // Merge com resultado da API, removendo duplicatas
+    const merged = [...locais, ...sugestoesPraca];
+    const seen = new Set<string>();
+    const unicos: SugestaoPraca[] = [];
+    for (const item of merged) {
+      const key = `${normalizeText(item.nome_cidade || '')}|${normalizeText(item.nome_estado || '')}`;
+      if (!item.nome_cidade || seen.has(key)) continue;
+      seen.add(key);
+      unicos.push(item);
+      if (unicos.length >= 20) break;
+    }
+    return unicos;
+  }, [buscaPraca, centroids, sugestoesPraca]);
+
+  React.useEffect(() => {
+    const q = buscaExibidor.trim();
+    if (q.length < 1) {
+      setSugestoesExibidor([]);
+      return;
+    }
+    const pracaFiltro = (buscaPraca || cidadeSelecionada?.cidade || '').trim();
+    const t = setTimeout(() => {
+      api.get('/exibidores-praca', { params: { search: q, praca: pracaFiltro } })
+        .then(res => {
+          const lista = Array.isArray(res.data) ? res.data : [];
+          setSugestoesExibidor(lista.map((i: any) => i.nome_exibidor).filter(Boolean));
+        })
+        .catch(() => setSugestoesExibidor([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [buscaExibidor, buscaPraca, cidadeSelecionada]);
+
+  React.useEffect(() => {
+    const q = buscaBairro.trim();
+    if (q.length < 1) {
+      setSugestoesBairro([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      api.get('/bairros', {
+        params: {
+          search: q,
+          praca: (buscaPraca || cidadeSelecionada?.cidade || '').trim(),
+        },
+      })
+        .then(res => {
+          const lista = Array.isArray(res.data) ? res.data : [];
+          setSugestoesBairro(lista.map((i: any) => i.name).filter(Boolean));
+        })
+        .catch(() => setSugestoesBairro([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [buscaBairro, buscaPraca, cidadeSelecionada]);
+
+  const sugestoesExibidorVisiveis = React.useMemo(() => {
+    const q = normalizeText(buscaExibidor);
+    if (!q) return baseExibidoresPraca.slice(0, 20);
+    const pracaFiltro = normalizeText(buscaPraca || cidadeSelecionada?.cidade || '');
+
+    const locais = [
+      ...baseExibidoresPraca,
+      ...pontos
+      .filter(p => !pracaFiltro || normalizeText(p.cidade || '').includes(pracaFiltro))
+      .map(p => p.exibidor)
+      .filter((v): v is string => Boolean(v && v.trim()))
+    ]
+      .filter(v => normalizeText(v).includes(q))
+      .slice(0, 40);
+
+    const merged = [...locais, ...sugestoesExibidor];
+    const seen = new Set<string>();
+    const unicos: string[] = [];
+    for (const item of merged) {
+      const key = normalizeText(item);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      unicos.push(item);
+      if (unicos.length >= 20) break;
+    }
+    return unicos;
+  }, [buscaExibidor, buscaPraca, cidadeSelecionada, pontos, sugestoesExibidor, baseExibidoresPraca]);
+
+  const sugestoesBairroVisiveis = React.useMemo(() => {
+    const q = normalizeText(buscaBairro);
+    if (!q) return baseBairrosPraca.slice(0, 20);
+    const pracaFiltro = normalizeText(buscaPraca || cidadeSelecionada?.cidade || '');
+
+    const locais = [
+      ...baseBairrosPraca,
+      ...pontos
+      .filter(p => !pracaFiltro || normalizeText(p.cidade || '').includes(pracaFiltro))
+      .map(p => p.bairro)
+      .filter((v): v is string => Boolean(v && v.trim() && v !== 'Não informado'))
+    ]
+      .filter(v => normalizeText(v).includes(q))
+      .slice(0, 40);
+
+    const merged = [...locais, ...sugestoesBairro];
+    const seen = new Set<string>();
+    const unicos: string[] = [];
+    for (const item of merged) {
+      const key = normalizeText(item);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      unicos.push(item);
+      if (unicos.length >= 20) break;
+    }
+    return unicos;
+  }, [buscaBairro, buscaPraca, cidadeSelecionada, pontos, sugestoesBairro, baseBairrosPraca]);
+
+  // Fallback de endereço por coordenada: quando o ponto não vier com rua no banco
+  React.useEffect(() => {
+    if (!pontoSelecionado) return;
+    const ruaAtual = (pontoSelecionado.rua || '').trim();
+    if (ruaAtual && ruaAtual !== 'Não informado') return;
+
+    const lat = Number(pontoSelecionado.latitude);
+    const lng = Number(pontoSelecionado.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+    const coordKey = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+    const ruaCache = ruaPorCoordenada[coordKey];
+    if (ruaCache) {
+      setPontoSelecionado(prev =>
+        prev && prev.id === pontoSelecionado.id
+          ? { ...prev, rua: ruaCache }
+          : prev
+      );
+      return;
+    }
+
+    let cancelado = false;
+    setBuscandoRua(true);
+    api.post('/consulta-endereco', {
+      rows: [{ id: pontoSelecionado.id, latitude: lat, longitude: lng }]
+    })
+      .then(res => {
+        if (cancelado) return;
+        const item = res.data?.results?.[0];
+        const ruaDetectada =
+          (item?.street && String(item.street).trim()) ||
+          (item?.formattedAddress && String(item.formattedAddress).split(',')[0].trim()) ||
+          '';
+        if (!ruaDetectada) return;
+
+        setRuaPorCoordenada(prev => ({ ...prev, [coordKey]: ruaDetectada }));
+        setPontoSelecionado(prev =>
+          prev && prev.id === pontoSelecionado.id
+            ? { ...prev, rua: ruaDetectada }
+            : prev
+        );
+      })
+      .catch(err => {
+        console.error('[BancoDeAtivos] Erro ao buscar rua por coordenada:', err);
+      })
+      .finally(() => {
+        if (!cancelado) setBuscandoRua(false);
+      });
+
+    return () => {
+      cancelado = true;
+    };
+  }, [pontoSelecionado, ruaPorCoordenada]);
+
+  // ── Derived ────────────────────────────────────────────────────────
+
+  const showBrazilView = !cidadeSelecionada;
+  const maxPontos = React.useMemo(() => Math.max(...centroids.map(c => c.total_pontos), 1), [centroids]);
+  const pontosOrdenados = React.useMemo(() => {
+    const arr = [...pontos];
+    arr.sort((a, b) => {
+      let cmp = 0;
+      if (gridSortKey === 'impactos_ipv') {
+        cmp = Number(a.impactos_ipv || 0) - Number(b.impactos_ipv || 0);
+      } else if (gridSortKey === 'code') {
+        cmp = String(a.code || '').localeCompare(String(b.code || ''), 'pt-BR', { sensitivity: 'base' });
+      } else {
+        cmp = String(a.exibidor || '').localeCompare(String(b.exibidor || ''), 'pt-BR', { sensitivity: 'base' });
+      }
+      return gridSortDir === 'asc' ? cmp : -cmp;
+    });
+    return arr;
+  }, [pontos, gridSortKey, gridSortDir]);
+
+  const colunasDadosModal = React.useMemo(() => {
+    const preferredOrder = [
+      'id', 'code', 'exibidor', 'tipo_midia', 'ambiente', 'cidade', 'estado', 'bairro', 'rua',
+      'grupo_midia', 'subgrupo_midia', 'categoria', 'formato',
+      'passantes', 'impactos_ipv', 'rating', 'latitude', 'longitude'
+    ];
+    const allKeys = new Set<string>();
+    pontos.forEach((p) => Object.keys(p || {}).forEach((k) => allKeys.add(k)));
+    return [
+      ...preferredOrder.filter(k => allKeys.has(k)),
+      ...Array.from(allKeys).filter(k => !preferredOrder.includes(k)).sort()
+    ];
+  }, [pontos]);
+
+  const exportarPontosExcel = React.useCallback(async () => {
+    const source = pontos;
+    if (!source.length || exportandoExcel) return;
+    setExportandoExcel(true);
+    setExportProgress(5);
+    setExportStatusText('Preparando dados para exportação...');
+
     try {
-      const XLSX = await import('xlsx');
-      
-      const dadosExcel = resultadosBusca.map(item => ({
-        'ID': item.codigo_ponto,
-        'Código': item.code,
-        'Latitude': item.latitude,
-        'Longitude': item.longitude,
-        'Exibidor': item.exibidor,
-        'Categoria Exibidor': item.categoria_exibidor,
-        'Ambiente': item.ambiente,
-        'Formato': item.formato,
-        'Grupo de mídia': item.grupo_midia,
-        'Tipo de mídia': item.tipo_midia,
-        'Cidade': item.cidade,
-        'Estado': item.estado,
-        'Endereço': item.endereco,
-        'Bairro': item.bairro,
-        'CEP': item.cep,
-        'Rating': item.rating,
-        'Passantes': item.passantes,
-        'Impactos IPV': item.impactos_ipv
+      let sourceEnriquecido = source;
+
+      // Enriquecer logradouro por coordenadas quando estiver ausente
+      const ruasPorId: Record<number, string> = {};
+      const cacheUpdate: Record<string, string> = {};
+
+      const pendentes = source
+        .filter((p) => !p.rua || p.rua === 'Não informado')
+        .map((p) => {
+          const lat = Number(p.latitude);
+          const lng = Number(p.longitude);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+          const key = coordKey(lat, lng);
+          const ruaCache = ruaPorCoordenada[key];
+          if (ruaCache) {
+            ruasPorId[p.id] = ruaCache;
+            return null;
+          }
+          return { id: p.id, latitude: lat, longitude: lng };
+        })
+        .filter((x): x is { id: number; latitude: number; longitude: number } => Boolean(x));
+
+      if (pendentes.length === 0) {
+        setExportProgress(40);
+        setExportStatusText('Logradouro já disponível. Montando planilha...');
+      }
+
+      const chunkSize = 200;
+      const totalChunks = Math.max(1, Math.ceil(pendentes.length / chunkSize));
+      for (let i = 0; i < pendentes.length; i += chunkSize) {
+        const chunk = pendentes.slice(i, i + chunkSize);
+        try {
+          const chunkNumber = Math.floor(i / chunkSize) + 1;
+          setExportStatusText(`Consultando logradouro (${chunkNumber}/${totalChunks})...`);
+          const progressDuranteConsulta = 10 + Math.round((chunkNumber / totalChunks) * 55);
+          setExportProgress(progressDuranteConsulta);
+          const res = await api.post('/consulta-endereco', { rows: chunk });
+          const resultados = Array.isArray(res.data?.results) ? res.data.results : [];
+          for (const item of resultados) {
+            const ruaDetectada =
+              (item?.street && String(item.street).trim()) ||
+              (item?.formattedAddress && String(item.formattedAddress).split(',')[0].trim()) ||
+              '';
+            if (!ruaDetectada) continue;
+            ruasPorId[item.id] = ruaDetectada;
+            const key = coordKey(Number(item.latitude), Number(item.longitude));
+            cacheUpdate[key] = ruaDetectada;
+          }
+        } catch (err) {
+          console.error('[BancoDeAtivos] Falha ao enriquecer rua para export (chunk):', err);
+        }
+      }
+
+      if (Object.keys(cacheUpdate).length > 0) {
+        setRuaPorCoordenada((prev) => ({ ...prev, ...cacheUpdate }));
+      }
+
+      setExportProgress(75);
+      setExportStatusText('Organizando dados finais...');
+
+      sourceEnriquecido = source.map((p) => ({
+        ...p,
+        rua: p.rua && p.rua !== 'Não informado' ? p.rua : (ruasPorId[p.id] || p.rua || ''),
       }));
 
-      const ws = XLSX.utils.json_to_sheet(dadosExcel);
+      // Ordem preferencial + campos extras dinâmicos que venham da API
+      const preferredOrder = [
+        'id', 'code', 'exibidor', 'tipo_midia', 'ambiente', 'cidade', 'estado', 'bairro', 'rua',
+        'grupo_midia', 'subgrupo_midia', 'categoria', 'formato',
+        'passantes', 'impactos_ipv', 'rating', 'latitude', 'longitude'
+      ];
+
+      const allKeys = new Set<string>();
+      sourceEnriquecido.forEach((p) => Object.keys(p || {}).forEach((k) => allKeys.add(k)));
+
+      const orderedKeys = [
+        ...preferredOrder.filter(k => allKeys.has(k)),
+        ...Array.from(allKeys).filter(k => !preferredOrder.includes(k)).sort()
+      ];
+
+      const data = sourceEnriquecido.map((p) => {
+        const row: Record<string, any> = {};
+        orderedKeys.forEach((k) => {
+          row[k] = (p as any)[k] ?? '';
+        });
+        return row;
+      });
+
+      const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Pontos de Mídia');
-      XLSX.writeFile(wb, `pontos_midia_${new Date().toISOString().split('T')[0]}.xlsx`);
-    } catch (err) {
-      console.error('Erro ao exportar Excel:', err);
-      alert('Erro ao exportar para Excel');
-    }
-  };
+      const nomeAba = sanitizeSheetName(cidadeSelecionada?.cidade ? `Pontos ${cidadeSelecionada.cidade}` : 'Pontos Banco Ativos');
+      XLSX.utils.book_append_sheet(wb, ws, nomeAba);
 
-  // Carregar opções dos filtros quando a aba de busca é aberta
-  useEffect(() => {
-    if (abaAtiva === 'busca' && todasOpcoesPracas.length === 0) {
-      carregarOpcoesFiltros();
-    }
-  }, [abaAtiva]);
+      setExportProgress(90);
+      setExportStatusText('Gerando arquivo Excel...');
 
-  // Atualizar opções filtradas quando os filtros mudarem
-  useEffect(() => {
-    if (todasOpcoesPracas.length > 0) {
-      atualizarOpcoesFiltradas();
+      const date = new Date();
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      const h = String(date.getHours()).padStart(2, '0');
+      const min = String(date.getMinutes()).padStart(2, '0');
+      const cidade = (cidadeSelecionada?.cidade || 'geral').replace(/\s+/g, '_');
+      const filename = `banco_ativos_pontos_${cidade}_${y}${m}${d}_${h}${min}.xlsx`;
+      XLSX.writeFile(wb, filename);
+      setExportProgress(100);
+      setExportStatusText('Exportação concluída.');
+    } finally {
+      setTimeout(() => {
+        setExportandoExcel(false);
+        setExportProgress(0);
+        setExportStatusText('');
+      }, 700);
     }
-  }, [filtros.praca, filtros.exibidor, filtros.bairro, filtros.rating]);
+  }, [pontos, cidadeSelecionada, ruaPorCoordenada, exportandoExcel]);
 
-  if (loading) {
+  // Map cidade_st → centroid para lookup rápido
+  // Chave normalizada (trim + lowercase) para tolerar diferenças de case/espaços entre as duas queries
+  const centroidMap = React.useMemo(() => {
+    const m = new Map<string, CityBubble>();
+    centroids.forEach(c => m.set((c.cidade ?? '').trim().toLowerCase(), c));
+    return m;
+  }, [centroids]);
+
+  const getCentroid = React.useCallback((nome: string): CityBubble | undefined => {
+    return centroidMap.get((nome ?? '').trim().toLowerCase());
+  }, [centroidMap]);
+
+  const centroidsFiltrados = React.useMemo(() => {
+    if (filtroAmbiente === 'todos') return centroids;
+    return centroids.filter(c =>
+      filtroAmbiente === 'vias_publicas' ? c.pontos_public > 0 : c.pontos_indoor > 0
+    );
+  }, [centroids, filtroAmbiente]);
+
+  // Progressive disclosure thresholds
+  // zoom < 5  → only choropleth perimeters, no bubbles
+  // zoom 5-7  → perimeters + city bubbles (hover only, no labels)
+  // zoom >= 8 → city drill-down with clustered points
+  const showBubbles = showBrazilView && zoom >= 5;
+
+  // ── Render ─────────────────────────────────────────────────────────
+
     return (
       <div className="min-h-screen bg-white flex font-sans">
         <Sidebar menuReduzido={menuReduzido} setMenuReduzido={setMenuReduzido} />
-        <div className={`fixed top-0 z-20 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? "left-20" : "left-64"}`} />
-        <div className={`flex-1 transition-all duration-300 min-h-screen w-full ${menuReduzido ? "ml-20" : "ml-64"} flex flex-col`}>
+      <div className={`fixed top-0 z-20 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? 'left-20' : 'left-64'}`} />
+      <div className={`flex-1 transition-all duration-300 min-h-screen w-full ${menuReduzido ? 'ml-20' : 'ml-64'} flex flex-col`}>
           <Topbar 
             menuReduzido={menuReduzido} 
-            breadcrumb={{
-              items: [
-                { label: "Home", path: "/" },
-                { label: "Banco de ativos" }
-              ]
-            }}
-          />
-          <div className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`} />
-          <div className="flex-1 flex items-center justify-center pt-20">
-            <AppleLoading />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (erro) {
-    return (
-      <div className="min-h-screen bg-white flex font-sans">
-        <Sidebar menuReduzido={menuReduzido} setMenuReduzido={setMenuReduzido} />
-        <div className={`fixed top-0 z-20 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? "left-20" : "left-64"}`} />
-        <div className={`flex-1 transition-all duration-300 min-h-screen w-full ${menuReduzido ? "ml-20" : "ml-64"} flex flex-col`}>
-          <Topbar 
-            menuReduzido={menuReduzido} 
-            breadcrumb={{
-              items: [
-                { label: "Home", path: "/" },
-                { label: "Banco de ativos" }
-              ]
-            }}
-          />
-          <div className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`} />
-          <div className="flex-1 flex items-center justify-center pt-20">
-            <div className="text-center">
-              <p className="text-red-600 mb-4 font-medium">{erro}</p>
-              <button
-                onClick={carregarDados}
-                className="px-6 py-3 bg-[#ff4600] text-white font-bold rounded hover:bg-[#e03700] transition-all shadow-md hover:shadow-lg uppercase tracking-wide text-sm"
-              >
-                Tentar novamente
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-white flex font-sans">
-      <Sidebar menuReduzido={menuReduzido} setMenuReduzido={setMenuReduzido} />
-      <div className={`fixed top-0 z-20 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? "left-20" : "left-64"}`} />
-      <div className={`flex-1 transition-all duration-300 min-h-screen w-full ${menuReduzido ? "ml-20" : "ml-64"} flex flex-col`}>
-        <Topbar 
-          menuReduzido={menuReduzido} 
           breadcrumb={{
             items: [
-              { label: "Home", path: "/" },
-              { label: "Banco de ativos" }
+              { label: 'Home', path: '/' },
+              { label: 'Banco de Ativos' },
             ]
           }}
         />
-        <div className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"}`} />
-        
-        <div className="flex-1 pt-8 pb-32 px-8 overflow-auto">
-          <div className="max-w-7xl mx-auto">
-            {/* Título em laranja */}
-            <div className="flex items-center justify-between mb-6">
-              <h1 className="text-2xl font-bold text-[#ff4600] uppercase tracking-wide">Banco de Ativos</h1>
-              {abaAtiva === 'dashboard' && usandoCache && (
-                <div className="flex items-center gap-2 text-xs text-gray-600">
-                  <span className="w-2 h-2 bg-[#ff4600] rounded-full animate-pulse"></span>
-                  <span className="font-medium">Dados em cache • Atualizando em background...</span>
+
+        {/* Mapa fullscreen */}
+        <div className="relative flex-1 overflow-hidden" style={{ marginTop: 72 }}>
+
+          <style>{`
+            .leaflet-top.leaflet-left .leaflet-control-zoom { display: none !important; }
+            .leaflet-tooltip { pointer-events: none; }
+          `}</style>
+
+          {/* ── Floating Panel ── */}
+          <div
+            ref={painelRef}
+            className="absolute z-[500] flex flex-col w-[300px] rounded-2xl shadow-2xl"
+            style={{ background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(8px)', top: 16, left: 16 }}
+          >
+            {/* Drag Handle */}
+            <div
+              onMouseDown={onDragHandleMouseDown}
+              className="flex items-center justify-between px-3 py-2 rounded-t-2xl cursor-grab active:cursor-grabbing select-none"
+              style={{ background: 'rgba(240,240,240,0.95)', borderBottom: '1px solid rgba(0,0,0,0.06)' }}
+            >
+              <div className="flex items-center gap-1.5">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="4" cy="4" r="1.2" fill="#aaa"/><circle cx="10" cy="4" r="1.2" fill="#aaa"/><circle cx="4" cy="10" r="1.2" fill="#aaa"/><circle cx="10" cy="10" r="1.2" fill="#aaa"/></svg>
+                <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Banco de Ativos</span>
                 </div>
-              )}
-              {abaAtiva === 'dashboard' && !loading && dados && (
                 <button
-                  onClick={() => carregarDados(true)}
-                  className="text-xs text-[#ff4600] hover:text-[#e03700] transition-colors font-medium"
-                  title="Atualizar dados"
-                >
-                  ↻ Atualizar
+                onMouseDown={e => e.stopPropagation()}
+                onClick={() => setPainelColapsado(v => !v)}
+                className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-200 transition"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  {painelColapsado
+                    ? <path d="M2 8L6 4L10 8" stroke="#888" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    : <path d="M2 4L6 8L10 4" stroke="#888" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  }
+                </svg>
                 </button>
-              )}
             </div>
             
-            {/* Abas de navegação */}
-            <div className="flex gap-4 border-b border-gray-300 mb-8">
-              <button
-                onClick={() => setAbaAtiva('dashboard')}
-                className={`pb-3 px-4 font-bold text-sm transition-all uppercase tracking-wide ${
-                  abaAtiva === 'dashboard'
-                    ? 'text-[#ff4600] border-b-2 border-[#ff4600]'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Dashboard
-              </button>
-              <button
-                onClick={() => setAbaAtiva('busca')}
-                className={`pb-3 px-4 font-bold text-sm transition-all uppercase tracking-wide ${
-                  abaAtiva === 'busca'
-                    ? 'text-[#ff4600] border-b-2 border-[#ff4600]'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Busca de Pontos
-              </button>
-            </div>
-            
-            {/* Conteúdo da aba Dashboard */}
-            {abaAtiva === 'dashboard' && dados && (
-              <div className="space-y-8">
-                {/* TOTAL */}
+            {/* Panel Content */}
+            <div
+              className="flex flex-col overflow-y-auto"
+              style={{
+                maxHeight: painelColapsado ? 0 : 'calc(100vh - 140px)',
+                overflow: painelColapsado ? 'hidden' : 'auto',
+                transition: 'max-height 0.25s ease',
+              }}
+            >
+              <div className="p-3 space-y-3">
+
+                {/* Card: Totais Gerais */}
+                {dados && (
+                  <div className="rounded-xl border-2 border-gray-200 bg-white p-3">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <span className="w-2 h-2 rounded-full bg-[#ff4600]" />
+                      <span className="text-[10px] uppercase tracking-wide font-semibold text-gray-500">Total Geral</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center">
                 <div>
-                  <h2 className="text-lg font-bold text-gray-900 mb-4 uppercase tracking-wide">Total Geral</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-gradient-to-br from-gray-800 to-gray-900 text-white rounded-lg p-8 shadow-lg hover:shadow-xl transition-shadow">
-                      <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-300">PONTOS DE MÍDIA</div>
-                      <div className="text-5xl font-bold text-[#ff4600]">{formatarNumero(dados.total.pontos_midia)}</div>
+                        <div className="text-lg font-bold text-gray-800">{fmt(dados.total.pontos_midia)}</div>
+                        <div className="text-[9px] text-gray-400 uppercase">Pontos</div>
                     </div>
-                    <div className="bg-gradient-to-br from-gray-800 to-gray-900 text-white rounded-lg p-8 shadow-lg hover:shadow-xl transition-shadow">
-                      <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-300">PRAÇAS</div>
-                      <div className="text-5xl font-bold text-[#ff4600]">{formatarNumero(dados.total.pracas)}</div>
+                      <div>
+                        <div className="text-lg font-bold text-gray-800">{fmt(dados.total.pracas)}</div>
+                        <div className="text-[9px] text-gray-400 uppercase">Praças</div>
                     </div>
-                    <div className="bg-gradient-to-br from-gray-800 to-gray-900 text-white rounded-lg p-8 shadow-lg hover:shadow-xl transition-shadow">
-                      <div className="text-xs font-bold mb-3 uppercase tracking-wider text-gray-300">EXIBIDORES</div>
-                      <div className="text-5xl font-bold text-[#ff4600]">{formatarNumero(dados.total.exibidores)}</div>
+                      <div>
+                        <div className="text-lg font-bold text-gray-800">{fmt(dados.total.exibidores)}</div>
+                        <div className="text-[9px] text-gray-400 uppercase">Exibidores</div>
                     </div>
                   </div>
                 </div>
+                )}
 
-                {/* VIAS PÚBLICAS */}
+                {/* Card: VP vs Indoor */}
+                {dados && (
+                  <div className="rounded-xl border-2 border-gray-200 bg-white p-3">
+                    <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <h2 className="text-lg font-bold text-gray-900 mb-4 uppercase tracking-wide">Vias Públicas</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white border-2 border-gray-200 rounded-lg p-8 shadow-sm hover:border-[#ff4600] hover:shadow-md transition-all">
-                      <div className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wider">PONTOS DE MÍDIA</div>
-                      <div className="text-5xl font-bold text-gray-900">{formatarNumero(dados.vias_publicas.pontos_midia)}</div>
+                        <div className="flex items-center gap-1 mb-1.5">
+                          <span className="w-2 h-2 rounded-full bg-blue-500" />
+                          <span className="text-[9px] uppercase tracking-wide font-semibold text-gray-500">Vias Públicas</span>
                     </div>
-                    <div className="bg-white border-2 border-gray-200 rounded-lg p-8 shadow-sm hover:border-[#ff4600] hover:shadow-md transition-all">
-                      <div className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wider">PRAÇAS</div>
-                      <div className="text-5xl font-bold text-gray-900">{formatarNumero(dados.vias_publicas.pracas)}</div>
+                        <div className="text-sm font-bold text-blue-600">{fmt(dados.vias_publicas.pontos_midia)}</div>
+                        <div className="text-[9px] text-gray-400">{fmt(dados.vias_publicas.pracas)} praças · {fmt(dados.vias_publicas.exibidores)} exib.</div>
                     </div>
-                    <div className="bg-white border-2 border-gray-200 rounded-lg p-8 shadow-sm hover:border-[#ff4600] hover:shadow-md transition-all">
-                      <div className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wider">EXIBIDORES</div>
-                      <div className="text-5xl font-bold text-gray-900">{formatarNumero(dados.vias_publicas.exibidores)}</div>
+                      <div>
+                        <div className="flex items-center gap-1 mb-1.5">
+                          <span className="w-2 h-2 rounded-full bg-orange-500" />
+                          <span className="text-[9px] uppercase tracking-wide font-semibold text-gray-500">Indoor</span>
                     </div>
+                        <div className="text-sm font-bold text-orange-600">{fmt(dados.indoor.pontos_midia)}</div>
+                        <div className="text-[9px] text-gray-400">{fmt(dados.indoor.pracas)} praças · {fmt(dados.indoor.exibidores)} exib.</div>
                   </div>
                 </div>
-
-                {/* INDOOR */}
-                <div>
-                  <h2 className="text-lg font-bold text-gray-900 mb-4 uppercase tracking-wide">Indoor</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white border-2 border-gray-200 rounded-lg p-8 shadow-sm hover:border-[#ff4600] hover:shadow-md transition-all">
-                      <div className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wider">PONTOS DE MÍDIA</div>
-                      <div className="text-5xl font-bold text-gray-900">{formatarNumero(dados.indoor.pontos_midia)}</div>
-                    </div>
-                    <div className="bg-white border-2 border-gray-200 rounded-lg p-8 shadow-sm hover:border-[#ff4600] hover:shadow-md transition-all">
-                      <div className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wider">PRAÇAS</div>
-                      <div className="text-5xl font-bold text-gray-900">{formatarNumero(dados.indoor.pracas)}</div>
-                    </div>
-                    <div className="bg-white border-2 border-gray-200 rounded-lg p-8 shadow-sm hover:border-[#ff4600] hover:shadow-md transition-all">
-                      <div className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wider">EXIBIDORES</div>
-                      <div className="text-5xl font-bold text-gray-900">{formatarNumero(dados.indoor.exibidores)}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Mapa Interativo - Renderizado separadamente fora do max-w-7xl */}
-            {abaAtiva === 'dashboard' && dados && (
-              <div className="-mx-8 mt-8 mb-8">
-                <MapaDashboardBancoAtivos altura="700px" />
-              </div>
-            )}
-
-            {/* Conteúdo da aba Busca por Pontos de Mídia */}
-            {abaAtiva === 'busca' && (
-              <div className="space-y-6">
-                {/* Título da seção */}
-                <div className="mb-6">
-                  <h2 className="text-xl font-bold text-gray-900 mb-2">Filtros de Busca</h2>
-                  <p className="text-sm text-gray-500">Selecione os filtros desejados para buscar pontos de mídia</p>
-                </div>
-
-                {/* Mensagem de filtros encadeados */}
-                {(filtros.praca || filtros.exibidor || filtros.bairro || filtros.rating) && (
-                  <div className="mb-4 p-4 bg-gray-50 border-l-4 border-[#ff4600] rounded text-sm">
-                    <span className="text-gray-900 font-bold uppercase tracking-wide">Filtros encadeados ativos</span>
-                    <span className="text-gray-600 ml-2">• Os dropdowns mostram apenas opções relacionadas aos filtros selecionados.</span>
                   </div>
                 )}
 
-                {/* Grid de Filtros - 4 colunas */}
-                <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {/* Filtro: Praça - Autocomplete */}
-                    <div className="relative">
-                      <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">
-                        Praça 
-                        {opcoesPracas.length > 0 && (
-                          <span className={`text-xs ml-2 font-normal normal-case ${
-                            (filtros.exibidor || filtros.bairro || filtros.rating) && opcoesPracas.length < todasOpcoesPracas.length
-                              ? 'text-[#ff4600]'
-                              : 'text-gray-400'
-                          }`}>
-                            ({opcoesPracas.length}{(filtros.exibidor || filtros.bairro || filtros.rating) && opcoesPracas.length < todasOpcoesPracas.length ? ` de ${todasOpcoesPracas.length}` : ''})
-                          </span>
-                        )}
-                      </label>
-                      <input
-                        type="text"
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded focus:outline-none focus:border-[#ff4600] bg-white text-sm text-gray-700 hover:border-gray-400 transition-colors"
-                        placeholder="Digite para buscar..."
-                        value={inputPraca}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setInputPraca(value);
-                          
-                          if (value.length >= 2) {
-                            const filtered = opcoesPracas.filter(praca => 
-                              praca.toLowerCase().includes(value.toLowerCase())
-                            );
-                            setPracasFiltradas(filtered);
-                            setMostrarSugestoesPraca(true);
-                          } else {
-                            setMostrarSugestoesPraca(false);
-                            setPracasFiltradas([]);
-                          }
-                          
-                          // Se limpar o campo, limpar o filtro
-                          if (value === '') {
-                            setFiltros({...filtros, praca: ''});
+                {/* Card: Filtros */}
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                  <div className="text-[10px] uppercase tracking-wide font-semibold text-gray-500 mb-2">Filtros e busca</div>
+                  <div className="flex gap-1 mb-2">
+                    {(['todos', 'vias_publicas', 'indoor'] as const).map(opt => (
+                      <button
+                        key={opt}
+                        onClick={() => {
+                          setFiltroAmbiente(opt);
+                          if (cidadeSelecionada) {
+                            carregarPontosCidade(cidadeSelecionada.cidade, opt, {
+                              exibidor: buscaExibidor,
+                              bairro: buscaBairro,
+                            });
                           }
                         }}
-                        onFocus={() => {
-                          if (inputPraca.length >= 2) {
-                            setMostrarSugestoesPraca(true);
-                          }
-                        }}
-                        onBlur={() => {
-                          // Delay para permitir o clique nas sugestões
-                          setTimeout(() => setMostrarSugestoesPraca(false), 200);
-                        }}
-                      />
-                      
-                      {/* Lista de sugestões */}
-                      {mostrarSugestoesPraca && pracasFiltradas.length > 0 && (
-                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
-                          {pracasFiltradas.slice(0, 50).map((praca, index) => (
-                            <div
-                              key={index}
-                              className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm text-gray-700"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                setInputPraca(praca);
-                                setFiltros({...filtros, praca: praca});
-                                setMostrarSugestoesPraca(false);
-                              }}
-                            >
-                              {praca}
-                            </div>
-                          ))}
-                          {pracasFiltradas.length > 50 && (
-                            <div className="px-3 py-2 text-xs text-gray-500 italic bg-gray-50">
-                              +{pracasFiltradas.length - 50} resultados... Continue digitando para refinar
+                        className={`flex-1 text-[10px] py-1.5 rounded-lg font-medium transition ${
+                          filtroAmbiente === opt
+                            ? 'bg-[#ff4600] text-white shadow'
+                            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        {opt === 'todos' ? 'Todos' : opt === 'vias_publicas' ? 'VP' : 'Indoor'}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setMostrarBuscaAvancada(v => !v)}
+                    className="w-full text-[10px] py-1.5 rounded-lg font-medium bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition mb-2 flex items-center justify-between px-2"
+                  >
+                    <span>Busca avançada</span>
+                    <span>{mostrarBuscaAvancada ? '−' : '+'}</span>
+                  </button>
+
+                  {mostrarBuscaAvancada && (
+                    <>
+                      <div className="space-y-1.5 mb-2">
+                        <div className="relative">
+                          <input
+                            value={buscaPraca}
+                            onChange={(e) => setBuscaPraca(e.target.value)}
+                            onFocus={() => {
+                              setCampoBuscaAtivo('praca');
+                              if (!buscaPraca.trim()) {
+                                // força abrir top praças mesmo sem digitar
+                                setSugestoesPraca([]);
+                              }
+                            }}
+                            onBlur={() => setTimeout(() => setCampoBuscaAtivo(null), 120)}
+                            placeholder="Buscar praça"
+                            className="w-full text-[11px] py-1.5 px-2 rounded-lg border border-gray-200 bg-white text-gray-700"
+                          />
+                          {campoBuscaAtivo === 'praca' && sugestoesPracaVisiveis.length > 0 && (
+                            <div className="absolute z-[650] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-32 overflow-auto">
+                              {sugestoesPracaVisiveis.map((c, idx) => (
+                                <button
+                                  key={`${c.nome_cidade}-${c.nome_estado}-${idx}`}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setBuscaPraca(c.nome_cidade);
+                                    carregarListasDependentesDaPraca(c.nome_cidade);
+                                    setCampoBuscaAtivo(null);
+                                  }}
+                                  className="w-full text-left px-2 py-1.5 text-[11px] hover:bg-gray-50 text-gray-700"
+                                >
+                                  {c.nome_cidade}{c.nome_estado ? `/${c.nome_estado}` : ''}
+                                </button>
+                              ))}
                             </div>
                           )}
                         </div>
-                      )}
-                      
-                      {/* Mensagem quando não há resultados */}
-                      {mostrarSugestoesPraca && pracasFiltradas.length === 0 && inputPraca.length >= 2 && (
-                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg">
-                          <div className="px-3 py-2 text-sm text-gray-500 italic">
-                            Nenhuma praça encontrada
-                          </div>
+
+                        <div className="relative">
+                          <input
+                            value={buscaExibidor}
+                            onChange={(e) => setBuscaExibidor(e.target.value)}
+                            onFocus={() => setCampoBuscaAtivo('exibidor')}
+                            onBlur={() => setTimeout(() => setCampoBuscaAtivo(null), 120)}
+                            placeholder="Buscar exibidor"
+                            className="w-full text-[11px] py-1.5 px-2 rounded-lg border border-gray-200 bg-white text-gray-700"
+                          />
+                          {campoBuscaAtivo === 'exibidor' && sugestoesExibidorVisiveis.length > 0 && (
+                            <div className="absolute z-[650] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-32 overflow-auto">
+                              {sugestoesExibidorVisiveis.map((nome, idx) => (
+                                <button
+                                  key={`${nome}-${idx}`}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setBuscaExibidor(nome);
+                                    setCampoBuscaAtivo(null);
+                                  }}
+                                  className="w-full text-left px-2 py-1.5 text-[11px] hover:bg-gray-50 text-gray-700"
+                                >
+                                  {nome}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
 
-                    {/* Filtro: Exibidor */}
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">
-                        Exibidor
-                        {opcoesExibidores.length > 0 && (
-                          <span className={`text-xs ml-2 font-normal normal-case ${
-                            (filtros.praca || filtros.bairro || filtros.rating) && opcoesExibidores.length < todasOpcoesExibidores.length
-                              ? 'text-[#ff4600]'
-                              : 'text-gray-400'
-                          }`}>
-                            ({opcoesExibidores.length}{(filtros.praca || filtros.bairro || filtros.rating) && opcoesExibidores.length < todasOpcoesExibidores.length ? ` de ${todasOpcoesExibidores.length}` : ''})
-                          </span>
-                        )}
-                      </label>
-                      <select 
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded focus:outline-none focus:border-[#ff4600] bg-white text-sm text-gray-700 hover:border-gray-400 transition-colors"
-                        value={filtros.exibidor}
-                        onChange={(e) => setFiltros({...filtros, exibidor: e.target.value})}
-                        disabled={todasOpcoesExibidores.length === 0}
-                      >
-                        <option value="">
-                          {todasOpcoesExibidores.length === 0 
-                            ? 'Carregando...' 
-                            : opcoesExibidores.length === 0 
-                              ? 'Nenhum exibidor disponível'
-                              : 'Selecione...'}
-                        </option>
-                        {opcoesExibidores.map(exibidor => (
-                          <option key={exibidor} value={exibidor}>{exibidor}</option>
-                        ))}
-                      </select>
-                    </div>
+                        <div className="relative">
+                          <input
+                            value={buscaBairro}
+                            onChange={(e) => setBuscaBairro(e.target.value)}
+                            onFocus={() => setCampoBuscaAtivo('bairro')}
+                            onBlur={() => setTimeout(() => setCampoBuscaAtivo(null), 120)}
+                            placeholder="Buscar bairro"
+                            className="w-full text-[11px] py-1.5 px-2 rounded-lg border border-gray-200 bg-white text-gray-700"
+                          />
+                          {campoBuscaAtivo === 'bairro' && sugestoesBairroVisiveis.length > 0 && (
+                            <div className="absolute z-[650] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-32 overflow-auto">
+                              {sugestoesBairroVisiveis.map((nome, idx) => (
+                                <button
+                                  key={`${nome}-${idx}`}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setBuscaBairro(nome);
+                                    setCampoBuscaAtivo(null);
+                                  }}
+                                  className="w-full text-left px-2 py-1.5 text-[11px] hover:bg-gray-50 text-gray-700"
+                                >
+                                  {nome}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
 
-                    {/* Filtro: Bairro */}
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">
-                        Bairro
-                        {opcoesBairros.length > 0 && (
-                          <span className={`text-xs ml-2 font-normal normal-case ${
-                            (filtros.praca || filtros.exibidor || filtros.rating) && opcoesBairros.length < todasOpcoesBairros.length
-                              ? 'text-[#ff4600]'
-                              : 'text-gray-400'
-                          }`}>
-                            ({opcoesBairros.length}{(filtros.praca || filtros.exibidor || filtros.rating) && opcoesBairros.length < todasOpcoesBairros.length ? ` de ${todasOpcoesBairros.length}` : ''})
-                          </span>
-                        )}
-                      </label>
-                      <select 
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded focus:outline-none focus:border-[#ff4600] bg-white text-sm text-gray-700 hover:border-gray-400 transition-colors"
-                        value={filtros.bairro}
-                        onChange={(e) => setFiltros({...filtros, bairro: e.target.value})}
-                        disabled={todasOpcoesBairros.length === 0}
-                      >
-                        <option value="">
-                          {todasOpcoesBairros.length === 0 
-                            ? 'Carregando...' 
-                            : opcoesBairros.length === 0 
-                              ? 'Nenhum bairro disponível'
-                              : 'Selecione...'}
-                        </option>
-                        {opcoesBairros.map(bairro => (
-                          <option key={bairro} value={bairro}>{bairro}</option>
-                        ))}
-                      </select>
-                    </div>
+                      <div className="grid grid-cols-2 gap-1 mb-2">
+                        <button
+                          onClick={aplicarBusca}
+                          className="text-[10px] py-1.5 rounded-lg font-medium bg-[#ff4600] text-white hover:bg-[#e23d00] transition"
+                        >
+                          Aplicar
+                        </button>
+                        <button
+                          onClick={limparBusca}
+                          className="text-[10px] py-1.5 rounded-lg font-medium bg-white text-gray-600 border border-gray-200 hover:bg-gray-100 transition"
+                        >
+                          Limpar
+                        </button>
+                      </div>
+                    </>
+                  )}
 
-                    {/* Filtro: Rating */}
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">Rating</label>
-                      <select 
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded focus:outline-none focus:border-[#ff4600] bg-white text-sm text-gray-700 hover:border-gray-400 transition-colors"
-                        value={filtros.rating}
-                        onChange={(e) => setFiltros({...filtros, rating: e.target.value})}
-                      >
-                        <option value="">Selecione...</option>
-                        <option value="A">A</option>
-                        <option value="B">B</option>
-                        <option value="C">C</option>
-                      </select>
-                    </div>
-
-                    {/* Filtro: Ambiente */}
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">Ambiente</label>
-                      <select 
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded focus:outline-none focus:border-[#ff4600] bg-white text-sm text-gray-700 hover:border-gray-400 transition-colors"
-                        value={filtros.ambiente}
-                        onChange={(e) => setFiltros({...filtros, ambiente: e.target.value})}
-                      >
-                        <option value="">Selecione...</option>
-                        <option value="Indoor">Indoor</option>
-                        <option value="Vias Públicas">Vias Públicas</option>
-                      </select>
-                    </div>
-
-                    {/* Filtro: Grupo de mídia */}
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">
-                        Grupo de mídia
-                        <span className="block text-xs text-gray-400 font-normal mt-1 normal-case">
-                          (válido somente para vias públicas)
-                        </span>
-                      </label>
-                      <select 
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded focus:outline-none focus:border-[#ff4600] bg-white text-sm text-gray-700 hover:border-gray-400 transition-colors disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200"
-                        value={filtros.grupo_midia}
-                        onChange={(e) => setFiltros({...filtros, grupo_midia: e.target.value})}
-                        disabled={filtros.ambiente !== 'Vias Públicas'}
-                      >
-                        <option value="">Selecione...</option>
-                        {opcoesGruposMidia.map(grupo => (
-                          <option key={grupo.id} value={grupo.name}>{grupo.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Filtro: Tipo de mídia - Indoor */}
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">
-                        Tipo de mídia - Indoor
-                        <span className="block text-xs text-gray-400 font-normal mt-1 normal-case">
-                          (válido somente para indoor)
-                        </span>
-                      </label>
-                      <select 
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded focus:outline-none focus:border-[#ff4600] bg-white text-sm text-gray-700 hover:border-gray-400 transition-colors disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200"
-                        value={filtros.tipo_ambiente_indoor}
-                        onChange={(e) => setFiltros({...filtros, tipo_ambiente_indoor: e.target.value})}
-                        disabled={filtros.ambiente !== 'Indoor'}
-                      >
-                        <option value="">Selecione...</option>
-                        {opcoesTiposMidiaIndoor.map(tipo => (
-                          <option key={tipo.id} value={tipo.name}>{tipo.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Filtro: Tipo de mídia - Vias Públicas */}
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">
-                        Tipo de mídia - Vias Públicas
-                        <span className="block text-xs text-gray-400 font-normal mt-1 normal-case">
-                          (válido somente para vias públicas)
-                        </span>
-                      </label>
-                      <select 
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded focus:outline-none focus:border-[#ff4600] bg-white text-sm text-gray-700 hover:border-gray-400 transition-colors disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200"
-                        value={filtros.tipo_midia_vias_publicas}
-                        onChange={(e) => setFiltros({...filtros, tipo_midia_vias_publicas: e.target.value})}
-                        disabled={filtros.ambiente !== 'Vias Públicas'}
-                      >
-                        <option value="">Selecione...</option>
-                        {opcoesTiposMidiaViasPublicas.map(tipo => (
-                          <option key={tipo.id} value={tipo.name}>{tipo.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Filtro: Formato */}
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">Formato</label>
-                      <select 
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded focus:outline-none focus:border-[#ff4600] bg-white text-sm text-gray-700 hover:border-gray-400 transition-colors"
-                        value={filtros.formato}
-                        onChange={(e) => setFiltros({...filtros, formato: e.target.value})}
-                      >
-                        <option value="">Selecione...</option>
-                        <option value="Estático">Estático</option>
-                        <option value="Digital">Digital</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Botões de Ação */}
-                <div className="flex flex-wrap gap-3 items-center">
-                  <button 
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      realizarBusca(e);
-                    }}
-                    disabled={loadingBusca}
-                    className="bg-[#ff4600] hover:bg-[#e03700] text-white font-bold py-3 px-8 rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm uppercase tracking-wide"
-                  >
-                    {loadingBusca ? 'Buscando...' : 'Buscar'}
-                  </button>
-                  
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      setFiltros({
-                        praca: '',
-                        exibidor: '',
-                        bairro: '',
-                        rating: '',
-                        ambiente: '',
-                        grupo_midia: '',
-                        tipo_ambiente_indoor: '',
-                        tipo_midia_vias_publicas: '',
-                        formato: ''
-                      });
-                      setInputPraca('');
-                      setMostrarSugestoesPraca(false);
-                      setPracasFiltradas([]);
-                      setResultadosBusca([]);
-                    }}
-                    className="border border-gray-300 hover:border-gray-400 text-gray-700 hover:text-gray-900 font-semibold py-3 px-6 rounded transition-all text-sm"
-                  >
-                    Limpar
-                  </button>
-
-                  {resultadosBusca.length > 0 && (
-                    <button 
-                      type="button"
-                      onClick={exportarExcel}
-                      className="bg-gray-800 hover:bg-gray-900 text-white font-bold py-3 px-8 rounded transition-all text-sm uppercase tracking-wide"
+                  {cidadeSelecionada && (
+                    <button
+                      onClick={voltarBrasil}
+                      className="w-full text-[10px] py-1.5 rounded-lg font-medium bg-white text-gray-600 border border-gray-200 hover:bg-gray-100 transition"
                     >
-                      Exportar Excel
+                      ← Voltar para visão Brasil
                     </button>
                   )}
-                  
-                  {Object.values(filtros).filter(Boolean).length > 0 && (
-                    <div className="ml-auto text-xs text-gray-500 font-medium">
-                      {Object.values(filtros).filter(Boolean).length} filtro{Object.values(filtros).filter(Boolean).length > 1 ? 's' : ''} selecionado{Object.values(filtros).filter(Boolean).length > 1 ? 's' : ''}
-                    </div>
-                  )}
                 </div>
 
-                {/* Área de Resultados */}
-                <div className="mt-10">
-                  <div className="mb-4">
-                    <h2 className="text-xl font-bold text-gray-900">
-                      Resultados
-                      {resultadosBusca.length > 0 && (
-                        <span className="ml-3 text-base font-normal text-gray-500">
-                          {resultadosBusca.length} {resultadosBusca.length === 1 ? 'ponto' : 'pontos'}
+                {/* Card: Cidade Selecionada */}
+                {cidadeSelecionada && (
+                  <div className="rounded-xl border-2 border-[#ff4600] bg-orange-50 p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-[#ff4600]" />
+                        <span className="text-[10px] uppercase tracking-wide font-semibold text-[#ff4600]">
+                          {cidadeSelecionada.cidade}{cidadeSelecionada.estado ? `/${cidadeSelecionada.estado}` : ''}
                         </span>
-                      )}
-                    </h2>
-                  </div>
-                  
-                  <div className="bg-white rounded border border-gray-300 overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead className="bg-gray-100 border-b-2 border-gray-300">
-                          <tr>
-                            <th className="px-4 py-3 text-left font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">ID</th>
-                            <th className="px-4 py-3 text-left font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">Código</th>
-                            <th className="px-4 py-3 text-left font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">Latitude</th>
-                            <th className="px-4 py-3 text-left font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">Longitude</th>
-                            <th className="px-4 py-3 text-left font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">Exibidor</th>
-                            <th className="px-4 py-3 text-left font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">Categoria</th>
-                            <th className="px-4 py-3 text-left font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">Ambiente</th>
-                            <th className="px-4 py-3 text-left font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">Formato</th>
-                            <th className="px-4 py-3 text-left font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">Grupo</th>
-                            <th className="px-4 py-3 text-left font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">Tipo</th>
-                            <th className="px-4 py-3 text-left font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">Cidade</th>
-                            <th className="px-4 py-3 text-left font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">Estado</th>
-                            <th className="px-4 py-3 text-left font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">Endereço</th>
-                            <th className="px-4 py-3 text-left font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">Bairro</th>
-                            <th className="px-4 py-3 text-left font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">CEP</th>
-                            <th className="px-4 py-3 text-left font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">Rating</th>
-                            <th className="px-4 py-3 text-right font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">Passantes</th>
-                            <th className="px-4 py-3 text-right font-bold text-gray-700 text-xs uppercase tracking-wider whitespace-nowrap">Impactos</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {loadingBusca ? (
-                            <tr>
-                              <td colSpan={18} className="px-4 py-16 text-center">
-                                <AppleLoading />
-                              </td>
-                            </tr>
-                          ) : erroBusca ? (
-                            <tr>
-                              <td colSpan={18} className="px-4 py-12 text-center">
-                                <div className="text-red-600 font-semibold">{erroBusca}</div>
-                              </td>
-                            </tr>
-                          ) : resultadosBusca.length === 0 ? (
-                            <tr>
-                              <td colSpan={18} className="px-4 py-20 text-center">
-                                <div className="flex flex-col items-center gap-4">
-                                  <div className="text-gray-400 font-semibold text-sm">Nenhum resultado encontrado</div>
-                                  <div className="text-xs text-gray-500 max-w-lg">
-                                    {Object.values(filtros).filter(Boolean).length > 0 ? (
-                                      <div className="space-y-2">
-                                        <p>A combinação de filtros não retornou resultados.</p>
-                                        <div className="text-left inline-block">
-                                          <p className="font-semibold mb-1">Sugestões:</p>
-                                          <ul className="list-disc list-inside space-y-1">
-                                            <li>Remover alguns filtros</li>
-                                            <li>Buscar apenas por Praça ou Exibidor</li>
-                                            <li>Verificar se o Ambiente está correto</li>
-                                          </ul>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      'Selecione os filtros desejados e clique em Buscar.'
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          ) : (
-                            resultadosBusca.map((resultado, idx) => (
-                              <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                                <td className="px-4 py-3 whitespace-nowrap text-[#ff4600] font-bold">{resultado.codigo_ponto || '-'}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-gray-600 text-xs">{resultado.code || '-'}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-gray-500 font-mono text-xs">{resultado.latitude ? Number(resultado.latitude).toFixed(6) : '-'}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-gray-500 font-mono text-xs">{resultado.longitude ? Number(resultado.longitude).toFixed(6) : '-'}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-gray-900 font-semibold">{resultado.exibidor || '-'}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-gray-600 text-xs">{resultado.categoria_exibidor || '-'}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-gray-700">{resultado.ambiente || '-'}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-gray-600 text-xs">{resultado.formato || '-'}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-gray-600 text-xs">{resultado.grupo_midia || '-'}</td>
-                                <td className="px-4 py-3 text-gray-600 text-xs">{resultado.tipo_midia || '-'}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-gray-900 font-semibold">{resultado.cidade || '-'}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-gray-600 text-xs">{resultado.estado || '-'}</td>
-                                <td className="px-4 py-3 text-gray-600 text-xs">{resultado.endereco || '-'}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-gray-700">{resultado.bairro || '-'}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-gray-600 text-xs">{resultado.cep || '-'}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-gray-700 font-semibold">{resultado.rating || '-'}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-right text-gray-900 font-semibold">{resultado.passantes ? formatarNumero(resultado.passantes) : '0'}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-right text-gray-900 font-semibold">{resultado.impactos_ipv ? formatarNumero(resultado.impactos_ipv) : '0'}</td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
                     </div>
+                      <button onClick={voltarBrasil} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
                   </div>
+                    {loadingPontos ? (
+                      <div className="flex items-center justify-center py-4">
+                        <div className="w-5 h-5 border-2 border-gray-200 border-t-[#ff4600] rounded-full animate-spin" />
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div>
+                          <div className="text-sm font-bold text-gray-800 truncate" title={fmt(pontos.length)}>{fmtCompact(pontos.length)}</div>
+                          <div className="text-[9px] text-gray-400">Pontos</div>
+                        </div>
+                        <div>
+                          <div className="text-sm font-bold text-gray-800 truncate" title={fmt(cidadeSelecionada.total_passantes)}>
+                            {fmtCompact(cidadeSelecionada.total_passantes)}
+                          </div>
+                          <div className="text-[9px] text-gray-400">Passantes</div>
+                        </div>
+                        <div>
+                          <div className="text-sm font-bold text-gray-800 truncate" title={fmt(cidadeSelecionada.total_impactos)}>
+                            {fmtCompact(cidadeSelecionada.total_impactos)}
+                          </div>
+                          <div className="text-[9px] text-gray-400">Impactos</div>
                 </div>
               </div>
             )}
-          </div>
+                    {!loadingPontos && pontos.length > 0 && (
+                      <button
+                        onClick={() => setMostrarDadosModal(true)}
+                        className="w-full mt-2 text-[10px] py-1.5 rounded-lg font-medium bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition"
+                      >
+                        Ver dados completos
+                      </button>
+                    )}
+              </div>
+            )}
+
+                {/* Card: Ponto Selecionado */}
+                {pontoSelecionado && (
+                  <div className="rounded-xl border-2 bg-white p-3" style={{ borderColor: (pontoSelecionado.ambiente || '').toUpperCase().includes('PUBLIC') ? '#3b82f6' : '#f97316' }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] uppercase tracking-wide font-semibold text-gray-500">Detalhe do Ponto</span>
+                      <button onClick={() => setPontoSelecionado(null)} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+                </div>
+                    <div className="space-y-1.5 text-xs">
+                      {pontoSelecionado.code && (
+                        <div className="flex justify-between"><span className="text-gray-400">Código</span><span className="font-medium text-gray-700">{pontoSelecionado.code}</span></div>
+                      )}
+                      <div className="flex justify-between"><span className="text-gray-400">Exibidor</span><span className="font-medium text-gray-700 text-right max-w-[160px] truncate">{pontoSelecionado.exibidor || '-'}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-400">Tipo Mídia</span><span className="font-medium text-gray-700 text-right max-w-[160px] truncate">{pontoSelecionado.tipo_midia || '-'}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-400">Ambiente</span>
+                        <span className={`font-medium ${(pontoSelecionado.ambiente || '').toUpperCase().includes('PUBLIC') ? 'text-blue-600' : 'text-orange-600'}`}>
+                          {(pontoSelecionado.ambiente || '').toUpperCase().includes('PUBLIC') ? 'Vias Públicas' : 'Indoor'}
+                          </span>
+                      </div>
+                      <div className="flex justify-between"><span className="text-gray-400">Cidade</span><span className="font-medium text-gray-700">{pontoSelecionado.cidade || '-'}</span></div>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-gray-400">Rua</span>
+                        <span
+                          className="font-medium text-gray-700 text-right max-w-[160px] truncate"
+                          title={pontoSelecionado.rua || '-'}
+                        >
+                          {pontoSelecionado.rua && pontoSelecionado.rua !== 'Não informado' ? pontoSelecionado.rua : '-'}
+                        </span>
+                      </div>
+                      {!pontoSelecionado.rua && buscandoRua && (
+                        <div className="text-[10px] text-gray-400 text-right">Buscando logradouro...</div>
+                      )}
+                      {pontoSelecionado.bairro && pontoSelecionado.bairro !== 'Não informado' && (
+                        <div className="flex justify-between"><span className="text-gray-400">Bairro</span><span className="font-medium text-gray-700">{pontoSelecionado.bairro}</span></div>
+                      )}
+                      {pontoSelecionado.grupo_midia && pontoSelecionado.grupo_midia !== 'Não informado' && (
+                        <div className="flex justify-between"><span className="text-gray-400">Grupo</span><span className="font-medium text-gray-700">{pontoSelecionado.grupo_midia}</span></div>
+                      )}
+                      <div className="h-px bg-gray-100 my-1" />
+                      <div className="grid grid-cols-3 gap-2 text-center pt-1">
+                        <div className="min-w-0">
+                          <div
+                            className="text-sm font-bold text-gray-800 truncate"
+                            title={fmt(Number(pontoSelecionado.passantes || 0))}
+                          >
+                            {fmtCompact(Number(pontoSelecionado.passantes || 0))}
+                          </div>
+                          <div className="text-[8px] text-gray-400 uppercase">Passantes</div>
+                        </div>
+                        <div className="min-w-0">
+                          <div
+                            className="text-sm font-bold text-gray-800 truncate"
+                            title={fmt(Number(pontoSelecionado.impactos_ipv || 0))}
+                          >
+                            {fmtCompact(Number(pontoSelecionado.impactos_ipv || 0))}
+                          </div>
+                          <div className="text-[8px] text-gray-400 uppercase">Impactos</div>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold text-gray-800 truncate" title={pontoSelecionado.rating || '-'}>
+                            {pontoSelecionado.rating || '-'}
+                          </div>
+                          <div className="text-[8px] text-gray-400 uppercase">Rating</div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setMostrarStreetView(true)}
+                        className="w-full mt-2 text-[11px] px-3 py-2 rounded-md bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 transition-colors font-semibold"
+                      >
+                        Ver Street View
+                      </button>
+                    </div>
+                    </div>
+                )}
+
+                {loading && (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="w-8 h-8 border-3 border-gray-200 border-t-[#ff4600] rounded-full animate-spin" />
+                  </div>
+                )}
+
+                    </div>
+                    </div>
+                    </div>
+
+          {/* ── Hover Card (cidade em hover no perimetro) ── */}
+          {hoveredCity && !cidadeSelecionada && (
+            <div
+              className="absolute z-[490] rounded-xl shadow-xl pointer-events-none"
+              style={{
+                right: 60, top: 10,
+                background: 'rgba(255,255,255,0.97)',
+                backdropFilter: 'blur(8px)',
+                border: '1.5px solid rgba(0,0,0,0.08)',
+                minWidth: 200,
+                padding: '10px 14px',
+              }}
+            >
+              <div className="text-[11px] font-bold text-gray-800 mb-2">
+                {hoveredCity.cidade_st}{hoveredCity.estado_st ? ` / ${hoveredCity.estado_st}` : ''}
+                    </div>
+              <div className="grid grid-cols-3 gap-2 text-center mb-2">
+                    <div>
+                  <div className="text-sm font-bold text-[#ff4600]">{fmt(hoveredCity.total_pontos)}</div>
+                  <div className="text-[8px] text-gray-400 uppercase">Pontos</div>
+                    </div>
+                    <div>
+                  <div className="text-sm font-bold text-blue-600">{fmt(hoveredCity.pontos_public)}</div>
+                  <div className="text-[8px] text-gray-400 uppercase">VP</div>
+                    </div>
+                    <div>
+                  <div className="text-sm font-bold text-orange-500">{fmt(hoveredCity.pontos_indoor)}</div>
+                  <div className="text-[8px] text-gray-400 uppercase">Indoor</div>
+                    </div>
+                  </div>
+              {hoveredCity.total_passantes > 0 && (
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-gray-400">Passantes</span>
+                  <span className="font-semibold text-gray-700">{fmt(hoveredCity.total_passantes)}</span>
+                </div>
+              )}
+              {hoveredCity.total_impactos > 0 && (
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-gray-400">Impactos IPV</span>
+                  <span className="font-semibold text-gray-700">{fmt(hoveredCity.total_impactos)}</span>
+                </div>
+              )}
+              <div className="mt-2 text-[9px] text-gray-400 italic">Clique para ver os pontos</div>
+            </div>
+          )}
+
+          {/* ── Map ── */}
+          <div className="absolute inset-0" style={{ zIndex: 1 }}>
+            <MapContainer
+              center={[-15.78, -47.93]}
+              zoom={4}
+              style={{ height: '100%', width: '100%' }}
+              zoomControl={false}
+            >
+              <ZoomControl position="topright" />
+              <ZoomTracker onZoom={handleZoom} />
+              <TileLayer
+                url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+              />
+
+              {/* Choropleth perimeters — sempre visíveis */}
+              {perimetros.map(p => {
+                const city = getCentroid(p.cidade_st);
+                const totalPontos = city?.total_pontos ?? 0;
+                const isSelecionada = (cidadeSelecionada?.cidade ?? '').trim().toLowerCase() === (p.cidade_st ?? '').trim().toLowerCase();
+                const style = choroplethStyle(totalPontos, maxPontos, isSelecionada);
+
+                // CityBubble garantido: usa centroid se disponível, senão usa coords do próprio perimetro
+                const cityParaClick: CityBubble = city ?? {
+                  cidade: p.cidade_st,
+                  estado: p.estado_st ?? '',
+                  lat: Number(p.latitude_center_vl) || -15.78,
+                  lon: Number(p.longitude_center_vl) || -47.93,
+                  total_pontos: 0,
+                  total_passantes: 0,
+                  total_impactos: 0,
+                  pontos_public: 0,
+                  pontos_indoor: 0,
+                };
+
+                return (
+                  <Rectangle
+                    key={p.cidade_st}
+                    bounds={[
+                      [p.latitude_min_vl, p.longitude_min_vl],
+                      [p.latitude_max_vl, p.longitude_max_vl],
+                    ]}
+                    pathOptions={{ ...style, interactive: true }}
+                    bubblingMouseEvents={false}
+                    eventHandlers={{
+                      mouseover: () => setHoveredCity({
+                        cidade_st: p.cidade_st,
+                        estado_st: p.estado_st,
+                        total_pontos: city?.total_pontos ?? 0,
+                        pontos_public: city?.pontos_public ?? 0,
+                        pontos_indoor: city?.pontos_indoor ?? 0,
+                        total_passantes: city?.total_passantes ?? 0,
+                        total_impactos: city?.total_impactos ?? 0,
+                      }),
+                      mouseout: () => setHoveredCity(null),
+                      click: () => {
+                        console.log('[Rectangle click] cidade:', p.cidade_st, '| cityParaClick:', cityParaClick.cidade);
+                        handleClickCidade(cityParaClick);
+                      },
+                    }}
+                  />
+                );
+              })}
+
+              {/* City bubbles — aparecem a partir do zoom 5 na visão Brasil */}
+              {showBubbles && centroidsFiltrados.map(city => (
+                <CircleMarker
+                  key={city.cidade}
+                  center={[city.lat, city.lon]}
+                  radius={bubbleRadius(city.total_pontos, maxPontos)}
+                  pathOptions={{ color: '#ff4600', fillColor: '#ff4600', fillOpacity: 0.75, weight: 1.5, opacity: 1 }}
+                  eventHandlers={{
+                    click: () => handleClickCidade(city),
+                    mouseover: () => setHoveredCity({
+                      cidade_st: city.cidade,
+                      estado_st: city.estado,
+                      total_pontos: city.total_pontos,
+                      pontos_public: city.pontos_public,
+                      pontos_indoor: city.pontos_indoor,
+                      total_passantes: city.total_passantes,
+                      total_impactos: city.total_impactos,
+                    }),
+                    mouseout: () => setHoveredCity(null),
+                  }}
+                >
+                  {/* Tooltip compacto apenas com nome — só quando zoom >= 7 */}
+                  {zoom >= 7 && (
+                    <Tooltip permanent direction="bottom" offset={[0, 8]} className="leaflet-praca-label" opacity={0.85}>
+                      <span style={{ fontWeight: 600, fontSize: 9, color: '#444', letterSpacing: 0.2 }}>
+                        {city.cidade}
+                      </span>
+                    </Tooltip>
+                  )}
+                </CircleMarker>
+              ))}
+
+              {showBrazilView && centroidsFiltrados.length > 0 && (
+                <AjustarMapaBrasil cidades={centroidsFiltrados} />
+              )}
+
+              {/* Fly to city imediatamente ao selecionar — sem esperar pelos pontos */}
+              {cidadeSelecionada && (
+                <FlyToCity lat={cidadeSelecionada.lat} lon={cidadeSelecionada.lon} />
+              )}
+
+              {/* MarkerClusterLayer sempre montado quando há cidade selecionada;
+                  renderiza vazio enquanto carrega e atualiza sozinho quando pontos chegam */}
+              {cidadeSelecionada && (
+                <MarkerClusterLayer
+                  pontos={pontos}
+                  onSelect={setPontoSelecionado}
+                  selectedPointId={pontoSelecionado?.id}
+                />
+              )}
+              {pontoSelecionado && (
+                <FlyToPoint lat={Number(pontoSelecionado.latitude)} lon={Number(pontoSelecionado.longitude)} />
+              )}
+              {pontoSelecionado && (
+                <CircleMarker
+                  center={[Number(pontoSelecionado.latitude), Number(pontoSelecionado.longitude)]}
+                  radius={11}
+                  pathOptions={{
+                    color: '#111827',
+                    weight: 2.5,
+                    fillColor: '#ff4600',
+                    fillOpacity: 0.35,
+                  }}
+                >
+                  <Tooltip direction="top" offset={[0, -10]} opacity={1}>
+                    <div style={{ fontSize: 11, lineHeight: 1.4 }}>
+                      <strong>Ponto selecionado</strong><br />
+                      {pontoSelecionado.code || `ID ${pontoSelecionado.id}`}
+                    </div>
+                  </Tooltip>
+                </CircleMarker>
+              )}
+            </MapContainer>
+                  </div>
+                  
+          {/* ── Legenda Choropleth ── */}
+          <div style={{
+            position: 'absolute', bottom: 48, right: 16, zIndex: 500,
+            background: 'rgba(255,255,255,0.95)', borderRadius: 10,
+            padding: '8px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+          }}>
+            <div className="text-[9px] uppercase tracking-wide text-gray-400 font-semibold mb-2">
+              {showBrazilView ? 'Densidade de Pontos' : 'Ambiente'}
+                                        </div>
+            {showBrazilView ? (
+              <div className="flex items-center gap-1">
+                {['#fed7aa','#fb923c','#f97316','#ea580c','#c2410c','#9a3412'].map((c, i) => (
+                  <span key={i} style={{ width: 16, height: 10, borderRadius: 2, background: c, display: 'inline-block', opacity: 0.85 }} />
+                ))}
+                <span className="text-[9px] text-gray-400 ml-1">menos → mais</span>
+                                      </div>
+                                    ) : (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                  <span className="text-[10px] text-gray-500">Vias Públicas</span>
+                                  </div>
+                <span style={{ width: 1, height: 14, background: '#e5e7eb', display: 'inline-block' }} />
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-orange-500" />
+                  <span className="text-[10px] text-gray-500">Indoor</span>
+                                </div>
+                <span style={{ width: 1, height: 14, background: '#e5e7eb', display: 'inline-block' }} />
+                <span className="text-[10px] text-gray-500 font-medium">{fmt(pontos.length)} pontos</span>
+              </div>
+            )}
+                    </div>
+
+          {/* Loading overlay */}
+          {loadingPontos && (
+            <div className="absolute inset-0 z-[400] flex items-center justify-center bg-white/50 backdrop-blur-sm">
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-10 h-10 border-4 border-gray-200 border-t-[#ff4600] rounded-full animate-spin" />
+                <span className="text-sm text-gray-500">Carregando pontos...</span>
+                </div>
+              </div>
+            )}
         </div>
         
-        {/* Footer padrão - mesmo das outras páginas */}
-        <div className={`fixed bottom-0 z-30 flex flex-col items-center pointer-events-none transition-all duration-300 ${menuReduzido ? 'left-20 w-[calc(100%-5rem)]' : 'left-64 w-[calc(100%-16rem)]'}`}>
-          <div className="absolute left-0 top-0 h-full w-px bg-[#c1c1c1]" />
-          <footer className="w-full border-t border-[#c1c1c1] p-4 text-center text-[10px] italic text-[#b0b0b0] tracking-wide bg-white z-10 font-sans pointer-events-auto relative">
-            <div className="absolute left-0 top-0 h-full w-px bg-[#c1c1c1]" />
-            <div className="w-full h-[1px] bg-[#c1c1c1] absolute top-0 left-0" />
+        {/* ── Footer ── */}
+        <div className={`fixed bottom-0 z-[600] pointer-events-none transition-all duration-300 ${menuReduzido ? 'left-20 w-[calc(100%-5rem)]' : 'left-64 w-[calc(100%-16rem)]'}`}>
+          <footer className="w-full border-t border-[#e5e5e5] px-4 py-2 text-center text-[10px] italic text-[#b0b0b0] tracking-wide bg-white pointer-events-none">
             © 2025 Colmeia. All rights are reserved to Be Mediatech OOH.
           </footer>
         </div>
+
+        {mostrarDadosModal && (
+          <div className="fixed inset-0 z-[1250] bg-black/50 flex items-center justify-center p-4">
+            <div className="w-full max-w-7xl h-[86vh] bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col">
+              <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Dados completos dos pontos</h3>
+                  <p className="text-xs text-gray-500">
+                    {cidadeSelecionada?.cidade || 'Praça'} · {fmt(pontosOrdenados.length)} registros
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={exportarPontosExcel}
+                    disabled={exportandoExcel}
+                    className="inline-flex items-center gap-1.5 text-[11px] py-1.5 px-2.5 rounded-lg font-medium bg-white text-gray-600 border border-gray-200 hover:bg-gray-100 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="text-gray-500">
+                      <path d="M14 2H7a2 2 0 0 0-2 2v7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M14 2v5h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M19 13v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M12 10v8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                      <path d="M9 15l3 3 3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    {exportandoExcel ? 'Exportando...' : 'Exportar'}
+                  </button>
+                  <button
+                    onClick={() => setMostrarDadosModal(false)}
+                    className="w-8 h-8 rounded-full hover:bg-gray-100 text-gray-600"
+                    aria-label="Fechar dados completos"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {exportandoExcel && (
+                <div className="px-4 py-2 border-b border-gray-100">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] text-gray-500">{exportStatusText || 'Exportando...'}</span>
+                    <span className="text-[11px] text-gray-500">{Math.max(0, Math.min(100, exportProgress))}%</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#ff4600] transition-all duration-300"
+                      style={{ width: `${Math.max(0, Math.min(100, exportProgress))}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex-1 overflow-auto">
+                <table className="min-w-full text-[11px]">
+                  <thead className="sticky top-0 bg-gray-50 border-b border-gray-200 z-10">
+                    <tr>
+                      {colunasDadosModal.map((col) => {
+                        const sortable = col === 'code' || col === 'exibidor' || col === 'impactos_ipv';
+                        return (
+                          <th key={col} className="px-2 py-2 text-left font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
+                            {sortable ? (
+                              <button
+                                onClick={() => alternarOrdenacaoGrid(col as GridSortKey)}
+                                className="hover:text-gray-700 transition-colors"
+                              >
+                                {col} {gridSortKey === col ? (gridSortDir === 'asc' ? '↑' : '↓') : ''}
+                              </button>
+                            ) : (
+                              col
+                            )}
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pontosOrdenados.map((p) => (
+                      <tr
+                        key={p.id}
+                        className={`border-b border-gray-50 hover:bg-gray-50 cursor-pointer ${
+                          pontoSelecionado?.id === p.id ? 'bg-orange-50' : ''
+                        }`}
+                        onClick={() => {
+                          setPontoSelecionado(p);
+                          setMostrarDadosModal(false);
+                        }}
+                      >
+                        {colunasDadosModal.map((col) => (
+                          <td key={`${p.id}-${col}`} className="px-2 py-1.5 text-gray-700 whitespace-nowrap max-w-[220px] truncate" title={String((p as any)[col] ?? '-')}>
+                            {String((p as any)[col] ?? '-')}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {mostrarStreetView && pontoSelecionado && (
+          <div className="fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
+            <div className="w-full max-w-5xl h-[80vh] bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col">
+              <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Street View do ponto</h3>
+                  <p className="text-xs text-gray-500">
+                    {Number(pontoSelecionado.latitude).toFixed(5)}, {Number(pontoSelecionado.longitude).toFixed(5)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setMostrarStreetView(false)}
+                  className="w-8 h-8 rounded-full hover:bg-gray-100 text-gray-600"
+                  aria-label="Fechar Street View"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="flex-1 bg-gray-100">
+                {streetViewEmbedUrl ? (
+                  <iframe
+                    title="Street View"
+                    src={streetViewEmbedUrl}
+                    width="100%"
+                    height="100%"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    allowFullScreen
+                  />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center p-6 text-center text-sm text-gray-600">
+                    Defina `VITE_GOOGLE_MAPS_API_KEY` no `.env` para habilitar o Street View.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 };
-

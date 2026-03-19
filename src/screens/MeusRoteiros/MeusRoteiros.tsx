@@ -18,6 +18,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useRoteirosRefresh } from "../../hooks/useRoteirosRefresh";
 import { useDebounce } from "../../hooks/useDebounce";
 import { ConfirmDeleteModal } from "../../components/ConfirmDeleteModal/ConfirmDeleteModal";
+import { useAuth } from "../../contexts/AuthContext";
 
 // Definir a interface dos dados da view
 interface Roteiro {
@@ -39,6 +40,8 @@ interface Roteiro {
   active_bl: number;
   active_st: string;
   delete_bl: number;
+  liberadoAgencia_bl?: number;
+  agencia_st?: string;
 }
 
 interface PaginationInfo {
@@ -50,6 +53,7 @@ interface PaginationInfo {
 
 export const MeusRoteiros: React.FC = () => {
   const navigate = useNavigate();
+  const { isAgencia } = useAuth();
   const [menuReduzido, setMenuReduzido] = useState(false);
   const [dados, setDados] = useState<Roteiro[]>([]);
   const [paginacao, setPaginacao] = useState<PaginationInfo>({
@@ -201,6 +205,26 @@ Email: suporte@be180.com.br`;
     });
   };
 
+  const handleToggleLiberacao = async (roteiro: Roteiro) => {
+    const novoValor = roteiro.liberadoAgencia_bl === 1 ? false : true;
+    try {
+      await api.put('/roteiros?action=liberar-agencia', {
+        planoMidiaGrupo_pk: roteiro.planoMidiaGrupo_pk,
+        liberadoAgencia_bl: novoValor,
+      });
+      setDados((prev) =>
+        prev.map((r) =>
+          r.planoMidiaGrupo_pk === roteiro.planoMidiaGrupo_pk
+            ? { ...r, liberadoAgencia_bl: novoValor ? 1 : 0 }
+            : r
+        )
+      );
+    } catch (err: any) {
+      console.error('Erro ao liberar roteiro:', err);
+      setErro(err.response?.data?.error || 'Erro ao alterar liberação');
+    }
+  };
+
   const handleOpenDeleteModal = (roteiro: Roteiro) => {
     setDeleteModal({
       isOpen: true,
@@ -271,7 +295,7 @@ Email: suporte@be180.com.br`;
             breadcrumb={{
               items: [
                 { label: "Home", path: "/" },
-                { label: "Meus roteiros", path: "/" }
+                { label: "Meus roteiros", path: "/meus-roteiros" }
               ]
             }}
           />
@@ -353,6 +377,11 @@ Email: suporte@be180.com.br`;
                     >
                       Período da campanha
                     </th>
+                    {!isAgencia && (
+                      <th className="text-white text-xs font-bold uppercase text-center px-4 py-2 tracking-wider font-sans">
+                        Agência
+                      </th>
+                    )}
                     <th className="text-white text-xs font-bold uppercase text-right px-6 py-2 tracking-wider font-sans">&nbsp;</th>
                   </tr>
                 </thead>
@@ -361,11 +390,11 @@ Email: suporte@be180.com.br`;
                     <TableSkeleton />
                   ) : erro ? (
                     <tr>
-                      <td colSpan={5} className="text-center py-4 text-red-500">{erro}</td>
+                      <td colSpan={isAgencia ? 5 : 6} className="text-center py-4 text-red-500">{erro}</td>
                     </tr>
                   ) : dados.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="text-center py-4">
+                      <td colSpan={isAgencia ? 5 : 6} className="text-center py-4">
                         {isSearching ? "Nenhum roteiro encontrado com esse termo" : "Nenhum roteiro encontrado"}
                       </td>
                     </tr>
@@ -391,6 +420,19 @@ Email: suporte@be180.com.br`;
                           )}
                         </td>
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{item.semanasMax_vl} {item.semanasMax_vl === 1 ? 'semana' : 'semanas'}</td>
+                        {!isAgencia && (
+                          <td className="text-center px-4 py-4">
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={item.liberadoAgencia_bl === 1}
+                                onChange={() => handleToggleLiberacao(item)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-9 h-5 bg-gray-300 rounded-full peer peer-checked:bg-[#FF9800] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                            </label>
+                          </td>
+                        )}
                         <td className="text-[#222] text-xs px-6 py-4 whitespace-nowrap text-right flex items-center gap-4 justify-end font-sans">
                           <Link to={`/mapa?grupo=${item.planoMidiaGrupo_pk}`}>
                             <PinDrop
@@ -404,13 +446,15 @@ Email: suporte@be180.com.br`;
                           >
                             <Difference4 className="w-6 h-6 hover:text-[#FF9800] cursor-pointer text-[#3A3A3A]" />
                           </button>
-                          <button
-                            onClick={() => handleOpenDeleteModal(item)}
-                            className="transition-transform duration-200 hover:scale-110"
-                            title="Excluir roteiro"
-                          >
-                            <Delete4 className="w-6 h-6 hover:text-red-600 cursor-pointer text-[#3A3A3A]" />
-                          </button>
+                          {!isAgencia && (
+                            <button
+                              onClick={() => handleOpenDeleteModal(item)}
+                              className="transition-transform duration-200 hover:scale-110"
+                              title="Excluir roteiro"
+                            >
+                              <Delete4 className="w-6 h-6 hover:text-red-600 cursor-pointer text-[#3A3A3A]" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))

@@ -10,6 +10,9 @@ import { ProcessingResultsLoader } from "../../components/ProcessingResultsLoade
 import { AppleSaveLoader } from "../../components/AppleSaveLoader/AppleSaveLoader";
 import { Modal } from "../../components/Modal/Modal";
 import { ModalAdicionarMarca } from "../../components/ModalAdicionarMarca/ModalAdicionarMarca";
+import { ImportarPlanoMidia } from "../../components/ImportarPlanoMidia";
+import { ImportarPlanoAba1 } from "../../components/ImportarPlanoAba1";
+import type { ParsedPlanoRow } from "../../utils/parsePlanoOohExcel";
 
 interface Agencia {
   id_agencia: number;
@@ -27,7 +30,7 @@ interface Categoria {
 }
 
 interface Cidade {
-  id_cidade: number;
+  id_cidade: number | string;
   nome_cidade: string;
   nome_estado: string;
   codigo_ibge?: string;
@@ -328,9 +331,11 @@ export const CriarRoteiro: React.FC = () => {
   const [mensagemProcessamento, setMensagemProcessamento] = useState<string>('');
   
   // Estados para Roteiro Simulado
+  const [modoSimulado, setModoSimulado] = useState<'manual' | 'importar'>('manual');
+  const [importPlanoData, setImportPlanoData] = useState<{ records: ParsedPlanoRow[]; filename: string } | null>(null);
   const [pracasSelecionadasSimulado, setPracasSelecionadasSimulado] = useState<any[]>([]);
   const [quantidadeSemanas, setQuantidadeSemanas] = useState<number>(12);
-  const [tabelaSimulado, setTabelaSimulado] = useState<Record<number, any[]>>({}); // Objeto: id_cidade -> array de linhas
+  const [tabelaSimulado, setTabelaSimulado] = useState<Record<string, any[]>>({}); // Objeto: chave da praça -> array de linhas
   
   // Estados para o novo fluxo pós-upload
   const [uploadCompleto, setUploadCompleto] = useState(false);
@@ -451,6 +456,28 @@ export const CriarRoteiro: React.FC = () => {
     fetchCidades();
   }, []);
 
+  const normalizeSearchText = React.useCallback((value: string) => {
+    return (value || '')
+      .toUpperCase()
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ');
+  }, []);
+
+  const getCidadeIdKey = React.useCallback((cidade: Cidade) => {
+    const rawId = cidade?.id_cidade;
+    if (rawId !== undefined && rawId !== null && String(rawId).trim() !== '') {
+      return String(rawId).trim();
+    }
+    return `${cidade.nome_cidade}|${cidade.nome_estado}`
+      .toUpperCase()
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ');
+  }, []);
+
   // Filtrar cidades baseado na busca
   useEffect(() => {
     if (!searchPraca.trim()) {
@@ -458,12 +485,14 @@ export const CriarRoteiro: React.FC = () => {
       return;
     }
 
-    const filtered = cidades.filter(cidade =>
-      cidade.nome_cidade.toLowerCase().includes(searchPraca.toLowerCase()) ||
-      cidade.nome_estado.toLowerCase().includes(searchPraca.toLowerCase())
-    );
+    const termoBusca = normalizeSearchText(searchPraca);
+    const filtered = cidades.filter((cidade) => {
+      const nomeCidade = normalizeSearchText(cidade.nome_cidade);
+      const nomeEstado = normalizeSearchText(cidade.nome_estado);
+      return nomeCidade.includes(termoBusca) || nomeEstado.includes(termoBusca);
+    });
     setCidadesFiltradas(filtered);
-  }, [searchPraca, cidades]);
+  }, [searchPraca, cidades, normalizeSearchText]);
 
   // Fechar dropdown ao clicar fora
   useEffect(() => {
@@ -503,7 +532,7 @@ export const CriarRoteiro: React.FC = () => {
       }
       
       // Objeto para armazenar tabelas por praça: id_cidade -> array de linhas
-      const tabelasPorPraca: Record<number, any[]> = {};
+      const tabelasPorPraca: Record<string, any[]> = {};
       
       // Gerar uma tabela separada para cada praça configurada na Aba 3
       for (const praca of cidadesSalvas) {
@@ -551,8 +580,8 @@ export const CriarRoteiro: React.FC = () => {
             });
           });
           
-          // Armazenar tabela desta praça - garantir que usamos número como chave
-          const idPraca = Number(praca.id_cidade);
+          // Armazenar tabela desta praça com chave estável (string)
+          const idPraca = getCidadeIdKey(praca);
           tabelasPorPraca[idPraca] = estruturaTabela;
           console.log(`✅ Tabela gerada para ${praca.nome_cidade}: ${estruturaTabela.length} subgrupos`);
           console.log(`✅ Tabela salva com chave ID: ${idPraca} (tipo: ${typeof idPraca})`);
@@ -573,6 +602,129 @@ export const CriarRoteiro: React.FC = () => {
     } catch (error) {
       console.error('❌ Erro ao gerar tabelas simuladas:', error);
       alert('Erro ao gerar estrutura das tabelas. Tente novamente.');
+    }
+  };
+
+  // Nomes de praça pendentes de match (salvos ao fazer upload antes de cidades carregar)
+  const [pendingPracaNomes, setPendingPracaNomes] = React.useState<string[]>([]);
+
+  // Quando cidades carrega (ou muda) e há nomes pendentes, resolve o match
+  React.useEffect(() => {
+    if (!pendingPracaNomes.length || !cidades.length) return;
+    const normalizeName = (s: string) =>
+      s.toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const detectadas = pendingPracaNomes
+      .map((nome) => cidades.find((c) => normalizeName(c.nome_cidade) === normalizeName(nome)))
+      .filter((c): c is typeof cidades[0] => c !== undefined);
+    if (detectadas.length > 0) {
+      setCidadesSelecionadas(detectadas);
+      setCidadesSalvas(detectadas);
+      setAba3Preenchida(true);
+    }
+    setPendingPracaNomes([]);
+  }, [cidades, pendingPracaNomes]);
+
+  // Callback do ImportarPlanoMidia/ImportarPlanoAba1: popula Aba 3 com as praças detectadas no Excel
+  const handlePracasDetectadas = (pracaNomes: string[]) => {
+    if (!pracaNomes.length) return;
+    if (!cidades.length) {
+      setPendingPracaNomes(pracaNomes);
+      return;
+    }
+    const normalizeName = (s: string) =>
+      s.toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const detectadas = pracaNomes
+      .map((nome) => cidades.find((c) => normalizeName(c.nome_cidade) === normalizeName(nome)))
+      .filter((c): c is typeof cidades[0] => c !== undefined);
+    if (detectadas.length > 0) {
+      setCidadesSelecionadas(detectadas);
+      setCidadesSalvas(detectadas);
+      setAba3Preenchida(true);
+    }
+  };
+
+  // Callback do ImportarPlanoAba1: armazena dados parseados e preenche Aba 1/3
+  const handleDataParsedImport = (data: {
+    records: ParsedPlanoRow[];
+    filename: string;
+    campanhaSuggestion: string;
+    valorTotalSuggestion: number;
+  }) => {
+    setImportPlanoData({ records: data.records, filename: data.filename });
+    setModoSimulado('importar');
+    if (!nomeRoteiro.trim() && data.campanhaSuggestion) setNomeRoteiro(data.campanhaSuggestion);
+    if ((!valorCampanha || valorCampanha === 'R$ 0,00') && data.valorTotalSuggestion > 0) {
+      setValorCampanha(
+        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(data.valorTotalSuggestion)
+      );
+    }
+  };
+
+  // Callback do ImportarPlanoMidia: executa cadeia do Flow A (Stage 2 e 3) e navega para Aba 6
+  const handleImportacaoCompleta = async (planoMidiaImportFile_pk: number | null) => {
+    if (!planoMidiaGrupo_pk) {
+      const msg = 'planoMidiaGrupo_pk não encontrado para continuar a importação.';
+      mostrarModal(msg, 'error', 'Erro na cadeia de importação');
+      throw new Error(msg);
+    }
+
+    try {
+      // Stage 2: materializar dados importados em planoMidiaDesc + consultaLoop
+      const fromImportResponse = await axios.post('/sp-plano-midia-from-import', {
+        planoMidiaGrupo_pk,
+      });
+
+      if (!fromImportResponse?.data?.success) {
+        throw new Error(fromImportResponse?.data?.message || 'Falha ao executar sp_planoMidiaFromImport.');
+      }
+
+      const linhas = Array.isArray(fromImportResponse.data?.data) ? fromImportResponse.data.data : [];
+      const cidadesSemIbge = linhas.filter((row: any) => !row?.ibgeCode_vl);
+
+      // Stage 3: disparar processamento Databricks do roteiro simulado
+      const now = new Date();
+      const date_dt = now.toISOString().slice(0, 10);
+      const date_dh = now.toISOString().slice(0, 19).replace('T', ' ');
+
+      const databricksResponse = await axios.post('/databricks-roteiro-simulado', {
+        planoMidiaGrupo_pk,
+        date_dh,
+        date_dt,
+      });
+
+      if (!databricksResponse?.data?.success) {
+        throw new Error(databricksResponse?.data?.message || 'Falha ao iniciar o processamento Databricks.');
+      }
+
+      setAba6Habilitada(true);
+      setAbaAtiva(6);
+
+      const summary = fromImportResponse.data?.summary || {};
+      const runId = databricksResponse.data?.data?.run_id;
+
+      let mensagem = `Fluxo de importação concluído com sucesso.\n\n`;
+      mensagem += `• Grupo: #${planoMidiaGrupo_pk}\n`;
+      if (planoMidiaImportFile_pk) mensagem += `• Arquivo importado: #${planoMidiaImportFile_pk}\n`;
+      mensagem += `• Cidades processadas: ${summary.totalCidades ?? linhas.length}\n`;
+      mensagem += `• Registros planoMidia: ${summary.totalPlanoMidia ?? 0}\n`;
+      mensagem += `• Databricks run_id: ${runId || 'N/A'}\n`;
+
+      if (cidadesSemIbge.length > 0) {
+        mensagem += `\n⚠️ ${cidadesSemIbge.length} cidade(s) sem ibgeCode no retorno da SP.`;
+        mostrarModal(mensagem, 'warning', 'Importação concluída com alertas');
+      } else {
+        mostrarModal(mensagem, 'success', 'Importação concluída');
+      }
+    } catch (error: any) {
+      const msg =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        'Erro ao concluir a cadeia da importação OOH.';
+
+      console.error('[Flow A Importação OOH] Erro:', error);
+      mostrarModal(msg, 'error', 'Erro na cadeia de importação');
+      throw new Error(msg);
     }
   };
 
@@ -624,10 +776,10 @@ export const CriarRoteiro: React.FC = () => {
         return;
       }
 
-      // Verificar se todas as praças configuradas têm tabela (usando número como chave)
+      // Verificar se todas as praças configuradas têm tabela
       const pracasSemTabela = cidadesSalvas.filter(p => {
-        const idPraca = Number(p.id_cidade);
-        const tabela = tabelaSimulado[idPraca] || tabelaSimulado[p.id_cidade as any];
+        const idPraca = getCidadeIdKey(p);
+        const tabela = tabelaSimulado[idPraca];
         return !tabela || tabela.length === 0;
       });
       if (pracasSemTabela.length > 0) {
@@ -650,17 +802,13 @@ export const CriarRoteiro: React.FC = () => {
       
       // Validar correspondência entre IDs das praças e tabelas
       cidadesSalvas.forEach(praca => {
-        const idNumero = Number(praca.id_cidade);
-        const idString = String(praca.id_cidade);
-        const tabelaPorNumero = tabelaSimulado[idNumero];
-        const tabelaPorString = tabelaSimulado[idString];
-        const tabelaPorIdOriginal = tabelaSimulado[praca.id_cidade as any];
+        const idKey = getCidadeIdKey(praca);
+        const tabelaPorChave = tabelaSimulado[idKey];
         
         console.log(`🔍 Validação para ${praca.nome_cidade}:`);
         console.log(`  - ID original: ${praca.id_cidade} (${typeof praca.id_cidade})`);
-        console.log(`  - Tabela por número (${idNumero}): ${tabelaPorNumero ? 'ENCONTRADA' : 'NÃO ENCONTRADA'}`);
-        console.log(`  - Tabela por string (${idString}): ${tabelaPorString ? 'ENCONTRADA' : 'NÃO ENCONTRADA'}`);
-        console.log(`  - Tabela por ID original: ${tabelaPorIdOriginal ? 'ENCONTRADA' : 'NÃO ENCONTRADA'}`);
+        console.log(`  - Chave usada: ${idKey}`);
+        console.log(`  - Tabela por chave: ${tabelaPorChave ? 'ENCONTRADA' : 'NÃO ENCONTRADA'}`);
       });
 
       const planoMidiaGrupo_st = gerarPlanoMidiaGrupoString();
@@ -802,48 +950,8 @@ export const CriarRoteiro: React.FC = () => {
 
           // Coletar dados da tabela específica desta praça
           console.log(`🔍 Buscando tabela para praça ID ${praca.id_cidade} (tipo: ${typeof praca.id_cidade})...`);
-          
-          // Tentar buscar a tabela usando diferentes formatos de ID para garantir compatibilidade
-          let tabelaDaPraca = tabelaSimulado[praca.id_cidade as any];
-          
-          // Se não encontrou, tentar como número
-          if (!tabelaDaPraca) {
-            const idNumero = Number(praca.id_cidade);
-            tabelaDaPraca = tabelaSimulado[idNumero];
-            if (tabelaDaPraca) {
-              console.log(`✅ Tabela encontrada usando ID numérico: ${idNumero}`);
-            }
-          }
-          
-          // Se ainda não encontrou, tentar como string
-          if (!tabelaDaPraca) {
-            const idString = String(praca.id_cidade);
-            tabelaDaPraca = tabelaSimulado[idString as any];
-            if (tabelaDaPraca) {
-              console.log(`✅ Tabela encontrada usando ID string: ${idString}`);
-            }
-          }
-          
-          // Se ainda não encontrou, tentar todas as chaves disponíveis
-          if (!tabelaDaPraca) {
-            console.log(`⚠️ Tentando buscar tabela comparando IDs manualmente...`);
-            const todasChaves = Object.keys(tabelaSimulado);
-            console.log(`📋 Chaves disponíveis:`, todasChaves);
-            console.log(`📋 ID da praça (original):`, praca.id_cidade);
-            console.log(`📋 ID da praça (número):`, Number(praca.id_cidade));
-            console.log(`📋 ID da praça (string):`, String(praca.id_cidade));
-            
-            // Tentar comparar valores (não tipos)
-            for (const chave of todasChaves) {
-              if (Number(chave) === Number(praca.id_cidade) || String(chave) === String(praca.id_cidade)) {
-                tabelaDaPraca = tabelaSimulado[Number(chave) || chave as any];
-                if (tabelaDaPraca) {
-                  console.log(`✅ Tabela encontrada na chave: ${chave}`);
-                  break;
-                }
-              }
-            }
-          }
+          const pracaKey = getCidadeIdKey(praca);
+          const tabelaDaPraca = tabelaSimulado[pracaKey];
           
           if (!tabelaDaPraca) {
             const todasChaves = Object.keys(tabelaSimulado);
@@ -1132,7 +1240,8 @@ export const CriarRoteiro: React.FC = () => {
 
   // Funções para lidar com seleção de cidades
   const handleSelecionarCidade = (cidade: Cidade) => {
-    const jaExiste = cidadesSelecionadas.find(c => c.id_cidade === cidade.id_cidade);
+    const cidadeKey = getCidadeIdKey(cidade);
+    const jaExiste = cidadesSelecionadas.find(c => getCidadeIdKey(c) === cidadeKey);
     if (!jaExiste) {
       setCidadesSelecionadas([...cidadesSelecionadas, cidade]);
       // Buscar inventário da cidade selecionada
@@ -1142,8 +1251,9 @@ export const CriarRoteiro: React.FC = () => {
     setShowDropdownCidades(false);
   };
 
-  const handleRemoverCidade = (id_cidade: number) => {
-    setCidadesSelecionadas(cidadesSelecionadas.filter(c => c.id_cidade !== id_cidade));
+  const handleRemoverCidade = (id_cidade: number | string) => {
+    const idKey = String(id_cidade);
+    setCidadesSelecionadas(cidadesSelecionadas.filter(c => String(c.id_cidade) !== idKey));
   };
 
   // Função para verificar se as cidades mudaram desde o último salvamento
@@ -1151,7 +1261,7 @@ export const CriarRoteiro: React.FC = () => {
     if (cidadesSelecionadas.length !== cidadesSalvas.length) return true;
     
     return cidadesSelecionadas.some(cidade => 
-      !cidadesSalvas.find(salva => salva.id_cidade === cidade.id_cidade)
+      !cidadesSalvas.find(salva => getCidadeIdKey(salva) === getCidadeIdKey(cidade))
     );
   };
 
@@ -2525,7 +2635,12 @@ export const CriarRoteiro: React.FC = () => {
         agencia_pk,
         marca_pk,
         categoria_pk,
-        valorCampanha_vl
+        valorCampanha_vl,
+        gender_st: genero || null,
+        class_st: classe || null,
+        age_st: faixaEtaria || null,
+        usuarioId_st: user?.id || user?.sub || null,
+        usuarioName_st: user?.name || null,
       });
 
       if (response.data && response.data[0]?.new_pk) {
@@ -2544,7 +2659,7 @@ export const CriarRoteiro: React.FC = () => {
     }
   };
 
-  // Função para salvar Aba 2 - Salvamento puramente local (sem tocar na base)
+  // Função para salvar Aba 2 - Persiste target no planoMidiaGrupo_dm + salva estado local
   const salvarAba2 = async () => {
     if (!planoMidiaGrupo_pk) {
       alert('É necessário salvar a Aba 1 primeiro');
@@ -2558,12 +2673,23 @@ export const CriarRoteiro: React.FC = () => {
 
     setSalvandoAba2(true);
     try {
-      console.log('💾 Salvando Aba 2 localmente - Configuração de target...');
-      
-      // ✅ SALVAMENTO PURAMENTE LOCAL: Não toca na base de dados
-      // Os planoMidiaDesc_pk serão criados apenas na Aba 4 com dados reais
-      
-      // Salvar configuração de target no estado local
+      console.log('💾 Salvando Aba 2 na base + estado local - Configuração de target...');
+
+      const payloadTarget = {
+        planoMidiaGrupo_pk,
+        gender_st: genero,
+        class_st: classe,
+        age_st: faixaEtaria,
+        usuarioId_st: user?.id || user?.sub || null,
+        usuarioName_st: user?.name || null,
+      };
+
+      const targetResponse = await axios.post('/plano-midia-grupo-target', payloadTarget);
+      if (!targetResponse?.data?.success) {
+        throw new Error(targetResponse?.data?.message || 'Não foi possível persistir o target no grupo.');
+      }
+
+      // Salvar configuração de target também no estado local
       setTargetSalvoLocal({
         genero,
         classe,
@@ -2574,7 +2700,7 @@ export const CriarRoteiro: React.FC = () => {
       setAba2Preenchida(true); // Marcar Aba 2 como preenchida
       
       mostrarModal(
-        `Público-alvo configurado: ${genero}, ${classe}, ${faixaEtaria}. Agora selecione as cidades do seu roteiro.`,
+        `Público-alvo configurado e salvo na base: ${genero}, ${classe}, ${faixaEtaria}. Agora selecione as cidades do seu roteiro.`,
         'success',
         '✅ Target Salvo!'
       );
@@ -2741,7 +2867,11 @@ export const CriarRoteiro: React.FC = () => {
                 <div className="relative">
                   <select
                     value={tipoRoteiro}
-                    onChange={(e) => setTipoRoteiro(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setTipoRoteiro(v);
+                      if (v === 'completo') setImportPlanoData(null);
+                    }}
                     className="w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal"
                   >
                     <option value="">Selecione qual tipo do roteiro irá criar</option>
@@ -2855,6 +2985,21 @@ export const CriarRoteiro: React.FC = () => {
                       {modoVisualizacao ? 'Dados do roteiro' : 'Cadastre os dados do seu novo roteiro'}
                     </h3>
                   </div>
+
+                  {/* Importar Plano OOH (apenas para Roteiro Simulado) - preenche praças e sugere nome/valor */}
+                  {tipoRoteiro === 'simulado' && !modoVisualizacao && (
+                    <ImportarPlanoAba1
+                      existingData={importPlanoData}
+                      onPracasDetectadas={handlePracasDetectadas}
+                      onDataParsed={handleDataParsedImport}
+                      onClear={() => {
+                        setImportPlanoData(null);
+                        setCidadesSelecionadas([]);
+                        setCidadesSalvas([]);
+                        setAba3Preenchida(false);
+                      }}
+                    />
+                  )}
                   
                   <form onSubmit={handleSubmit}>
                     <div className="grid grid-cols-2 gap-8">
@@ -3686,9 +3831,56 @@ export const CriarRoteiro: React.FC = () => {
                       </>
                     )}
 
-                    {/* Roteiro Simulado - Seleção manual */}
+                    {/* Roteiro Simulado */}
                     {tipoRoteiro === 'simulado' && (
                       <>
+                        {/* Toggle: Manual | Importar Plano */}
+                        {!modoVisualizacao && (
+                          <div className="mb-8 flex gap-2 p-1 bg-[#f0f0f0] rounded-xl w-fit">
+                            <button
+                              type="button"
+                              onClick={() => setModoSimulado('manual')}
+                              className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                                modoSimulado === 'manual'
+                                  ? 'bg-white text-[#ff4600] shadow-sm border border-orange-200'
+                                  : 'text-[#666] hover:text-[#333]'
+                              }`}
+                            >
+                              Configurar manualmente
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setModoSimulado('importar')}
+                              disabled={!planoMidiaGrupo_pk}
+                              title={!planoMidiaGrupo_pk ? 'Salve a Aba 1 primeiro para habilitar a importação' : undefined}
+                              className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                                modoSimulado === 'importar'
+                                  ? 'bg-white text-indigo-600 shadow-sm border border-indigo-200'
+                                  : !planoMidiaGrupo_pk
+                                  ? 'text-[#aaa] cursor-not-allowed'
+                                  : 'text-[#666] hover:text-[#333]'
+                              }`}
+                            >
+                              Importar Plano de Mídia OOH
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Modo Importar */}
+                        {modoSimulado === 'importar' && planoMidiaGrupo_pk && !modoVisualizacao && (
+                          <ImportarPlanoMidia
+                            planoMidiaGrupo_pk={planoMidiaGrupo_pk}
+                            nomeRoteiro={nomeRoteiro}
+                            initialData={importPlanoData}
+                            onPracasDetectadas={handlePracasDetectadas}
+                            onImportacaoCompleta={handleImportacaoCompleta}
+                            onClear={() => setImportPlanoData(null)}
+                          />
+                        )}
+
+                        {/* Modo Manual */}
+                        {(modoSimulado === 'manual' || modoVisualizacao) && (
+                        <>
                         {/* Praças da Aba 3 */}
                         <div className="mb-8">
                           <label className="block text-base font-bold text-[#3a3a3a] mb-4">
@@ -3794,9 +3986,8 @@ export const CriarRoteiro: React.FC = () => {
                         {Object.keys(tabelaSimulado).length > 0 && (
                           <div className="mb-8 space-y-8">
                             {cidadesSalvas.map((praca) => {
-                              // Buscar tabela usando número como chave
-                              const idPracaNumero = Number(praca.id_cidade);
-                              const tabelaDaPraca = tabelaSimulado[idPracaNumero] || tabelaSimulado[praca.id_cidade as any];
+                              const idPracaKey = getCidadeIdKey(praca);
+                              const tabelaDaPraca = tabelaSimulado[idPracaKey];
                               if (!tabelaDaPraca || tabelaDaPraca.length === 0) return null;
                               
                               return (
@@ -3851,8 +4042,8 @@ export const CriarRoteiro: React.FC = () => {
                                                   value={linha.visibilidade}
                                                   onChange={(e) => {
                                                     const novasTabelas = { ...tabelaSimulado };
-                                                    novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
-                                                    novasTabelas[idPracaNumero][index].visibilidade = e.target.value;
+                                                    novasTabelas[idPracaKey] = [...(novasTabelas[idPracaKey] || [])];
+                                                    novasTabelas[idPracaKey][index].visibilidade = e.target.value;
                                                     setTabelaSimulado(novasTabelas);
                                                   }}
                                                   className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
@@ -3875,8 +4066,8 @@ export const CriarRoteiro: React.FC = () => {
                                                 value={linha.seDigitalInsercoes_vl || 0}
                                                 onChange={(e) => {
                                                   const novasTabelas = { ...tabelaSimulado };
-                                                  novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
-                                                  novasTabelas[idPracaNumero][index].seDigitalInsercoes_vl = parseInt(e.target.value) || 0;
+                                                  novasTabelas[idPracaKey] = [...(novasTabelas[idPracaKey] || [])];
+                                                  novasTabelas[idPracaKey][index].seDigitalInsercoes_vl = parseInt(e.target.value) || 0;
                                                   setTabelaSimulado(novasTabelas);
                                                 }}
                                                 className="w-full px-3 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
@@ -3890,8 +4081,8 @@ export const CriarRoteiro: React.FC = () => {
                                                 value={linha.seDigitalMaximoInsercoes_vl || 0}
                                                 onChange={(e) => {
                                                   const novasTabelas = { ...tabelaSimulado };
-                                                  novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
-                                                  novasTabelas[idPracaNumero][index].seDigitalMaximoInsercoes_vl = parseInt(e.target.value) || 0;
+                                                  novasTabelas[idPracaKey] = [...(novasTabelas[idPracaKey] || [])];
+                                                  novasTabelas[idPracaKey][index].seDigitalMaximoInsercoes_vl = parseInt(e.target.value) || 0;
                                                   setTabelaSimulado(novasTabelas);
                                                 }}
                                                 className="w-full px-3 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
@@ -3912,9 +4103,9 @@ export const CriarRoteiro: React.FC = () => {
                                                   value={semana.insercaoComprada || 0}
                                                   onChange={(e) => {
                                                     const novasTabelas = { ...tabelaSimulado };
-                                                    novasTabelas[idPracaNumero] = [...(novasTabelas[idPracaNumero] || [])];
+                                                    novasTabelas[idPracaKey] = [...(novasTabelas[idPracaKey] || [])];
                                                     const valor = parseInt(e.target.value) || 0;
-                                                    novasTabelas[idPracaNumero][index].semanas[semanaIdx].insercaoComprada = valor;
+                                                    novasTabelas[idPracaKey][index].semanas[semanaIdx].insercaoComprada = valor;
                                                     setTabelaSimulado(novasTabelas);
                                                   }}
                                                   className="w-full px-2 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
@@ -3970,6 +4161,8 @@ export const CriarRoteiro: React.FC = () => {
                               )}
                             </button>
                           </div>
+                        )}
+                        </>
                         )}
                       </>
                     )}

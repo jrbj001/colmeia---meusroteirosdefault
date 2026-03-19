@@ -1,11 +1,13 @@
-import { StrictMode } from "react";
+import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Auth0Provider } from "@auth0/auth0-react";
 import { AuthProvider } from "./contexts/AuthContext";
+import { useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute/ProtectedRoute";
 import { Login } from "./screens/Login";
 import { Callback } from "./screens/Callback";
+import { HomeDashboard } from "./screens/HomeDashboard";
 import { MeusRoteiros } from "./screens/MeusRoteiros";
 import { Mapa } from "./screens/Mapa";
 import { CriarRoteiro } from "./screens/CriarRoteiro";
@@ -14,11 +16,24 @@ import { VisualizarResultados } from "./screens/VisualizarResultados";
 import { BancoDeAtivos } from "./screens/BancoDeAtivos";
 import { RelatorioPorPraca } from "./screens/RelatorioPorPraca";
 import { RelatorioPorExibidor } from "./screens/RelatorioPorExibidor";
+import { AdminUsuarios, AdminPerfis } from "./screens/Admin";
 import { PaginaEmDesenvolvimento } from "./components/PaginaEmDesenvolvimento";
+import { AcessoNegado } from "./screens/AcessoNegado/AcessoNegado";
 import '../tailwind.css';
 import 'leaflet/dist/leaflet.css';
 
-createRoot(document.getElementById("app") as HTMLElement).render(
+function AppGuard({ children }: { children: React.ReactNode }) {
+  const { acessoBloqueado } = useAuth();
+  if (acessoBloqueado) return <AcessoNegado />;
+  return <>{children}</>;
+}
+
+const appContainer = document.getElementById("app") as HTMLElement;
+const globalRoot = (globalThis as any).__COLMEIA_APP_ROOT__;
+const root = globalRoot || createRoot(appContainer);
+(globalThis as any).__COLMEIA_APP_ROOT__ = root;
+
+root.render(
   <StrictMode>
     <Auth0Provider
       domain={import.meta.env.VITE_AUTH0_DOMAIN}
@@ -31,11 +46,28 @@ createRoot(document.getElementById("app") as HTMLElement).render(
     >
       <AuthProvider>
         <BrowserRouter>
+        <AppGuard>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/callback" element={<Callback />} />
           <Route 
             path="/" 
+            element={
+              <ProtectedRoute>
+                <HomeDashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route
+            path="/home-dashboard"
+            element={
+              <ProtectedRoute>
+                <HomeDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/meus-roteiros"
             element={
               <ProtectedRoute>
                 <MeusRoteiros />
@@ -53,7 +85,7 @@ createRoot(document.getElementById("app") as HTMLElement).render(
             <Route 
               path="/criar-roteiro" 
               element={
-                <ProtectedRoute>
+                <ProtectedRoute internalOnly>
                   <CriarRoteiro />
                 </ProtectedRoute>
               } 
@@ -69,7 +101,7 @@ createRoot(document.getElementById("app") as HTMLElement).render(
             <Route 
               path="/consulta-endereco" 
               element={
-                <ProtectedRoute>
+                <ProtectedRoute internalOnly>
                   <ConsultaEndereco />
                 </ProtectedRoute>
               } 
@@ -77,7 +109,7 @@ createRoot(document.getElementById("app") as HTMLElement).render(
             <Route 
               path="/banco-de-ativos" 
               element={
-                <ProtectedRoute>
+                <ProtectedRoute internalOnly>
                   <BancoDeAtivos />
                 </ProtectedRoute>
               } 
@@ -158,8 +190,25 @@ createRoot(document.getElementById("app") as HTMLElement).render(
                 </ProtectedRoute>
               } 
             />
+            <Route 
+              path="/admin/usuarios" 
+              element={
+                <ProtectedRoute internalOnly adminOnly>
+                  <AdminUsuarios />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/perfis" 
+              element={
+                <ProtectedRoute internalOnly adminOnly>
+                  <AdminPerfis />
+                </ProtectedRoute>
+              } 
+            />
             <Route path="*" element={<div>Página não encontrada</div>} />
           </Routes>
+        </AppGuard>
         </BrowserRouter>
       </AuthProvider>
     </Auth0Provider>
