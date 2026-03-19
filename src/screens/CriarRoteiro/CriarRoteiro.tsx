@@ -660,10 +660,72 @@ export const CriarRoteiro: React.FC = () => {
     }
   };
 
-  // Callback do ImportarPlanoMidia: navega para Aba 6 após importação
-  const handleImportacaoCompleta = (_planoMidiaImportFile_pk: number | null) => {
-    setAba6Habilitada(true);
-    setAbaAtiva(6);
+  // Callback do ImportarPlanoMidia: executa cadeia do Flow A (Stage 2 e 3) e navega para Aba 6
+  const handleImportacaoCompleta = async (planoMidiaImportFile_pk: number | null) => {
+    if (!planoMidiaGrupo_pk) {
+      const msg = 'planoMidiaGrupo_pk não encontrado para continuar a importação.';
+      mostrarModal(msg, 'error', 'Erro na cadeia de importação');
+      throw new Error(msg);
+    }
+
+    try {
+      // Stage 2: materializar dados importados em planoMidiaDesc + consultaLoop
+      const fromImportResponse = await axios.post('/sp-plano-midia-from-import', {
+        planoMidiaGrupo_pk,
+      });
+
+      if (!fromImportResponse?.data?.success) {
+        throw new Error(fromImportResponse?.data?.message || 'Falha ao executar sp_planoMidiaFromImport.');
+      }
+
+      const linhas = Array.isArray(fromImportResponse.data?.data) ? fromImportResponse.data.data : [];
+      const cidadesSemIbge = linhas.filter((row: any) => !row?.ibgeCode_vl);
+
+      // Stage 3: disparar processamento Databricks do roteiro simulado
+      const now = new Date();
+      const date_dt = now.toISOString().slice(0, 10);
+      const date_dh = now.toISOString().slice(0, 19).replace('T', ' ');
+
+      const databricksResponse = await axios.post('/databricks-roteiro-simulado', {
+        planoMidiaGrupo_pk,
+        date_dh,
+        date_dt,
+      });
+
+      if (!databricksResponse?.data?.success) {
+        throw new Error(databricksResponse?.data?.message || 'Falha ao iniciar o processamento Databricks.');
+      }
+
+      setAba6Habilitada(true);
+      setAbaAtiva(6);
+
+      const summary = fromImportResponse.data?.summary || {};
+      const runId = databricksResponse.data?.data?.run_id;
+
+      let mensagem = `Fluxo de importação concluído com sucesso.\n\n`;
+      mensagem += `• Grupo: #${planoMidiaGrupo_pk}\n`;
+      if (planoMidiaImportFile_pk) mensagem += `• Arquivo importado: #${planoMidiaImportFile_pk}\n`;
+      mensagem += `• Cidades processadas: ${summary.totalCidades ?? linhas.length}\n`;
+      mensagem += `• Registros planoMidia: ${summary.totalPlanoMidia ?? 0}\n`;
+      mensagem += `• Databricks run_id: ${runId || 'N/A'}\n`;
+
+      if (cidadesSemIbge.length > 0) {
+        mensagem += `\n⚠️ ${cidadesSemIbge.length} cidade(s) sem ibgeCode no retorno da SP.`;
+        mostrarModal(mensagem, 'warning', 'Importação concluída com alertas');
+      } else {
+        mostrarModal(mensagem, 'success', 'Importação concluída');
+      }
+    } catch (error: any) {
+      const msg =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        'Erro ao concluir a cadeia da importação OOH.';
+
+      console.error('[Flow A Importação OOH] Erro:', error);
+      mostrarModal(msg, 'error', 'Erro na cadeia de importação');
+      throw new Error(msg);
+    }
   };
 
   // Função para salvar roteiro simulado
@@ -2573,7 +2635,12 @@ export const CriarRoteiro: React.FC = () => {
         agencia_pk,
         marca_pk,
         categoria_pk,
-        valorCampanha_vl
+        valorCampanha_vl,
+        gender_st: genero || null,
+        class_st: classe || null,
+        age_st: faixaEtaria || null,
+        usuarioId_st: user?.id || user?.sub || null,
+        usuarioName_st: user?.name || null,
       });
 
       if (response.data && response.data[0]?.new_pk) {
@@ -2592,7 +2659,7 @@ export const CriarRoteiro: React.FC = () => {
     }
   };
 
-  // Função para salvar Aba 2 - Salvamento puramente local (sem tocar na base)
+  // Função para salvar Aba 2 - Persiste target no planoMidiaGrupo_dm + salva estado local
   const salvarAba2 = async () => {
     if (!planoMidiaGrupo_pk) {
       alert('É necessário salvar a Aba 1 primeiro');
@@ -2606,12 +2673,23 @@ export const CriarRoteiro: React.FC = () => {
 
     setSalvandoAba2(true);
     try {
-      console.log('💾 Salvando Aba 2 localmente - Configuração de target...');
-      
-      // ✅ SALVAMENTO PURAMENTE LOCAL: Não toca na base de dados
-      // Os planoMidiaDesc_pk serão criados apenas na Aba 4 com dados reais
-      
-      // Salvar configuração de target no estado local
+      console.log('💾 Salvando Aba 2 na base + estado local - Configuração de target...');
+
+      const payloadTarget = {
+        planoMidiaGrupo_pk,
+        gender_st: genero,
+        class_st: classe,
+        age_st: faixaEtaria,
+        usuarioId_st: user?.id || user?.sub || null,
+        usuarioName_st: user?.name || null,
+      };
+
+      const targetResponse = await axios.post('/plano-midia-grupo-target', payloadTarget);
+      if (!targetResponse?.data?.success) {
+        throw new Error(targetResponse?.data?.message || 'Não foi possível persistir o target no grupo.');
+      }
+
+      // Salvar configuração de target também no estado local
       setTargetSalvoLocal({
         genero,
         classe,
@@ -2622,7 +2700,7 @@ export const CriarRoteiro: React.FC = () => {
       setAba2Preenchida(true); // Marcar Aba 2 como preenchida
       
       mostrarModal(
-        `Público-alvo configurado: ${genero}, ${classe}, ${faixaEtaria}. Agora selecione as cidades do seu roteiro.`,
+        `Público-alvo configurado e salvo na base: ${genero}, ${classe}, ${faixaEtaria}. Agora selecione as cidades do seu roteiro.`,
         'success',
         '✅ Target Salvo!'
       );

@@ -1,4 +1,4 @@
-const { getPool } = require('./db.js');
+const { sql, getPool } = require('./db.js');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -6,7 +6,18 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { planoMidiaGrupo_st, agencia_pk, marca_pk, categoria_pk, valorCampanha_vl } = req.body;
+    const {
+      planoMidiaGrupo_st,
+      agencia_pk,
+      marca_pk,
+      categoria_pk,
+      valorCampanha_vl,
+      gender_st = null,
+      class_st = null,
+      age_st = null,
+      usuarioId_st = null,
+      usuarioName_st = null,
+    } = req.body;
     
     // Validações
     if (!planoMidiaGrupo_st) {
@@ -26,13 +37,20 @@ module.exports = async function handler(req, res) {
     }
 
     const pool = await getPool();
-    const result = await pool.request()
-      .input('planoMidiaGrupo_st', planoMidiaGrupo_st)
-      .input('agencia_pk', agencia_pk)
-      .input('marca_pk', marca_pk)
-      .input('categoria_pk', categoria_pk)
-      .input('valorCampanha_vl', valorCampanha_vl)
-      .execute('[serv_product_be180].[sp_planoMidiaGrupoInsert]');
+    const request = pool.request()
+      .input('planoMidiaGrupo_st', sql.NVarChar(255), String(planoMidiaGrupo_st))
+      .input('agencia_pk', sql.Int, Number(agencia_pk))
+      .input('marca_pk', sql.Int, Number(marca_pk))
+      .input('categoria_pk', sql.Int, Number(categoria_pk))
+      .input('valorCampanha_vl', sql.Decimal(18, 2), Number(valorCampanha_vl));
+
+    request.input('gender_st', sql.NVarChar(50), gender_st ? String(gender_st) : null);
+    request.input('class_st', sql.NVarChar(50), class_st ? String(class_st) : null);
+    request.input('age_st', sql.NVarChar(50), age_st ? String(age_st) : null);
+    request.input('usuarioId_st', sql.NVarChar(255), usuarioId_st ? String(usuarioId_st) : null);
+    request.input('usuarioName_st', sql.NVarChar(255), usuarioName_st ? String(usuarioName_st) : null);
+
+    const result = await request.execute('[serv_product_be180].[sp_planoMidiaGrupoInsert]');
 
     res.status(200).json(result.recordset);
   } catch (error) {

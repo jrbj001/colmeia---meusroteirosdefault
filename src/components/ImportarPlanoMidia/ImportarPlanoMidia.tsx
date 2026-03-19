@@ -11,8 +11,8 @@ interface ImportarPlanoMidiaProps {
   initialData?: { records: ParsedPlanoRow[]; filename: string } | null;
   /** Recebe a lista de nomes de praça detectados no Excel p/ popular Aba 3 */
   onPracasDetectadas: (pracas: string[]) => void;
-  /** Chamado após importação bem-sucedida */
-  onImportacaoCompleta: (planoMidiaImportFile_pk: number | null) => void;
+  /** Chamado após importação bem-sucedida (pode executar etapas adicionais async) */
+  onImportacaoCompleta: (planoMidiaImportFile_pk: number | null) => void | Promise<void>;
   /** Chamado quando o usuário limpa os dados (opcional) */
   onClear?: () => void;
 }
@@ -150,8 +150,8 @@ export const ImportarPlanoMidia: React.FC<ImportarPlanoMidiaProps> = ({
         throw new Error(data?.message || 'Resposta inesperada da API.');
       }
 
+      await onImportacaoCompleta(data?.planoMidiaImportFile_pk ?? null);
       setStatus('done');
-      onImportacaoCompleta(data?.planoMidiaImportFile_pk ?? null);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
