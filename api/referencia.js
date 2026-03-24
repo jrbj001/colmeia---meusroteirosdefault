@@ -10,6 +10,7 @@ const handlers = {
   'cidade-ibge': require('../handlers/cidade-ibge'),
   'exibidores': require('../handlers/exibidores'),
   'exibidores-praca': require('../handlers/exibidores-praca'),
+  'exibidor-cadastro': require('../handlers/exibidor-cadastro'),
   'bairros': require('../handlers/bairros'),
   'grupos-midia': require('../handlers/grupos-midia'),
   'tipos-midia-indoor': require('../handlers/tipos-midia-indoor'),

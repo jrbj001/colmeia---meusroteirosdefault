@@ -89,6 +89,7 @@
     { "source": "/api/cidade-ibge", "destination": "/api/referencia?action=cidade-ibge" },
     { "source": "/api/exibidores", "destination": "/api/referencia?action=exibidores" },
     { "source": "/api/exibidores-praca", "destination": "/api/referencia?action=exibidores-praca" },
+    { "source": "/api/exibidor-cadastro", "destination": "/api/referencia?action=exibidor-cadastro" },
     { "source": "/api/bairros", "destination": "/api/referencia?action=bairros" },
     { "source": "/api/grupos-midia", "destination": "/api/referencia?action=grupos-midia" },
     { "source": "/api/tipos-midia-indoor", "destination": "/api/referencia?action=tipos-midia-indoor" },

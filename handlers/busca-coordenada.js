@@ -55,8 +55,20 @@ const forwardGeocodeGoogle = async (address, apiKey) => {
   const data = response.data;
 
   if (data.status !== 'OK' || !data.results?.length) {
+    const st = data.status || 'UNKNOWN';
+    const hint =
+      st === 'REQUEST_DENIED'
+        ? 'Chave da API Google inválida ou Geocoding API não habilitada no projeto.'
+        : st === 'OVER_QUERY_LIMIT' || st === 'OVER_DAILY_LIMIT'
+          ? 'Cota da API Google Geocoding excedida. Tente mais tarde ou verifique o billing.'
+          : st === 'ZERO_RESULTS'
+            ? 'Nenhum resultado encontrado para este endereço.'
+            : st === 'INVALID_REQUEST'
+              ? 'Requisição inválida ao Google Geocoding (endereço vazio ou malformado).'
+              : '';
     throw new Error(
-      data.error_message || `Google Geocoding retornou status ${data.status}`,
+      [data.error_message, hint].filter(Boolean).join(' ') ||
+        `Google Geocoding retornou status ${st}`,
     );
   }
 

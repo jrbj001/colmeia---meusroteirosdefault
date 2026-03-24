@@ -278,6 +278,20 @@ export const ConsultaEndereco: React.FC = () => {
       const response = await api.post("/consulta-endereco", { rows: validPayload });
       const data = response.data;
       if (!data?.results) throw new Error("Resposta da API não contém resultados.");
+      if (
+        Array.isArray(data.results) &&
+        data.results.length === 0 &&
+        (data.meta?.validRows ?? 0) > 0
+      ) {
+        const detalhe =
+          Array.isArray(data.errors) && data.errors.length > 0
+            ? String(data.errors[0]?.reason || data.errors[0])
+            : "";
+        setErrorMessage(
+          detalhe ||
+            "Nenhum endereço foi retornado pelo serviço de geocodificação. Verifique cotas da API Google ou tente novamente."
+        );
+      }
       setGeocodeResults(data.results);
       setApiInvalidRows(data.invalidRows || []);
       setApiErrors(data.errors || []);
@@ -286,7 +300,13 @@ export const ConsultaEndereco: React.FC = () => {
       if (data.meta?.invalidRows) addLog(`Coordenadas inválidas: ${data.meta.invalidRows}.`);
       if (data.errors?.length) addLog(`Falhas no provedor: ${data.errors.length}.`);
     } catch (error: any) {
-      setErrorMessage(error.response?.data?.message || error.message || "Falha ao consultar o serviço de endereço.");
+      const net =
+        error?.code === "ERR_NETWORK" || error?.message === "Network Error"
+          ? " Não foi possível contatar o servidor de API. Verifique sua conexão e tente novamente."
+          : "";
+      setErrorMessage(
+        (error.response?.data?.message || error.message || "Falha ao consultar o serviço de endereço.") + net
+      );
       setEnrichStatus("idle");
       addLog("Falha ao consultar o serviço.");
     }
@@ -319,6 +339,20 @@ export const ConsultaEndereco: React.FC = () => {
       const response = await api.post("/busca-coordenada", { rows: payload });
       const data = response.data;
       if (!data?.results) throw new Error("Resposta da API não contém resultados.");
+      if (
+        Array.isArray(data.results) &&
+        data.results.length === 0 &&
+        (data.meta?.validRows ?? 0) > 0
+      ) {
+        const detalhe =
+          Array.isArray(data.errors) && data.errors.length > 0
+            ? String(data.errors[0]?.reason || data.errors[0])
+            : "";
+        setFwdErrorMessage(
+          detalhe ||
+            "Nenhuma coordenada foi retornada pelo serviço de geocodificação. Verifique cotas da API Google ou tente novamente."
+        );
+      }
       setFwdResults(data.results);
       setFwdApiInvalidRows(data.invalidRows || []);
       setFwdApiErrors(data.errors || []);
@@ -327,7 +361,13 @@ export const ConsultaEndereco: React.FC = () => {
       if (data.meta?.invalidRows) addFwdLog(`Endereços inválidos: ${data.meta.invalidRows}.`);
       if (data.errors?.length) addFwdLog(`Falhas no provedor: ${data.errors.length}.`);
     } catch (error: any) {
-      setFwdErrorMessage(error.response?.data?.message || error.message || "Falha ao buscar coordenadas.");
+      const net =
+        error?.code === "ERR_NETWORK" || error?.message === "Network Error"
+          ? " Não foi possível contatar o servidor de API. Verifique sua conexão e tente novamente."
+          : "";
+      setFwdErrorMessage(
+        (error.response?.data?.message || error.message || "Falha ao buscar coordenadas.") + net
+      );
       setFwdEnrichStatus("idle");
       addFwdLog("Falha ao consultar o serviço.");
     }
