@@ -1,4 +1,6 @@
 const axios = require('axios');
+const https = require('https');
+const http = require('http');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -9,13 +11,26 @@ const GOOGLE_API_KEYS = [
   'MAPS_API_KEY',
 ];
 
+const AXIOS_TIMEOUT_MS = 12000;
+
+const httpAgent = new http.Agent({ keepAlive: false });
+const httpsAgent = new https.Agent({ keepAlive: false });
+
 const getGoogleApiKey = () => {
   for (const key of GOOGLE_API_KEYS) {
-    if (process.env[key]) {
-      return process.env[key];
+    const val = process.env[key];
+    if (val && val.trim()) {
+      return val.trim();
     }
   }
   return null;
+};
+
+const withTimeout = (promise, ms, label) => {
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`Timeout (${ms}ms) ao chamar ${label}`)), ms),
+  );
+  return Promise.race([promise, timeout]);
 };
 
 const buildAddressString = (row) => {
@@ -42,15 +57,16 @@ const buildAddressString = (row) => {
 const forwardGeocodeGoogle = async (address, apiKey) => {
   const url = 'https://maps.googleapis.com/maps/api/geocode/json';
 
-  const response = await axios.get(url, {
-    params: {
-      address,
-      key: apiKey,
-      language: 'pt-BR',
-      region: 'br',
-    },
-    timeout: 15000,
-  });
+  const response = await withTimeout(
+    axios.get(url, {
+      params: { address, key: apiKey, language: 'pt-BR', region: 'br' },
+      timeout: AXIOS_TIMEOUT_MS,
+      httpsAgent,
+      httpAgent,
+    }),
+    AXIOS_TIMEOUT_MS + 1000,
+    'Google Geocoding',
+  );
 
   const data = response.data;
 
@@ -97,20 +113,20 @@ const forwardGeocodeGoogle = async (address, apiKey) => {
 const forwardGeocodeNominatim = async (address) => {
   const url = 'https://nominatim.openstreetmap.org/search';
 
-  const response = await axios.get(url, {
-    params: {
-      q: address,
-      format: 'json',
-      addressdetails: 1,
-      limit: 1,
-      countrycodes: 'br',
-    },
-    headers: {
-      'User-Agent': 'colmeia-meusroteirosdefault/1.0 (+https://colmeia.dev)',
-      Accept: 'application/json',
-    },
-    timeout: 15000,
-  });
+  const response = await withTimeout(
+    axios.get(url, {
+      params: { q: address, format: 'json', addressdetails: 1, limit: 1, countrycodes: 'br' },
+      headers: {
+        'User-Agent': 'colmeia-meusroteirosdefault/1.0 (+https://colmeia.dev)',
+        Accept: 'application/json',
+      },
+      timeout: AXIOS_TIMEOUT_MS,
+      httpsAgent,
+      httpAgent,
+    }),
+    AXIOS_TIMEOUT_MS + 1000,
+    'Nominatim',
+  );
 
   const data = response.data;
 

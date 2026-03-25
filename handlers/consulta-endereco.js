@@ -1,6 +1,20 @@
 const axios = require('axios');
+const https = require('https');
+const http = require('http');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const AXIOS_TIMEOUT_MS = 12000;
+
+const httpAgent = new http.Agent({ keepAlive: false });
+const httpsAgent = new https.Agent({ keepAlive: false });
+
+const withTimeout = (promise, ms, label) => {
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`Timeout (${ms}ms) ao chamar ${label}`)), ms),
+  );
+  return Promise.race([promise, timeout]);
+};
 
 const GOOGLE_API_KEYS = [
   'GOOGLE_MAPS_API_KEY',
@@ -55,14 +69,16 @@ const sanitizeKey = (lat, lng, precision = 6) => {
 const reverseGeocodeGoogle = async (lat, lng, apiKey) => {
   const url = 'https://maps.googleapis.com/maps/api/geocode/json';
 
-  const response = await axios.get(url, {
-    params: {
-      latlng: `${lat},${lng}`,
-      key: apiKey,
-      language: 'pt-BR',
-    },
-    timeout: 15000,
-  });
+  const response = await withTimeout(
+    axios.get(url, {
+      params: { latlng: `${lat},${lng}`, key: apiKey, language: 'pt-BR' },
+      timeout: AXIOS_TIMEOUT_MS,
+      httpsAgent,
+      httpAgent,
+    }),
+    AXIOS_TIMEOUT_MS + 1000,
+    'Google Reverse Geocoding',
+  );
 
   const data = response.data;
 
@@ -110,20 +126,20 @@ const reverseGeocodeGoogle = async (lat, lng, apiKey) => {
 const reverseGeocodeNominatim = async (lat, lng) => {
   const url = 'https://nominatim.openstreetmap.org/reverse';
 
-  const response = await axios.get(url, {
-    params: {
-      lat,
-      lon: lng,
-      format: 'json',
-      addressdetails: 1,
-      zoom: 18,
-    },
-    headers: {
-      'User-Agent': 'colmeia-meusroteirosdefault/1.0 (+https://colmeia.dev)',
-      Accept: 'application/json',
-    },
-    timeout: 15000,
-  });
+  const response = await withTimeout(
+    axios.get(url, {
+      params: { lat, lon: lng, format: 'json', addressdetails: 1, zoom: 18 },
+      headers: {
+        'User-Agent': 'colmeia-meusroteirosdefault/1.0 (+https://colmeia.dev)',
+        Accept: 'application/json',
+      },
+      timeout: AXIOS_TIMEOUT_MS,
+      httpsAgent,
+      httpAgent,
+    }),
+    AXIOS_TIMEOUT_MS + 1000,
+    'Nominatim Reverse',
+  );
 
   const data = response.data;
 
@@ -164,8 +180,9 @@ const reverseGeocodeNominatim = async (lat, lng) => {
 
 const getGoogleApiKey = () => {
   for (const key of GOOGLE_API_KEYS) {
-    if (process.env[key]) {
-      return process.env[key];
+    const val = process.env[key];
+    if (val && val.trim()) {
+      return val.trim();
     }
   }
   return null;
