@@ -20,7 +20,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
   const { isAdmin } = usePermissions();
   const { isAgencia, isExibidor } = useAuth();
   const [bancoAtivosAberto, setBancoAtivosAberto] = useState(false);
-  const [baseExibidorAberta, setBaseExibidorAberta] = useState(false);
+  const [atualizarInventarioAberto, setAtualizarInventarioAberto] = useState(false);
   const [adminAberto, setAdminAberto] = useState(false);
   
   // Verificar se estamos em alguma rota do banco de ativos para abrir o submenu automaticamente
@@ -40,17 +40,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
       setBancoAtivosAberto(true);
     }
 
-    const rotasBaseExibidor = [
-      '/exibidor',
-      '/exibidor/dashboard',
-      '/exibidor/inventario-atual',
+    const rotasAtualizarInventario = [
       '/exibidor/importar',
+      '/exibidor/enviados',
       '/exibidor/editar',
       '/exibidor/excluir',
-      '/exibidor/solicitacoes',
     ];
-    if (rotasBaseExibidor.some((rota) => location.pathname.startsWith(rota))) {
-      setBaseExibidorAberta(true);
+    if (rotasAtualizarInventario.some((rota) => location.pathname.startsWith(rota))) {
+      setAtualizarInventarioAberto(true);
     }
 
     // Abrir submenu de admin automaticamente
@@ -73,72 +70,97 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
       <nav className={`space-y-4 w-full ${menuReduzido ? "flex flex-col items-center" : ""}`}>
         {isExibidor ? (
           <>
+            {/* Visão geral (Dashboard) */}
+            <Link to="/exibidor/dashboard" className="block">
+              <div className={`flex items-center gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
+                location.pathname === '/exibidor/dashboard' || location.pathname === '/' ? 'bg-[#ededed] text-[#222]' : ''
+              }`}>
+                <svg className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10.75L12 3l9 7.75V20a1 1 0 01-1 1h-5.5a1 1 0 01-1-1v-4.5h-3V20a1 1 0 01-1 1H4a1 1 0 01-1-1v-9.25z" />
+                </svg>
+                {!menuReduzido && (
+                  <span className="font-medium text-sm text-[#757575] tracking-[0.50px] group-hover:text-[#222] transition-colors duration-200">
+                    Visão geral
+                  </span>
+                )}
+              </div>
+            </Link>
+
+            {/* Meu inventário */}
+            <Link to="/exibidor/inventario" className="block">
+              <div className={`flex items-center gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
+                location.pathname.startsWith('/exibidor/inventario') ? 'bg-[#ededed] text-[#222]' : ''
+              }`}>
+                <FindInPage className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" color="#757575" />
+                {!menuReduzido && (
+                  <span className="font-medium text-sm text-[#757575] tracking-[0.50px] group-hover:text-[#222] transition-colors duration-200">
+                    Meu inventário
+                  </span>
+                )}
+              </div>
+            </Link>
+
+            {/* Atualizar inventário (submenu) */}
             {!menuReduzido ? (
               <div className="w-full">
                 <button
-                  onClick={() => setBaseExibidorAberta(!baseExibidorAberta)}
+                  onClick={() => setAtualizarInventarioAberto(!atualizarInventarioAberto)}
                   className={`w-full flex items-center justify-between gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
-                    location.pathname.startsWith('/exibidor') ? 'bg-[#ededed] text-[#222]' : ''
+                    ['/exibidor/importar', '/exibidor/enviados', '/exibidor/editar', '/exibidor/excluir'].some((r) => location.pathname.startsWith(r)) ? 'bg-[#ededed] text-[#222]' : ''
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <FindInPage className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" color="#757575" />
+                    <AddBox className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" color="#757575" />
                     <span className="font-bold text-sm text-[#757575] group-hover:text-[#222] transition-colors duration-200">
-                      Base de inventário
+                      Atualizar inventário
                     </span>
                   </div>
                   <KeyboardArrowDown
                     className={`w-5 h-5 transition-all duration-200 ${
-                      baseExibidorAberta
+                      atualizarInventarioAberto
                         ? 'transform rotate-180 text-[#222]'
                         : 'text-[#757575] group-hover:text-[#222]'
                     }`}
                   />
                 </button>
 
-                {baseExibidorAberta && (
+                {atualizarInventarioAberto && (
                   <div className="ml-4 mt-2 space-y-0.5">
-                    <Link to="/exibidor/inventario-atual" className="block">
-                      <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
-                        location.pathname === '/exibidor/inventario-atual' ? 'text-[#ff4600] font-medium' : 'text-[#3a3a3a] hover:bg-[#ededed]'
-                      }`}>
-                        Inventário atual
-                      </div>
-                    </Link>
                     <Link to="/exibidor/importar" className="block">
                       <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
                         location.pathname === '/exibidor/importar' ? 'text-[#ff4600] font-medium' : 'text-[#3a3a3a] hover:bg-[#ededed]'
                       }`}>
-                        Importar pontos
+                        Importar nova base
                       </div>
                     </Link>
                     <Link to="/exibidor/editar" className="block">
                       <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
                         location.pathname === '/exibidor/editar' ? 'text-[#ff4600] font-medium' : 'text-[#3a3a3a] hover:bg-[#ededed]'
                       }`}>
-                        Editar pontos
+                        Editar pontos enviados
                       </div>
                     </Link>
                     <Link to="/exibidor/excluir" className="block">
                       <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
                         location.pathname === '/exibidor/excluir' ? 'text-[#ff4600] font-medium' : 'text-[#3a3a3a] hover:bg-[#ededed]'
                       }`}>
-                        Excluir pontos
+                        Excluir pontos enviados
                       </div>
                     </Link>
                   </div>
                 )}
               </div>
             ) : (
-              <Link to="/exibidor/dashboard" className="block">
+              <Link to="/exibidor/importar" className="block">
                 <div className={`flex items-center gap-2.5 group hover:bg-[#ededed] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
-                  location.pathname.startsWith('/exibidor') ? 'bg-[#ededed] text-[#222]' : ''
+                  ['/exibidor/importar', '/exibidor/editar', '/exibidor/excluir'].some((r) => location.pathname.startsWith(r)) ? 'bg-[#ededed] text-[#222]' : ''
                 }`}>
-                  <FindInPage className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" color="#757575" />
+                  <AddBox className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" color="#757575" />
                 </div>
               </Link>
             )}
 
+            {/* Solicitações */}
             <Link to="/exibidor/solicitacoes" className="block">
               <div className={`flex items-center gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
                 location.pathname === '/exibidor/solicitacoes' ? 'bg-[#ededed] text-[#222]' : ''

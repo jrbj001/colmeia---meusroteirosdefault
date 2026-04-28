@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../../config/axios';
 import { ExibidorShell } from './components/ExibidorShell';
+import { AvisoFluxoAtualizacao } from './components/AvisoFluxoAtualizacao';
 
 interface ItemInventario {
   item_pk: number;
@@ -69,11 +70,17 @@ export const ExibidorEditar: React.FC = () => {
 
   return (
     <ExibidorShell
-      title="Edição de pontos de mídia"
-      subtitle="Busque e edite informações dos ativos importados."
-      breadcrumb={[{ label: 'Home', path: '/' }, { label: 'Base de inventário' }, { label: 'Editar pontos' }]}
+      title="Editar pontos enviados"
+      subtitle="Apenas pontos enviados pelo exibidor podem ser editados aqui — o legado BE180 é gerenciado pela equipe da BE180."
+      breadcrumb={[
+        { label: 'Home', path: '/' },
+        { label: 'Atualizar inventário' },
+        { label: 'Editar pontos enviados' },
+      ]}
     >
       <div className="space-y-6">
+        <AvisoFluxoAtualizacao descricao="As edições feitas aqui voltam para análise antes de serem aplicadas no inventário consolidado." />
+
         <section className="bg-[#fafafa] border border-[#ddd] rounded-xl p-4">
           <label className="block text-sm font-semibold text-[#3a3a3a] mb-2">Buscar pelo código do ponto ativo</label>
           <div className="flex gap-3">

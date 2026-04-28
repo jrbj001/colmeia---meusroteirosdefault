@@ -516,25 +516,314 @@ async function getSolicitacaoDetalhe(req, res, pool) {
 
 async function getDashboard(req, res, pool) {
   const exibidorFk = Number(req.headers['x-user-exibidor-fk'] || 0) || null;
-  const request = pool.request();
 
-  let loteFilter = '';
+  // Métricas do legado (bancoAtivosJoin_ft) — base consolidada do exibidor
+  const reqLegado = pool.request();
+  let legadoWhere = 'WHERE b.valid_bl = 1';
   if (exibidorFk) {
-    request.input('exibidor_fk', sql.Int, exibidorFk);
-    loteFilter = 'AND lote_fk IN (SELECT lote_pk FROM [serv_product_be180].[exibidor_inventario_upload_lote_dm] WHERE exibidor_fk = @exibidor_fk)';
+    reqLegado.input('exibidor_fk', sql.Int, exibidorFk);
+    legadoWhere += ' AND b.exibidor_fk = @exibidor_fk';
+  }
+  const legado = await reqLegado.query(`
+    SELECT
+      COUNT(1)                                                         AS totalPontosLegado_vl,
+      COUNT(DISTINCT ISNULL(NULLIF(LTRIM(RTRIM(b.cidade_st)),''),'X')) AS pracasLegado_vl,
+      SUM(CASE WHEN LOWER(b.environment_st) LIKE '%public%' THEN 1 ELSE 0 END) AS viasPublicasLegado_vl,
+      SUM(CASE WHEN LOWER(b.environment_st) LIKE '%indoor%' THEN 1 ELSE 0 END) AS indoorLegado_vl
+    FROM [serv_product_be180].[bancoAtivosJoin_ft] b
+    ${legadoWhere}
+  `);
+
+  // Métricas do novo (uploads do exibidor)
+  const reqNovo = pool.request();
+  let loteFilter = '';
+  let loteFilterStandalone = '';
+  if (exibidorFk) {
+    reqNovo.input('exibidor_fk', sql.Int, exibidorFk);
+    loteFilter = 'AND i.lote_fk IN (SELECT lote_pk FROM [serv_product_be180].[exibidor_inventario_upload_lote_dm] WHERE exibidor_fk = @exibidor_fk)';
+    loteFilterStandalone = 'AND exibidor_fk = @exibidor_fk';
+  }
+  const novo = await reqNovo.query(`
+    SELECT
+      (SELECT COUNT(1) FROM [serv_product_be180].[exibidor_inventario_item_dm] i WHERE i.delete_bl = 0 ${loteFilter}) AS totalPontosNovo_vl,
+      (SELECT COUNT(1) FROM [serv_product_be180].[exibidor_inventario_item_dm] i WHERE i.delete_bl = 0 AND i.status_st = 'APROVADO' ${loteFilter}) AS aprovadosNovo_vl,
+      (SELECT COUNT(1) FROM [serv_product_be180].[exibidor_inventario_upload_lote_dm] WHERE status_st = 'EM_ANALISE' ${loteFilterStandalone}) AS emAnalise_vl,
+      (SELECT COUNT(1) FROM [serv_product_be180].[exibidor_inventario_upload_lote_dm] WHERE status_st = 'PARA_CORRIGIR' ${loteFilterStandalone}) AS revisaoPendente_vl,
+      (SELECT MAX(dataAtualizacao_dh) FROM [serv_product_be180].[exibidor_inventario_upload_lote_dm] WHERE 1=1 ${loteFilterStandalone}) AS ultimaAtualizacao_dh
+  `);
+
+  const l = legado.recordset[0] || {};
+  const n = novo.recordset[0] || {};
+
+  return res.status(200).json({
+    success: true,
+    data: {
+      // consolidado = legado + novo aprovado
+      totalPontos_vl: Number(l.totalPontosLegado_vl || 0) + Number(n.aprovadosNovo_vl || 0),
+      pracas_vl: Number(l.pracasLegado_vl || 0),
+      viasPublicas_vl: Number(l.viasPublicasLegado_vl || 0),
+      indoor_vl: Number(l.indoorLegado_vl || 0),
+      // breakdown por origem
+      legado_vl: Number(l.totalPontosLegado_vl || 0),
+      novoAprovado_vl: Number(n.aprovadosNovo_vl || 0),
+      novoTotal_vl: Number(n.totalPontosNovo_vl || 0),
+      // status de solicitações
+      emAnalise_vl: Number(n.emAnalise_vl || 0),
+      revisaoPendente_vl: Number(n.revisaoPendente_vl || 0),
+      ultimaAtualizacao_dh: n.ultimaAtualizacao_dh || null,
+    },
+  });
+}
+
+// Pontos do exibidor para o mapa (legado + novo aprovado, com lat/long)
+async function getMapa(req, res, pool) {
+  const exibidorFk = Number(req.headers['x-user-exibidor-fk'] || 0) || null;
+  if (!exibidorFk) {
+    return res.status(400).json({ success: false, error: 'Exibidor não identificado' });
   }
 
-  const result = await request.query(`
+  const origem = parseString(req.query.origem) || 'todos'; // todos | legado | exibidor
+  const tipoAmbiente = parseString(req.query.tipo_ambiente); // indoor | vias_publicas | null
+
+  const partes = [];
+
+  if (origem === 'todos' || origem === 'legado') {
+    const reqL = pool.request().input('exibidor_fk', sql.Int, exibidorFk);
+    let whereL = `WHERE b.valid_bl = 1 AND b.exibidor_fk = @exibidor_fk
+                    AND b.latitude IS NOT NULL AND b.longitude IS NOT NULL
+                    AND CAST(b.latitude AS FLOAT) <> 0 AND CAST(b.longitude AS FLOAT) <> 0`;
+    if (tipoAmbiente === 'indoor') whereL += " AND LOWER(b.environment_st) LIKE '%indoor%'";
+    if (tipoAmbiente === 'vias_publicas') whereL += " AND LOWER(b.environment_st) LIKE '%public%'";
+
+    const r = await reqL.query(`
+      SELECT TOP 20000
+        b.pk                                AS id,
+        b.code                              AS code,
+        CAST(b.latitude AS FLOAT)           AS latitude,
+        CAST(b.longitude AS FLOAT)          AS longitude,
+        b.cidade_st                         AS cidade,
+        b.estado_st                         AS estado,
+        b.district                          AS bairro,
+        b.tipoMidia_st                      AS tipo_midia,
+        b.environment_st                    AS ambiente,
+        b.media_format_st                   AS formato,
+        b.grupo_st                          AS grupo,
+        b.exibidor_st                       AS exibidor,
+        ISNULL(CAST(b.pedestrian_flow AS FLOAT), 0)    AS passantes,
+        ISNULL(CAST(b.total_ipv_impact AS FLOAT), 0)   AS impactos_ipv,
+        b.social_class_geo                  AS rating,
+        'legado'                            AS origem
+      FROM [serv_product_be180].[bancoAtivosJoin_ft] b
+      ${whereL}
+    `);
+    partes.push(...r.recordset);
+  }
+
+  if (origem === 'todos' || origem === 'exibidor') {
+    const reqE = pool.request().input('exibidor_fk', sql.Int, exibidorFk);
+    let whereE = `WHERE i.delete_bl = 0 AND i.status_st = 'APROVADO'
+                    AND i.latitude_vl IS NOT NULL AND i.longitude_vl IS NOT NULL
+                    AND l.exibidor_fk = @exibidor_fk`;
+    if (tipoAmbiente === 'indoor') whereE += " AND LOWER(ISNULL(i.mapped_ambiente_st, i.ambiente_st)) LIKE '%indoor%'";
+    if (tipoAmbiente === 'vias_publicas') whereE += " AND (LOWER(ISNULL(i.mapped_ambiente_st, i.ambiente_st)) LIKE '%public%' OR LOWER(ISNULL(i.mapped_ambiente_st, i.ambiente_st)) LIKE '%via%')";
+
+    const r = await reqE.query(`
+      SELECT TOP 20000
+        i.item_pk                           AS id,
+        i.codigo_ativo_st                   AS code,
+        CAST(i.latitude_vl AS FLOAT)        AS latitude,
+        CAST(i.longitude_vl AS FLOAT)       AS longitude,
+        CAST(NULL AS NVARCHAR(150))         AS cidade,
+        CAST(NULL AS NVARCHAR(10))          AS estado,
+        CAST(NULL AS NVARCHAR(150))         AS bairro,
+        ISNULL(i.mapped_tipo_st, i.tipo_midia_st)         AS tipo_midia,
+        ISNULL(i.mapped_ambiente_st, i.ambiente_st)       AS ambiente,
+        ISNULL(i.mapped_formato_st, i.formato_midia_st)   AS formato,
+        CAST(NULL AS NVARCHAR(150))         AS grupo,
+        CAST(NULL AS NVARCHAR(255))         AS exibidor,
+        CAST(0 AS FLOAT)                    AS passantes,
+        CAST(0 AS FLOAT)                    AS impactos_ipv,
+        CAST(NULL AS NVARCHAR(20))          AS rating,
+        'exibidor'                          AS origem
+      FROM [serv_product_be180].[exibidor_inventario_item_dm] i
+      JOIN [serv_product_be180].[exibidor_inventario_upload_lote_dm] l ON l.lote_pk = i.lote_fk
+      ${whereE}
+    `);
+    partes.push(...r.recordset);
+  }
+
+  return res.status(200).json({
+    success: true,
+    total: partes.length,
+    data: partes,
+  });
+}
+
+// Visão consolidada (legado + novo aprovado) com paginação e filtros
+async function getConsolidado(req, res, pool) {
+  const exibidorFk = Number(req.headers['x-user-exibidor-fk'] || 0) || null;
+  if (!exibidorFk) {
+    return res.status(400).json({ success: false, error: 'Exibidor não identificado' });
+  }
+
+  const page = Math.max(1, Number(req.query.page || 1));
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit || 100)));
+  const offset = (page - 1) * limit;
+  const search = parseString(req.query.search);
+  const cidadeFiltro = parseString(req.query.cidade);
+  const tipoFiltro = parseString(req.query.tipo);
+  const origemFiltro = parseString(req.query.origem); // legado | exibidor | null
+
+  // Construímos UNION ALL para legado + novo aprovado
+  const reqUnion = pool.request().input('exibidor_fk', sql.Int, exibidorFk);
+  const filtrosLegado = ['b.valid_bl = 1', 'b.exibidor_fk = @exibidor_fk'];
+  const filtrosNovo = ['i.delete_bl = 0', "i.status_st = 'APROVADO'", 'l.exibidor_fk = @exibidor_fk'];
+
+  if (search) {
+    reqUnion.input('search', sql.NVarChar(255), `%${search}%`);
+    filtrosLegado.push('(b.code LIKE @search OR b.cidade_st LIKE @search OR b.tipoMidia_st LIKE @search)');
+    filtrosNovo.push('(i.codigo_ativo_st LIKE @search OR i.tipo_midia_st LIKE @search OR i.nome_fantasia_st LIKE @search)');
+  }
+  if (cidadeFiltro) {
+    reqUnion.input('cidade', sql.NVarChar(150), cidadeFiltro);
+    filtrosLegado.push('b.cidade_st = @cidade');
+    // novo não tem cidade ainda — exclui por filtro
+    filtrosNovo.push('1 = 0');
+  }
+  if (tipoFiltro) {
+    reqUnion.input('tipo', sql.NVarChar(150), tipoFiltro);
+    filtrosLegado.push('b.tipoMidia_st = @tipo');
+    filtrosNovo.push('ISNULL(i.mapped_tipo_st, i.tipo_midia_st) = @tipo');
+  }
+
+  const sqlLegado = `
     SELECT
-      (SELECT COUNT(1) FROM [serv_product_be180].[exibidor_inventario_item_dm] WHERE delete_bl = 0 ${loteFilter}) AS totalPontos_vl,
-      (SELECT COUNT(DISTINCT ISNULL(NULLIF(LTRIM(RTRIM(cidade_st)), ''), 'SEM_CIDADE')) FROM [serv_product_be180].[exibidor_dm] WHERE delete_bl = 0) AS pracas_vl,
-      (SELECT COUNT(1) FROM [serv_product_be180].[exibidor_inventario_item_dm] WHERE delete_bl = 0 AND ambiente_st = 'Vias públicas' ${loteFilter}) AS viasPublicas_vl,
-      (SELECT COUNT(1) FROM [serv_product_be180].[exibidor_inventario_item_dm] WHERE delete_bl = 0 AND ambiente_st = 'Indoor' ${loteFilter}) AS indoor_vl,
-      (SELECT COUNT(1) FROM [serv_product_be180].[exibidor_inventario_upload_lote_dm] WHERE status_st = 'EM_ANALISE' ${exibidorFk ? 'AND exibidor_fk = @exibidor_fk' : ''}) AS emAnalise_vl,
-      (SELECT COUNT(1) FROM [serv_product_be180].[exibidor_inventario_upload_lote_dm] WHERE status_st = 'PARA_CORRIGIR' ${exibidorFk ? 'AND exibidor_fk = @exibidor_fk' : ''}) AS revisaoPendente_vl,
-      (SELECT MAX(dataAtualizacao_dh) FROM [serv_product_be180].[exibidor_inventario_upload_lote_dm] ${exibidorFk ? 'WHERE exibidor_fk = @exibidor_fk' : ''}) AS ultimaAtualizacao_dh
+      CONCAT('L_', b.pk)                  AS row_id,
+      b.pk                                AS pk,
+      'legado'                            AS origem,
+      b.code                              AS code,
+      b.cidade_st                         AS cidade,
+      b.estado_st                         AS estado,
+      b.tipoMidia_st                      AS tipo_midia,
+      b.environment_st                    AS ambiente,
+      b.media_format_st                   AS formato,
+      b.grupo_st                          AS grupo,
+      CAST(b.latitude AS FLOAT)           AS latitude,
+      CAST(b.longitude AS FLOAT)          AS longitude
+    FROM [serv_product_be180].[bancoAtivosJoin_ft] b
+    WHERE ${filtrosLegado.join(' AND ')}
+  `;
+  const sqlNovo = `
+    SELECT
+      CONCAT('N_', i.item_pk)             AS row_id,
+      i.item_pk                           AS pk,
+      'exibidor'                          AS origem,
+      i.codigo_ativo_st                   AS code,
+      CAST(NULL AS NVARCHAR(150))         AS cidade,
+      CAST(NULL AS NVARCHAR(10))          AS estado,
+      ISNULL(i.mapped_tipo_st, i.tipo_midia_st)         AS tipo_midia,
+      ISNULL(i.mapped_ambiente_st, i.ambiente_st)       AS ambiente,
+      ISNULL(i.mapped_formato_st, i.formato_midia_st)   AS formato,
+      CAST(NULL AS NVARCHAR(150))         AS grupo,
+      CAST(i.latitude_vl AS FLOAT)        AS latitude,
+      CAST(i.longitude_vl AS FLOAT)       AS longitude
+    FROM [serv_product_be180].[exibidor_inventario_item_dm] i
+    JOIN [serv_product_be180].[exibidor_inventario_upload_lote_dm] l ON l.lote_pk = i.lote_fk
+    WHERE ${filtrosNovo.join(' AND ')}
+  `;
+
+  let unionQuery;
+  if (origemFiltro === 'legado') unionQuery = sqlLegado;
+  else if (origemFiltro === 'exibidor') unionQuery = sqlNovo;
+  else unionQuery = `${sqlLegado} UNION ALL ${sqlNovo}`;
+
+  reqUnion.input('offset', sql.Int, offset).input('limit', sql.Int, limit);
+
+  const totalRes = await reqUnion.query(`SELECT COUNT(1) AS total FROM (${unionQuery}) u`);
+  const total = totalRes.recordset[0]?.total || 0;
+
+  const dataRes = await reqUnion.query(`
+    SELECT *
+    FROM (${unionQuery}) u
+    ORDER BY u.cidade, u.code
+    OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
   `);
-  return res.status(200).json({ success: true, data: result.recordset[0] || {} });
+
+  // Stats agregadas (sem paginação)
+  const reqStats = pool.request().input('exibidor_fk', sql.Int, exibidorFk);
+  const stats = await reqStats.query(`
+    SELECT
+      (SELECT COUNT(1) FROM [serv_product_be180].[bancoAtivosJoin_ft] b WHERE b.valid_bl=1 AND b.exibidor_fk=@exibidor_fk) AS legado_vl,
+      (SELECT COUNT(1) FROM [serv_product_be180].[exibidor_inventario_item_dm] i
+        JOIN [serv_product_be180].[exibidor_inventario_upload_lote_dm] l ON l.lote_pk=i.lote_fk
+        WHERE i.delete_bl=0 AND i.status_st='APROVADO' AND l.exibidor_fk=@exibidor_fk) AS exibidor_vl
+  `);
+
+  return res.status(200).json({
+    success: true,
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    stats: stats.recordset[0] || { legado_vl: 0, exibidor_vl: 0 },
+    data: dataRes.recordset,
+  });
+}
+
+// Detalhe completo de um ponto (legado ou exibidor)
+async function getDetalhePonto(req, res, pool) {
+  const exibidorFk = Number(req.headers['x-user-exibidor-fk'] || 0) || null;
+  if (!exibidorFk) {
+    return res.status(400).json({ success: false, error: 'Exibidor não identificado' });
+  }
+  const origem = parseString(req.query.origem); // legado | exibidor
+  const pk = Number(req.query.pk || 0);
+  if (!origem || !pk) {
+    return res.status(400).json({ success: false, error: 'Informe origem e pk' });
+  }
+
+  if (origem === 'legado') {
+    const r = await pool.request()
+      .input('pk', sql.Int, pk)
+      .input('exibidor_fk', sql.Int, exibidorFk)
+      .query(`
+        SELECT TOP 1
+          b.pk, b.code, b.cidade_st, b.estado_st, b.district AS bairro_st,
+          b.exibidor_st, b.tipoMidia_st, b.environment_st, b.media_format_st,
+          b.grupo_st, b.grupoSub_st, b.categoria_st,
+          CAST(b.latitude AS FLOAT) AS latitude, CAST(b.longitude AS FLOAT) AS longitude,
+          ISNULL(CAST(b.pedestrian_flow AS FLOAT), 0)  AS passantes_vl,
+          ISNULL(CAST(b.total_ipv_impact AS FLOAT), 0) AS impactos_vl,
+          b.social_class_geo AS rating_st
+        FROM [serv_product_be180].[bancoAtivosJoin_ft] b
+        WHERE b.pk = @pk AND b.exibidor_fk = @exibidor_fk AND b.valid_bl = 1
+      `);
+    if (!r.recordset[0]) return res.status(404).json({ success: false, error: 'Ponto não encontrado' });
+    return res.status(200).json({ success: true, origem: 'legado', data: r.recordset[0] });
+  }
+
+  if (origem === 'exibidor') {
+    const r = await pool.request()
+      .input('pk', sql.Int, pk)
+      .input('exibidor_fk', sql.Int, exibidorFk)
+      .query(`
+        SELECT TOP 1
+          i.item_pk AS pk, i.codigo_ativo_st AS code, i.nome_fantasia_st,
+          CAST(i.latitude_vl AS FLOAT) AS latitude, CAST(i.longitude_vl AS FLOAT) AS longitude,
+          i.ambiente_st, i.formato_midia_st, i.tipo_midia_st,
+          i.mapped_ambiente_st, i.mapped_formato_st, i.mapped_tipo_st, i.mapped_bl,
+          i.valor_tabela_vl, i.periodo_tabela_st,
+          i.area_total_largura_vl, i.area_total_altura_vl, i.area_total_unidade_st,
+          i.area_visual_largura_vl, i.area_visual_altura_vl, i.area_visual_unidade_st,
+          i.substrato_st, i.especificacoes_st, i.secundagem_st, i.observacoes_st,
+          i.status_st, i.erroValidacao_st,
+          l.lote_pk AS lote_pk, l.arquivo_st AS lote_arquivo_st, l.dataCriacao_dh AS lote_dataCriacao_dh
+        FROM [serv_product_be180].[exibidor_inventario_item_dm] i
+        JOIN [serv_product_be180].[exibidor_inventario_upload_lote_dm] l ON l.lote_pk = i.lote_fk
+        WHERE i.item_pk = @pk AND l.exibidor_fk = @exibidor_fk AND i.delete_bl = 0
+      `);
+    if (!r.recordset[0]) return res.status(404).json({ success: false, error: 'Ponto não encontrado' });
+    return res.status(200).json({ success: true, origem: 'exibidor', data: r.recordset[0] });
+  }
+
+  return res.status(400).json({ success: false, error: 'Origem inválida' });
 }
 
 async function getLegado(req, res, pool) {
@@ -800,6 +1089,9 @@ module.exports = async (req, res) => {
       if (mode === 'dashboard') return getDashboard(req, res, pool);
       if (mode === 'places-queue') return listPlacesQueue(res, pool);
       if (mode === 'legado') return getLegado(req, res, pool);
+      if (mode === 'mapa') return getMapa(req, res, pool);
+      if (mode === 'consolidado') return getConsolidado(req, res, pool);
+      if (mode === 'detalhe-ponto') return getDetalhePonto(req, res, pool);
       return listItens(req, res, pool);
     }
 

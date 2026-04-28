@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../config/axios';
 import { ExibidorShell } from './components/ExibidorShell';
+import { AvisoFluxoAtualizacao } from './components/AvisoFluxoAtualizacao';
 
 interface ItemInventario {
   item_pk: number;
@@ -52,11 +53,17 @@ export const ExibidorExcluir: React.FC = () => {
 
   return (
     <ExibidorShell
-      title="Exclusão de pontos de mídia"
-      subtitle="Busque e selecione os pontos de mídia que deseja excluir do sistema."
-      breadcrumb={[{ label: 'Home', path: '/' }, { label: 'Base de inventário' }, { label: 'Excluir pontos' }]}
+      title="Excluir pontos enviados"
+      subtitle="Remove pontos da fila de envio do exibidor. O legado BE180 não pode ser excluído por aqui."
+      breadcrumb={[
+        { label: 'Home', path: '/' },
+        { label: 'Atualizar inventário' },
+        { label: 'Excluir pontos enviados' },
+      ]}
     >
       <div className="space-y-6">
+        <AvisoFluxoAtualizacao descricao="As exclusões feitas aqui afetam apenas pontos que ainda não foram consolidados ou que precisam ser removidos do envio." />
+
         <section className="bg-[#fafafa] border border-[#ddd] rounded-xl p-4">
           <label className="block text-sm font-semibold text-[#3a3a3a] mb-2">Buscar pelo código do ponto ativo</label>
           <div className="flex gap-3">

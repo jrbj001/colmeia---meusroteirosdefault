@@ -1,35 +1,50 @@
-import React, { StrictMode } from "react";
+import React, { StrictMode, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Auth0Provider } from "@auth0/auth0-react";
 import { AuthProvider } from "./contexts/AuthContext";
 import { useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute/ProtectedRoute";
-import { Login } from "./screens/Login";
-import { Callback } from "./screens/Callback";
-import { HomeDashboard } from "./screens/HomeDashboard";
-import { MeusRoteiros } from "./screens/MeusRoteiros";
-import { Mapa } from "./screens/Mapa";
-import { CriarRoteiro } from "./screens/CriarRoteiro";
-import { ConsultaEndereco } from "./screens/ConsultaEndereco";
-import { VisualizarResultados } from "./screens/VisualizarResultados";
-import { BancoDeAtivos } from "./screens/BancoDeAtivos";
-import { RelatorioPorPraca } from "./screens/RelatorioPorPraca";
-import { RelatorioPorExibidor } from "./screens/RelatorioPorExibidor";
-import { AdminUsuarios, AdminPerfis } from "./screens/Admin";
-import { PaginaEmDesenvolvimento } from "./components/PaginaEmDesenvolvimento";
-import { CadastrarExibidor } from "./screens/CadastrarExibidor/CadastrarExibidor";
-import { GestaoExibidores } from "./screens/GestaoExibidores/GestaoExibidores";
-import { ListarExibidores } from "./screens/ListarExibidores/ListarExibidores";
-import { AcessoNegado } from "./screens/AcessoNegado/AcessoNegado";
-import { ExibidorDashboard } from "./screens/Exibidor/ExibidorDashboard";
-import { ExibidorImportar } from "./screens/Exibidor/ExibidorImportar";
-import { ExibidorInventarioAtual } from "./screens/Exibidor/ExibidorInventarioAtual";
-import { ExibidorEditar } from "./screens/Exibidor/ExibidorEditar";
-import { ExibidorExcluir } from "./screens/Exibidor/ExibidorExcluir";
-import { ExibidorSolicitacoes } from "./screens/Exibidor/ExibidorSolicitacoes";
 import '../tailwind.css';
 import 'leaflet/dist/leaflet.css';
+
+// ── Eager: telas leves que aparecem antes do auth ──────────────────────────
+import { Login }    from "./screens/Login";
+import { Callback } from "./screens/Callback";
+import { AcessoNegado } from "./screens/AcessoNegado/AcessoNegado";
+
+// ── Lazy: tudo o resto (carregado sob demanda por rota) ────────────────────
+const HomeDashboard          = lazy(() => import("./screens/HomeDashboard").then(m => ({ default: m.HomeDashboard })));
+const MeusRoteiros           = lazy(() => import("./screens/MeusRoteiros").then(m => ({ default: m.MeusRoteiros })));
+const Mapa                   = lazy(() => import("./screens/Mapa").then(m => ({ default: m.Mapa })));
+const CriarRoteiro           = lazy(() => import("./screens/CriarRoteiro").then(m => ({ default: m.CriarRoteiro })));
+const ConsultaEndereco       = lazy(() => import("./screens/ConsultaEndereco").then(m => ({ default: m.ConsultaEndereco })));
+const VisualizarResultados   = lazy(() => import("./screens/VisualizarResultados").then(m => ({ default: m.VisualizarResultados })));
+const BancoDeAtivos          = lazy(() => import("./screens/BancoDeAtivos").then(m => ({ default: m.BancoDeAtivos })));
+const RelatorioPorPraca      = lazy(() => import("./screens/RelatorioPorPraca").then(m => ({ default: m.RelatorioPorPraca })));
+const RelatorioPorExibidor   = lazy(() => import("./screens/RelatorioPorExibidor").then(m => ({ default: m.RelatorioPorExibidor })));
+const AdminUsuarios          = lazy(() => import("./screens/Admin").then(m => ({ default: m.AdminUsuarios })));
+const AdminPerfis            = lazy(() => import("./screens/Admin").then(m => ({ default: m.AdminPerfis })));
+const PaginaEmDesenvolvimento = lazy(() => import("./components/PaginaEmDesenvolvimento").then(m => ({ default: m.PaginaEmDesenvolvimento })));
+const CadastrarExibidor      = lazy(() => import("./screens/CadastrarExibidor/CadastrarExibidor").then(m => ({ default: m.CadastrarExibidor })));
+const GestaoExibidores       = lazy(() => import("./screens/GestaoExibidores/GestaoExibidores").then(m => ({ default: m.GestaoExibidores })));
+const ListarExibidores       = lazy(() => import("./screens/ListarExibidores/ListarExibidores").then(m => ({ default: m.ListarExibidores })));
+const ExibidorDashboard      = lazy(() => import("./screens/Exibidor/ExibidorDashboard").then(m => ({ default: m.ExibidorDashboard })));
+const ExibidorImportar       = lazy(() => import("./screens/Exibidor/ExibidorImportar").then(m => ({ default: m.ExibidorImportar })));
+const ExibidorInventario     = lazy(() => import("./screens/Exibidor/ExibidorInventario").then(m => ({ default: m.ExibidorInventario })));
+const ExibidorEditar         = lazy(() => import("./screens/Exibidor/ExibidorEditar").then(m => ({ default: m.ExibidorEditar })));
+const ExibidorExcluir        = lazy(() => import("./screens/Exibidor/ExibidorExcluir").then(m => ({ default: m.ExibidorExcluir })));
+const ExibidorSolicitacoes   = lazy(() => import("./screens/Exibidor/ExibidorSolicitacoes").then(m => ({ default: m.ExibidorSolicitacoes })));
+
+// ── Loading mínimo enquanto o chunk carrega ────────────────────────────────
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-white">
+    <div className="flex flex-col items-center gap-3">
+      <div className="w-10 h-10 border-4 border-gray-200 border-t-[#ff4600] rounded-full animate-spin" />
+      <span className="text-sm text-gray-400">Carregando...</span>
+    </div>
+  </div>
+);
 
 function AppGuard({ children }: { children: React.ReactNode }) {
   const { acessoBloqueado } = useAuth();
@@ -55,230 +70,122 @@ root.render(
     >
       <AuthProvider>
         <BrowserRouter>
-        <AppGuard>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/callback" element={<Callback />} />
-          <Route 
-            path="/" 
-            element={
-              <ProtectedRoute>
-                <HomeDashboard />
-              </ProtectedRoute>
-            } 
-          />
-          <Route
-            path="/home-dashboard"
-            element={
-              <ProtectedRoute>
-                <HomeDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/meus-roteiros"
-            element={
-              <ProtectedRoute>
-                <MeusRoteiros />
-              </ProtectedRoute>
-            } 
-          />
-            <Route 
-              path="/mapa" 
-              element={
-                <ProtectedRoute>
-                  <Mapa />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/criar-roteiro" 
-              element={
-                <ProtectedRoute internalOnly>
-                  <CriarRoteiro />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/visualizar-resultados" 
-              element={
-                <ProtectedRoute>
-                  <VisualizarResultados />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/consulta-endereco" 
-              element={
-                <ProtectedRoute internalOnly>
-                  <ConsultaEndereco />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/banco-de-ativos" 
-              element={
-                <ProtectedRoute internalOnly>
-                  <BancoDeAtivos />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/banco-de-ativos/relatorio-por-praca" 
-              element={
-                <ProtectedRoute>
-                  <RelatorioPorPraca />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/banco-de-ativos/relatorio-por-exibidor" 
-              element={
-                <ProtectedRoute>
-                  <RelatorioPorExibidor />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/banco-de-ativos/exibidores" 
-              element={
-                <ProtectedRoute>
-                  <ListarExibidores />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/banco-de-ativos/cadastrar/grupo-midia" 
-              element={
-                <ProtectedRoute>
-                  <PaginaEmDesenvolvimento 
-                    titulo="Cadastrar Grupo de Mídia"
-                    breadcrumbItems={[
-                      { label: "Home", path: "/" },
-                      { label: "Banco de ativos", path: "/banco-de-ativos" },
-                      { label: "Cadastrar Grupo de Mídia" }
-                    ]}
-                  />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/banco-de-ativos/cadastrar/tipo-midia" 
-              element={
-                <ProtectedRoute>
-                  <PaginaEmDesenvolvimento 
-                    titulo="Cadastrar Tipo de Mídia"
-                    breadcrumbItems={[
-                      { label: "Home", path: "/" },
-                      { label: "Banco de ativos", path: "/banco-de-ativos" },
-                      { label: "Cadastrar Tipo de Mídia" }
-                    ]}
-                  />
-                </ProtectedRoute>
-              } 
-            />
-            <Route
-              path="/banco-de-ativos/cadastrar/exibidor"
-              element={
-                <ProtectedRoute internalOnly>
-                  <GestaoExibidores />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/banco-de-ativos/cadastrar/exibidor-form"
-              element={
-                <ProtectedRoute internalOnly>
-                  <CadastrarExibidor />
-                </ProtectedRoute>
-              }
-            />
-            <Route 
-              path="/banco-de-ativos/importar/arquivo" 
-              element={
-                <ProtectedRoute>
-                  <PaginaEmDesenvolvimento 
-                    titulo="Importar Arquivo"
-                    breadcrumbItems={[
-                      { label: "Home", path: "/" },
-                      { label: "Banco de ativos", path: "/banco-de-ativos" },
-                      { label: "Importar Arquivo" }
-                    ]}
-                  />
-                </ProtectedRoute>
-              } 
-            />
-            <Route
-              path="/exibidor"
-              element={<Navigate to="/exibidor/dashboard" replace />}
-            />
-            <Route
-              path="/exibidor/dashboard"
-              element={
-                <ProtectedRoute allowedProfiles={['Exibidor']}>
-                  <ExibidorDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/exibidor/inventario-atual"
-              element={
-                <ProtectedRoute allowedProfiles={['Exibidor']}>
-                  <ExibidorInventarioAtual />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/exibidor/importar"
-              element={
-                <ProtectedRoute allowedProfiles={['Exibidor']}>
-                  <ExibidorImportar />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/exibidor/editar"
-              element={
-                <ProtectedRoute allowedProfiles={['Exibidor']}>
-                  <ExibidorEditar />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/exibidor/excluir"
-              element={
-                <ProtectedRoute allowedProfiles={['Exibidor']}>
-                  <ExibidorExcluir />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/exibidor/solicitacoes"
-              element={
-                <ProtectedRoute allowedProfiles={['Exibidor']}>
-                  <ExibidorSolicitacoes />
-                </ProtectedRoute>
-              }
-            />
-            <Route 
-              path="/admin/usuarios" 
-              element={
-                <ProtectedRoute internalOnly adminOnly>
-                  <AdminUsuarios />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/admin/perfis" 
-              element={
-                <ProtectedRoute internalOnly adminOnly>
-                  <AdminPerfis />
-                </ProtectedRoute>
-              } 
-            />
-            <Route path="*" element={<div>Página não encontrada</div>} />
-          </Routes>
-        </AppGuard>
+          <AppGuard>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/login"    element={<Login />} />
+                <Route path="/callback" element={<Callback />} />
+
+                <Route path="/" element={
+                  <ProtectedRoute><HomeDashboard /></ProtectedRoute>
+                } />
+                <Route path="/home-dashboard" element={
+                  <ProtectedRoute><HomeDashboard /></ProtectedRoute>
+                } />
+                <Route path="/meus-roteiros" element={
+                  <ProtectedRoute><MeusRoteiros /></ProtectedRoute>
+                } />
+                <Route path="/mapa" element={
+                  <ProtectedRoute><Mapa /></ProtectedRoute>
+                } />
+                <Route path="/criar-roteiro" element={
+                  <ProtectedRoute internalOnly><CriarRoteiro /></ProtectedRoute>
+                } />
+                <Route path="/visualizar-resultados" element={
+                  <ProtectedRoute><VisualizarResultados /></ProtectedRoute>
+                } />
+                <Route path="/consulta-endereco" element={
+                  <ProtectedRoute internalOnly><ConsultaEndereco /></ProtectedRoute>
+                } />
+                <Route path="/banco-de-ativos" element={
+                  <ProtectedRoute internalOnly><BancoDeAtivos /></ProtectedRoute>
+                } />
+                <Route path="/banco-de-ativos/relatorio-por-praca" element={
+                  <ProtectedRoute><RelatorioPorPraca /></ProtectedRoute>
+                } />
+                <Route path="/banco-de-ativos/relatorio-por-exibidor" element={
+                  <ProtectedRoute><RelatorioPorExibidor /></ProtectedRoute>
+                } />
+                <Route path="/banco-de-ativos/exibidores" element={
+                  <ProtectedRoute><ListarExibidores /></ProtectedRoute>
+                } />
+                <Route path="/banco-de-ativos/cadastrar/grupo-midia" element={
+                  <ProtectedRoute>
+                    <PaginaEmDesenvolvimento
+                      titulo="Cadastrar Grupo de Mídia"
+                      breadcrumbItems={[
+                        { label: "Home", path: "/" },
+                        { label: "Banco de ativos", path: "/banco-de-ativos" },
+                        { label: "Cadastrar Grupo de Mídia" },
+                      ]}
+                    />
+                  </ProtectedRoute>
+                } />
+                <Route path="/banco-de-ativos/cadastrar/tipo-midia" element={
+                  <ProtectedRoute>
+                    <PaginaEmDesenvolvimento
+                      titulo="Cadastrar Tipo de Mídia"
+                      breadcrumbItems={[
+                        { label: "Home", path: "/" },
+                        { label: "Banco de ativos", path: "/banco-de-ativos" },
+                        { label: "Cadastrar Tipo de Mídia" },
+                      ]}
+                    />
+                  </ProtectedRoute>
+                } />
+                <Route path="/banco-de-ativos/cadastrar/exibidor" element={
+                  <ProtectedRoute internalOnly><GestaoExibidores /></ProtectedRoute>
+                } />
+                <Route path="/banco-de-ativos/cadastrar/exibidor-form" element={
+                  <ProtectedRoute internalOnly><CadastrarExibidor /></ProtectedRoute>
+                } />
+                <Route path="/banco-de-ativos/importar/arquivo" element={
+                  <ProtectedRoute>
+                    <PaginaEmDesenvolvimento
+                      titulo="Importar Arquivo"
+                      breadcrumbItems={[
+                        { label: "Home", path: "/" },
+                        { label: "Banco de ativos", path: "/banco-de-ativos" },
+                        { label: "Importar Arquivo" },
+                      ]}
+                    />
+                  </ProtectedRoute>
+                } />
+
+                {/* ── Exibidor ── */}
+                <Route path="/exibidor" element={<Navigate to="/exibidor/dashboard" replace />} />
+                <Route path="/exibidor/dashboard" element={
+                  <ProtectedRoute allowedProfiles={['Exibidor']}><ExibidorDashboard /></ProtectedRoute>
+                } />
+                <Route path="/exibidor/inventario" element={
+                  <ProtectedRoute allowedProfiles={['Exibidor']}><ExibidorInventario /></ProtectedRoute>
+                } />
+                <Route path="/exibidor/inventario-atual" element={<Navigate to="/exibidor/inventario" replace />} />
+                <Route path="/exibidor/importar" element={
+                  <ProtectedRoute allowedProfiles={['Exibidor']}><ExibidorImportar /></ProtectedRoute>
+                } />
+                <Route path="/exibidor/editar" element={
+                  <ProtectedRoute allowedProfiles={['Exibidor']}><ExibidorEditar /></ProtectedRoute>
+                } />
+                <Route path="/exibidor/excluir" element={
+                  <ProtectedRoute allowedProfiles={['Exibidor']}><ExibidorExcluir /></ProtectedRoute>
+                } />
+                <Route path="/exibidor/solicitacoes" element={
+                  <ProtectedRoute allowedProfiles={['Exibidor']}><ExibidorSolicitacoes /></ProtectedRoute>
+                } />
+
+                {/* ── Admin ── */}
+                <Route path="/admin/usuarios" element={
+                  <ProtectedRoute internalOnly adminOnly><AdminUsuarios /></ProtectedRoute>
+                } />
+                <Route path="/admin/perfis" element={
+                  <ProtectedRoute internalOnly adminOnly><AdminPerfis /></ProtectedRoute>
+                } />
+
+                <Route path="*" element={<div>Página não encontrada</div>} />
+              </Routes>
+            </Suspense>
+          </AppGuard>
         </BrowserRouter>
       </AuthProvider>
     </Auth0Provider>

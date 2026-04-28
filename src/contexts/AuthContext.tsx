@@ -38,6 +38,49 @@ interface AuthContextType {
 
 const DOMINIO_INTERNO = '@be180.com.br';
 
+// ── Cache de perfil em sessionStorage ──────────────────────────────────────
+// Chave única por sub do Auth0 para evitar colisão entre usuários diferentes.
+// sessionStorage é limpo ao fechar a aba — sem risco de dados obsoletos entre
+// sessões longas.
+const CACHE_PREFIX = 'colmeia_profile_v1_';
+
+interface CachedProfile {
+  usuario_pk?: number;
+  perfil_pk?: number;
+  perfil_nome?: string;
+  empresa_pk?: number | null;
+  exibidor_fk?: number | null;
+  bloqueado?: boolean;
+  cachedAt: number;
+}
+
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 min — revalida após meia hora
+
+function lerCache(sub: string): CachedProfile | null {
+  try {
+    const raw = sessionStorage.getItem(CACHE_PREFIX + sub);
+    if (!raw) return null;
+    const parsed: CachedProfile = JSON.parse(raw);
+    if (Date.now() - parsed.cachedAt > CACHE_TTL_MS) {
+      sessionStorage.removeItem(CACHE_PREFIX + sub);
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function gravarCache(sub: string, data: Omit<CachedProfile, 'cachedAt'>) {
+  try {
+    sessionStorage.setItem(CACHE_PREFIX + sub, JSON.stringify({ ...data, cachedAt: Date.now() }));
+  } catch { /* quota excedida — ignora */ }
+}
+
+function limparCache(sub: string) {
+  try { sessionStorage.removeItem(CACHE_PREFIX + sub); } catch { /* ok */ }
+}
+
 function isEmailInterno(email: string): boolean {
   return email.toLowerCase().endsWith(DOMINIO_INTERNO);
 }
@@ -69,77 +112,116 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     if (auth0IsAuthenticated && auth0User) {
       const email = auth0User.email || '';
+      const sub   = auth0User.sub   || '';
+
       const localUser: User = {
-        id: auth0User.sub || '',
+        id: sub,
         email,
         name: auth0User.name || auth0User.nickname || '',
         picture: auth0User.picture || undefined,
       };
 
-      if (email) {
-        axios.get(`/usuarios?search=${encodeURIComponent(email)}&limit=1`)
-          .then(async (response) => {
-            const usuarios = response.data.usuarios || [];
-            const match = usuarios.find(
-              (u: { usuario_email: string }) =>
-                u.usuario_email?.toLowerCase() === email.toLowerCase()
-            );
+      // ── 1. Verificar cache — resposta instantânea sem rede ──────────────
+      const cached = lerCache(sub);
+      if (cached) {
+        if (cached.bloqueado) {
+          setAcessoBloqueado(true);
+          setUser(null);
+        } else {
+          localUser.usuario_pk  = cached.usuario_pk;
+          localUser.perfil_pk   = cached.perfil_pk;
+          localUser.perfil_nome = cached.perfil_nome;
+          localUser.empresa_pk  = cached.empresa_pk ?? null;
+          localUser.exibidor_fk = cached.exibidor_fk ?? null;
+          setAcessoBloqueado(false);
+          setUser({ ...localUser });
+        }
+        setIsLoading(false);
+        return; // cache válido — não bate na API
+      }
 
-            if (match) {
-              // Usuário encontrado no banco — enriquecer dados
-              localUser.usuario_pk = match.usuario_pk;
-              localUser.perfil_pk = match.perfil_pk;
-              localUser.perfil_nome = match.perfil_nome;
-              localUser.empresa_pk = match.empresa_pk ?? null;
-              localUser.exibidor_fk = match.exibidor_fk ?? null;
-              setAcessoBloqueado(false);
-              setUser({ ...localUser });
-            } else if (isEmailInterno(email)) {
-              // Email @be180.com.br sem cadastro no banco → acesso interno liberado
-              setAcessoBloqueado(false);
-              setUser({ ...localUser });
-            } else {
-              // Email externo não cadastrado — tenta resolução por domínio de exibidor
-              try {
-                const domainRes = await axios.get(`/referencia?action=exibidor-resolve-domain&email=${encodeURIComponent(email)}`);
-                const { usuario } = domainRes.data;
-                if (usuario) {
-                  localUser.usuario_pk = usuario.usuario_pk;
-                  localUser.perfil_pk = usuario.perfil_pk;
-                  localUser.perfil_nome = usuario.perfil_nome;
-                  localUser.empresa_pk = usuario.empresa_pk ?? null;
-                  localUser.exibidor_fk = usuario.exibidor_fk ?? null;
-                  setAcessoBloqueado(false);
-                  setUser({ ...localUser });
-                } else {
-                  setAcessoBloqueado(true);
-                  setUser(null);
-                }
-              } catch {
-                // Domínio não associado → bloquear
-                setAcessoBloqueado(true);
-                setUser(null);
-              }
-            }
-
-            setIsLoading(false);
-          })
-          .catch(() => {
-            // Em caso de falha na API, só libera se for domínio interno
-            if (isEmailInterno(email)) {
-              setUser(localUser);
-              setAcessoBloqueado(false);
-            } else {
-              setAcessoBloqueado(true);
-              setUser(null);
-            }
-            setIsLoading(false);
-          });
-      } else {
+      // ── 2. Cache miss — busca na API ────────────────────────────────────
+      if (!email) {
         setAcessoBloqueado(true);
         setUser(null);
         setIsLoading(false);
+        return;
       }
+
+      axios.get(`/usuarios?search=${encodeURIComponent(email)}&limit=1`)
+        .then(async (response) => {
+          const usuarios = response.data.usuarios || [];
+          const match = usuarios.find(
+            (u: { usuario_email: string }) =>
+              u.usuario_email?.toLowerCase() === email.toLowerCase()
+          );
+
+          if (match) {
+            localUser.usuario_pk  = match.usuario_pk;
+            localUser.perfil_pk   = match.perfil_pk;
+            localUser.perfil_nome = match.perfil_nome;
+            localUser.empresa_pk  = match.empresa_pk ?? null;
+            localUser.exibidor_fk = match.exibidor_fk ?? null;
+            gravarCache(sub, {
+              usuario_pk:  localUser.usuario_pk,
+              perfil_pk:   localUser.perfil_pk,
+              perfil_nome: localUser.perfil_nome,
+              empresa_pk:  localUser.empresa_pk,
+              exibidor_fk: localUser.exibidor_fk,
+              bloqueado:   false,
+            });
+            setAcessoBloqueado(false);
+            setUser({ ...localUser });
+          } else if (isEmailInterno(email)) {
+            gravarCache(sub, { bloqueado: false });
+            setAcessoBloqueado(false);
+            setUser({ ...localUser });
+          } else {
+            // Email externo sem cadastro — tenta resolução por domínio
+            try {
+              const domainRes = await axios.get(`/referencia?action=exibidor-resolve-domain&email=${encodeURIComponent(email)}`);
+              const { usuario } = domainRes.data;
+              if (usuario) {
+                localUser.usuario_pk  = usuario.usuario_pk;
+                localUser.perfil_pk   = usuario.perfil_pk;
+                localUser.perfil_nome = usuario.perfil_nome;
+                localUser.empresa_pk  = usuario.empresa_pk ?? null;
+                localUser.exibidor_fk = usuario.exibidor_fk ?? null;
+                gravarCache(sub, {
+                  usuario_pk:  localUser.usuario_pk,
+                  perfil_pk:   localUser.perfil_pk,
+                  perfil_nome: localUser.perfil_nome,
+                  empresa_pk:  localUser.empresa_pk,
+                  exibidor_fk: localUser.exibidor_fk,
+                  bloqueado:   false,
+                });
+                setAcessoBloqueado(false);
+                setUser({ ...localUser });
+              } else {
+                gravarCache(sub, { bloqueado: true });
+                setAcessoBloqueado(true);
+                setUser(null);
+              }
+            } catch {
+              gravarCache(sub, { bloqueado: true });
+              setAcessoBloqueado(true);
+              setUser(null);
+            }
+          }
+
+          setIsLoading(false);
+        })
+        .catch(() => {
+          if (isEmailInterno(email)) {
+            gravarCache(sub, { bloqueado: false });
+            setUser(localUser);
+            setAcessoBloqueado(false);
+          } else {
+            setAcessoBloqueado(true);
+            setUser(null);
+          }
+          setIsLoading(false);
+        });
     } else {
       setUser(null);
       setAcessoBloqueado(false);
@@ -160,11 +242,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = (): void => {
-    console.log('AuthContext logout chamado');
-    // Limpar dados locais
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_data');
     localStorage.removeItem('user_permissoes');
+    // Limpa cache de perfil do usuário atual
+    if (user?.id) limparCache(user.id);
     setUser(null);
     setPermissoes([]);
     
