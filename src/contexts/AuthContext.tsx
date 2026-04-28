@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import axios from 'axios';
+import { setExibidorFkHeader } from '../config/axios';
 
 interface User {
   id: string;
@@ -11,6 +12,7 @@ interface User {
   perfil_pk?: number;
   perfil_nome?: string;
   empresa_pk?: number | null;
+  exibidor_fk?: number | null;
 }
 
 interface Permissao {
@@ -28,6 +30,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   isAgencia: boolean;
+  isExibidor: boolean;
   acessoBloqueado: boolean;
   carregarPermissoes: () => Promise<void>;
   temPermissao: (area_codigo: string, tipo?: 'leitura' | 'escrita') => boolean;
@@ -37,6 +40,11 @@ const DOMINIO_INTERNO = '@be180.com.br';
 
 function isEmailInterno(email: string): boolean {
   return email.toLowerCase().endsWith(DOMINIO_INTERNO);
+}
+
+function isPerfilExibidor(perfilNome?: string | null): boolean {
+  if (!perfilNome) return false;
+  return perfilNome.trim().toLowerCase().includes('exibidor');
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -70,7 +78,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (email) {
         axios.get(`/usuarios?search=${encodeURIComponent(email)}&limit=1`)
-          .then((response) => {
+          .then(async (response) => {
             const usuarios = response.data.usuarios || [];
             const match = usuarios.find(
               (u: { usuario_email: string }) =>
@@ -83,6 +91,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               localUser.perfil_pk = match.perfil_pk;
               localUser.perfil_nome = match.perfil_nome;
               localUser.empresa_pk = match.empresa_pk ?? null;
+              localUser.exibidor_fk = match.exibidor_fk ?? null;
               setAcessoBloqueado(false);
               setUser({ ...localUser });
             } else if (isEmailInterno(email)) {
@@ -90,9 +99,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               setAcessoBloqueado(false);
               setUser({ ...localUser });
             } else {
-              // Email externo não cadastrado → bloquear
-              setAcessoBloqueado(true);
-              setUser(null);
+              // Email externo não cadastrado — tenta resolução por domínio de exibidor
+              try {
+                const domainRes = await axios.get(`/referencia?action=exibidor-resolve-domain&email=${encodeURIComponent(email)}`);
+                const { usuario } = domainRes.data;
+                if (usuario) {
+                  localUser.usuario_pk = usuario.usuario_pk;
+                  localUser.perfil_pk = usuario.perfil_pk;
+                  localUser.perfil_nome = usuario.perfil_nome;
+                  localUser.empresa_pk = usuario.empresa_pk ?? null;
+                  localUser.exibidor_fk = usuario.exibidor_fk ?? null;
+                  setAcessoBloqueado(false);
+                  setUser({ ...localUser });
+                } else {
+                  setAcessoBloqueado(true);
+                  setUser(null);
+                }
+              } catch {
+                // Domínio não associado → bloquear
+                setAcessoBloqueado(true);
+                setUser(null);
+              }
             }
 
             setIsLoading(false);
@@ -233,6 +260,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [user?.usuario_pk]);
 
   const isAgencia = !!user?.empresa_pk;
+  const isExibidor = isPerfilExibidor(user?.perfil_nome);
+
+  // Sincroniza o header de tenant exibidor no axios sempre que o usuário mudar
+  useEffect(() => {
+    setExibidorFkHeader(user?.exibidor_fk);
+  }, [user?.exibidor_fk]);
 
   const value: AuthContextType = {
     user,
@@ -242,6 +275,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isLoading,
     isAuthenticated: !!user,
     isAgencia,
+    isExibidor,
     acessoBloqueado,
     carregarPermissoes,
     temPermissao,

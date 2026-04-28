@@ -8,6 +8,7 @@ interface ProtectedRouteProps {
   requiredPermission?: 'leitura' | 'escrita';
   internalOnly?: boolean;
   adminOnly?: boolean;
+  allowedProfiles?: string[];
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
@@ -16,6 +17,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   requiredPermission = 'leitura',
   internalOnly = false,
   adminOnly = false,
+  allowedProfiles,
 }) => {
   const { isAuthenticated, isLoading, temPermissao, isAgencia, user } = useAuth();
   const location = useLocation();
@@ -41,6 +43,14 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   if (adminOnly && user?.perfil_nome !== 'Admin') {
     return <Navigate to="/" replace />;
+  }
+
+  if (allowedProfiles && allowedProfiles.length > 0) {
+    const perfilUsuario = String(user?.perfil_nome || '').trim().toLowerCase();
+    const permitido = allowedProfiles.some((perfil) => perfilUsuario === perfil.trim().toLowerCase());
+    if (!permitido) {
+      return <Navigate to="/" replace />;
+    }
   }
 
   // Verificar permissão de acesso à área específica

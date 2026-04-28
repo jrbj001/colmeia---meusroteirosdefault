@@ -1,6 +1,6 @@
 import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Auth0Provider } from "@auth0/auth0-react";
 import { AuthProvider } from "./contexts/AuthContext";
 import { useAuth } from "./contexts/AuthContext";
@@ -18,7 +18,16 @@ import { RelatorioPorPraca } from "./screens/RelatorioPorPraca";
 import { RelatorioPorExibidor } from "./screens/RelatorioPorExibidor";
 import { AdminUsuarios, AdminPerfis } from "./screens/Admin";
 import { PaginaEmDesenvolvimento } from "./components/PaginaEmDesenvolvimento";
+import { CadastrarExibidor } from "./screens/CadastrarExibidor/CadastrarExibidor";
+import { GestaoExibidores } from "./screens/GestaoExibidores/GestaoExibidores";
+import { ListarExibidores } from "./screens/ListarExibidores/ListarExibidores";
 import { AcessoNegado } from "./screens/AcessoNegado/AcessoNegado";
+import { ExibidorDashboard } from "./screens/Exibidor/ExibidorDashboard";
+import { ExibidorImportar } from "./screens/Exibidor/ExibidorImportar";
+import { ExibidorInventarioAtual } from "./screens/Exibidor/ExibidorInventarioAtual";
+import { ExibidorEditar } from "./screens/Exibidor/ExibidorEditar";
+import { ExibidorExcluir } from "./screens/Exibidor/ExibidorExcluir";
+import { ExibidorSolicitacoes } from "./screens/Exibidor/ExibidorSolicitacoes";
 import '../tailwind.css';
 import 'leaflet/dist/leaflet.css';
 
@@ -131,6 +140,14 @@ root.render(
               } 
             />
             <Route 
+              path="/banco-de-ativos/exibidores" 
+              element={
+                <ProtectedRoute>
+                  <ListarExibidores />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
               path="/banco-de-ativos/cadastrar/grupo-midia" 
               element={
                 <ProtectedRoute>
@@ -160,20 +177,21 @@ root.render(
                 </ProtectedRoute>
               } 
             />
-            <Route 
-              path="/banco-de-ativos/cadastrar/exibidor" 
+            <Route
+              path="/banco-de-ativos/cadastrar/exibidor"
               element={
-                <ProtectedRoute>
-                  <PaginaEmDesenvolvimento 
-                    titulo="Cadastrar Exibidor"
-                    breadcrumbItems={[
-                      { label: "Home", path: "/" },
-                      { label: "Banco de ativos", path: "/banco-de-ativos" },
-                      { label: "Cadastrar Exibidor" }
-                    ]}
-                  />
+                <ProtectedRoute internalOnly>
+                  <GestaoExibidores />
                 </ProtectedRoute>
-              } 
+              }
+            />
+            <Route
+              path="/banco-de-ativos/cadastrar/exibidor-form"
+              element={
+                <ProtectedRoute internalOnly>
+                  <CadastrarExibidor />
+                </ProtectedRoute>
+              }
             />
             <Route 
               path="/banco-de-ativos/importar/arquivo" 
@@ -189,6 +207,58 @@ root.render(
                   />
                 </ProtectedRoute>
               } 
+            />
+            <Route
+              path="/exibidor"
+              element={<Navigate to="/exibidor/dashboard" replace />}
+            />
+            <Route
+              path="/exibidor/dashboard"
+              element={
+                <ProtectedRoute allowedProfiles={['Exibidor']}>
+                  <ExibidorDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/exibidor/inventario-atual"
+              element={
+                <ProtectedRoute allowedProfiles={['Exibidor']}>
+                  <ExibidorInventarioAtual />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/exibidor/importar"
+              element={
+                <ProtectedRoute allowedProfiles={['Exibidor']}>
+                  <ExibidorImportar />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/exibidor/editar"
+              element={
+                <ProtectedRoute allowedProfiles={['Exibidor']}>
+                  <ExibidorEditar />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/exibidor/excluir"
+              element={
+                <ProtectedRoute allowedProfiles={['Exibidor']}>
+                  <ExibidorExcluir />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/exibidor/solicitacoes"
+              element={
+                <ProtectedRoute allowedProfiles={['Exibidor']}>
+                  <ExibidorSolicitacoes />
+                </ProtectedRoute>
+              }
             />
             <Route 
               path="/admin/usuarios" 

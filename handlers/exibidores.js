@@ -1,35 +1,42 @@
-const { getPostgresPool } = require('./banco-ativos-passantes');
+const { sql, getPool } = require('./db');
 
 module.exports = async (req, res) => {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Método não permitido' });
+  }
+
   try {
-    console.log('📊 [Exibidores] Listando exibidores disponíveis');
-    
-    const pool = await getPostgresPool();
+    const pool = await getPool();
+    const search = (req.query.search || '').replace(/\+/g, ' ').trim();
+    const request = pool.request();
 
-    const query = `
-      SELECT DISTINCT
-        me.id,
-        me.name
-      FROM media_exhibitors me
-      INNER JOIN media_points mp ON mp.media_exhibitor_id = me.id
-      WHERE mp.is_active = true
-        AND mp.is_deleted = false
-        AND me.name IS NOT NULL
-        AND me.name != ''
-      ORDER BY me.name
-    `;
+    let where = 'WHERE valid_bl = 1 AND exibidor_st IS NOT NULL AND LTRIM(RTRIM(exibidor_st)) <> \'\'';
+    if (search) {
+      request.input('search', sql.NVarChar, `%${search}%`);
+      where += ' AND exibidor_st LIKE @search';
+    }
 
-    const result = await pool.query(query);
+    const result = await request.query(`
+      SELECT TOP 1000
+        exibidor_st
+      FROM [serv_product_be180].[bancoAtivosJoin_ft]
+      ${where}
+      GROUP BY exibidor_st
+      ORDER BY exibidor_st
+    `);
 
-    console.log(`✅ [Exibidores] ${result.rows.length} exibidores encontrados`);
+    const data = result.recordset.map((row) => ({
+      id: row.exibidor_st,
+      name: row.exibidor_st,
+    }));
 
-    res.status(200).json(result.rows);
+    res.status(200).json(data);
 
   } catch (error) {
-    console.error('❌ [Exibidores] Erro:', error);
+    console.error('[exibidores] Erro:', error.message);
     res.status(500).json({
       success: false,
-      message: 'Erro ao buscar exibidores',
+      message: 'Erro ao buscar exibidores no SQL Server',
       error: error.message
     });
   }
