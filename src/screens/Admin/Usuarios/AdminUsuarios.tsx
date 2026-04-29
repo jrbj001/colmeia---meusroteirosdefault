@@ -13,6 +13,7 @@ interface Usuario {
   perfil_nome: string;
   perfil_descricao: string;
   empresa_pk: number | null;
+  exibidor_fk: number | null;
 }
 
 interface Perfil {
@@ -26,11 +27,19 @@ interface Agencia {
   nome_agencia: string;
 }
 
+interface ExibidorItem {
+  exibidor_pk: number;
+  nome_st: string;
+  nome_fantasia_st: string | null;
+  dominio_st: string | null;
+}
+
 export const AdminUsuarios: React.FC = () => {
   usePermissions();
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [perfis, setPerfis] = useState<Perfil[]>([]);
   const [agencias, setAgencias] = useState<Agencia[]>([]);
+  const [exibidores, setExibidores] = useState<ExibidorItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroPerfil, setFiltroPerfil] = useState('');
@@ -45,6 +54,7 @@ export const AdminUsuarios: React.FC = () => {
     telefone_st: '',
     perfil_pk: 0,
     empresa_pk: null as number | null,
+    exibidor_fk: null as number | null,
   });
 
   // Carregar usuários e perfis
@@ -81,6 +91,12 @@ export const AdminUsuarios: React.FC = () => {
             : [];
         setAgencias(agenciasData);
       }
+      if (exibidores.length === 0) {
+        try {
+          const exibRes = await axios.get('/referencia?action=exibidor-cadastro');
+          setExibidores(exibRes.data?.data || []);
+        } catch { /* tabela pode não existir ainda */ }
+      }
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {
@@ -97,6 +113,7 @@ export const AdminUsuarios: React.FC = () => {
       telefone_st: '',
       perfil_pk: perfis.length > 0 ? perfis[0].perfil_pk : 0,
       empresa_pk: null,
+      exibidor_fk: null,
     });
     setShowModal(true);
   };
@@ -110,6 +127,7 @@ export const AdminUsuarios: React.FC = () => {
       telefone_st: usuario.usuario_telefone || '',
       perfil_pk: usuario.perfil_pk,
       empresa_pk: usuario.empresa_pk ?? null,
+      exibidor_fk: usuario.exibidor_fk ?? null,
     });
     setShowModal(true);
   };
@@ -428,6 +446,35 @@ export const AdminUsuarios: React.FC = () => {
                     Vincule a uma agência para acesso externo
                   </p>
                 </div>
+
+                {perfis.find(p => p.perfil_pk === formData.perfil_pk)?.perfil_nome?.toLowerCase().includes('exibidor') && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Exibidor
+                    </label>
+                    <select
+                      value={formData.exibidor_fk ?? ''}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          exibidor_fk: e.target.value ? parseInt(e.target.value) : null,
+                        })
+                      }
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    >
+                      <option value="">Selecione o exibidor</option>
+                      {exibidores.map((ex) => (
+                        <option key={ex.exibidor_pk} value={ex.exibidor_pk}>
+                          {ex.nome_fantasia_st || ex.nome_st}
+                          {ex.dominio_st ? ` (${ex.dominio_st})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Vincula o usuário a um exibidor específico
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="mt-6 flex gap-3">

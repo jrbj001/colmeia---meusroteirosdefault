@@ -14,6 +14,7 @@ export const usePermissions = () => {
     usuario: user,
     perfil: user?.perfil_nome,
     isAdmin: user?.perfil_nome === 'Admin',
+    isExibidor: user?.perfil_nome === 'Exibidor',
     isEditor: user?.perfil_nome === 'Editor',
     isVisualizador: user?.perfil_nome === 'Visualizador',
     isAnalistaBI: user?.perfil_nome === 'Analista BI',

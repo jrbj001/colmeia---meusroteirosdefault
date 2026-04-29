@@ -19,6 +19,15 @@ const api = axios.create({
   }
 });
 
+/** Injeta (ou remove) o cabeçalho de tenant exibidor em todas as requisições. */
+export function setExibidorFkHeader(fk: number | null | undefined): void {
+  if (fk) {
+    api.defaults.headers.common['x-user-exibidor-fk'] = String(fk);
+  } else {
+    delete api.defaults.headers.common['x-user-exibidor-fk'];
+  }
+}
+
 // Interceptor para logs de debug
 api.interceptors.request.use(
   (config) => {

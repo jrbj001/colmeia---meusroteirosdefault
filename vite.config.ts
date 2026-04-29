@@ -7,15 +7,24 @@ export default defineConfig({
     port: 3000,
   },
   build: {
-    chunkSizeWarningLimit: 1500, // Aumenta limite para 1.5MB (remove warning)
+    // Alerta apenas para chunks > 500 KB (limiar razoável com lazy loading)
+    chunkSizeWarningLimit: 500,
     rollupOptions: {
       output: {
         manualChunks: {
-          // Separa bibliotecas grandes em chunks próprios
+          // ── Infraestrutura React ──────────────────────────────────────────
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+
+          // ── Auth ─────────────────────────────────────────────────────────
+          'auth-vendor': ['@auth0/auth0-react', '@auth0/auth0-spa-js'],
+
+          // ── Mapa (Leaflet) — chunk pesado, isolado para cache de longo prazo
+          'leaflet-vendor': ['leaflet', 'react-leaflet'],
+
+          // ── Excel ─────────────────────────────────────────────────────────
           'xlsx-vendor': ['xlsx'],
-        }
-      }
-    }
-  }
-}) 
+        },
+      },
+    },
+  },
+})

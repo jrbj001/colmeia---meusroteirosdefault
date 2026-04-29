@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import api from "../../config/axios";
 import { Sidebar } from "../../components/Sidebar/Sidebar";
@@ -98,6 +98,34 @@ export const ConsultaEndereco: React.FC = () => {
   const [fwdApiErrors, setFwdApiErrors] = useState<any[]>([]);
   const [fwdErrorMessage, setFwdErrorMessage] = useState<string | null>(null);
   const [fwdLogs, setFwdLogs] = useState<string[]>([]);
+
+  // === Loading detalhado ===
+  const [loadingPhase, setLoadingPhase] = useState<string>("");
+  const [loadingRowCount, setLoadingRowCount] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, processed: 0 });
+  const loadingStartRef = useRef<number | null>(null);
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const BATCH_SIZE = 100;
+
+  const startLoadingTimer = useCallback(() => {
+    loadingStartRef.current = Date.now();
+    setElapsedSeconds(0);
+    elapsedTimerRef.current = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - (loadingStartRef.current ?? Date.now())) / 1000));
+    }, 1000);
+  }, []);
+
+  const stopLoadingTimer = useCallback(() => {
+    if (elapsedTimerRef.current) {
+      clearInterval(elapsedTimerRef.current);
+      elapsedTimerRef.current = null;
+    }
+    loadingStartRef.current = null;
+  }, []);
+
+  useEffect(() => () => { if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current); }, []);
 
   const addLog = useCallback((message: string) => {
     setLogs((prev) => [`${new Date().toLocaleTimeString("pt-BR")} - ${message}`, ...prev.slice(0, 49)]);
@@ -265,32 +293,82 @@ export const ConsultaEndereco: React.FC = () => {
 
   const executarConsulta = useCallback(async () => {
     if (!canEnrich) return;
+
+    const validPayload = parsedRows
+      .filter((row) => row.latitude !== null && row.longitude !== null)
+      .map((row) => ({ id: row.id, latitude: row.latitude, longitude: row.longitude }));
+
+    const batches: (typeof validPayload)[] = [];
+    for (let i = 0; i < validPayload.length; i += BATCH_SIZE) {
+      batches.push(validPayload.slice(i, i + BATCH_SIZE));
+    }
+
     setEnrichStatus("loading");
     setErrorMessage(null);
     setGeocodeResults([]);
     setApiInvalidRows([]);
     setApiErrors([]);
-    addLog("Enviando coordenadas para enriquecimento de endereços...");
-    const validPayload = parsedRows
-      .filter((row) => row.latitude !== null && row.longitude !== null)
-      .map((row) => ({ id: row.id, latitude: row.latitude, longitude: row.longitude }));
+    setLoadingPhase("Preparando coordenadas...");
+    setLoadingRowCount(validPayload.length);
+    setBatchProgress({ current: 0, total: batches.length, processed: 0 });
+    startLoadingTimer();
+    addLog(`Iniciando consulta em ${batches.length} lote(s) de até ${BATCH_SIZE} coordenadas.`);
+
+    const allResults: GeocodeResult[] = [];
+    const allInvalidRows: any[] = [];
+    const allErrors: any[] = [];
+    let provider = "google";
+
     try {
-      const response = await api.post("/consulta-endereco", { rows: validPayload });
-      const data = response.data;
-      if (!data?.results) throw new Error("Resposta da API não contém resultados.");
-      setGeocodeResults(data.results);
-      setApiInvalidRows(data.invalidRows || []);
-      setApiErrors(data.errors || []);
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        setBatchProgress({ current: i + 1, total: batches.length, processed: i * BATCH_SIZE });
+        setLoadingPhase(`Consultando endereços — lote ${i + 1} de ${batches.length}...`);
+
+        const response = await api.post("/consulta-endereco", { rows: batch });
+        const data = response.data;
+
+        if (!data?.results) throw new Error(`Lote ${i + 1}: resposta inválida da API.`);
+
+        provider = data.provider ?? provider;
+        allResults.push(...(data.results ?? []));
+        allInvalidRows.push(...(data.invalidRows ?? []));
+        allErrors.push(...(data.errors ?? []));
+
+        addLog(`Lote ${i + 1}/${batches.length}: ${data.results?.length ?? 0} endereços obtidos.`);
+      }
+
+      setBatchProgress({ current: batches.length, total: batches.length, processed: validPayload.length });
+      setLoadingPhase("Processando resultados...");
+
+      if (allResults.length === 0 && validPayload.length > 0) {
+        const detalhe = allErrors.length > 0 ? String(allErrors[0]?.reason || allErrors[0]) : "";
+        setErrorMessage(
+          detalhe || "Nenhum endereço foi retornado. Verifique cotas da API Google ou tente novamente."
+        );
+      }
+
+      setGeocodeResults(allResults);
+      setApiInvalidRows(allInvalidRows);
+      setApiErrors(allErrors);
+      stopLoadingTimer();
       setEnrichStatus("done");
-      addLog(`Enriquecimento concluído: ${data.results.length} linhas processadas (${data.provider}).`);
-      if (data.meta?.invalidRows) addLog(`Coordenadas inválidas: ${data.meta.invalidRows}.`);
-      if (data.errors?.length) addLog(`Falhas no provedor: ${data.errors.length}.`);
+      addLog(`Enriquecimento concluído: ${allResults.length} linhas processadas (${provider}).`);
+      if (allInvalidRows.length) addLog(`Coordenadas inválidas: ${allInvalidRows.length}.`);
+      if (allErrors.length) addLog(`Falhas no provedor: ${allErrors.length}.`);
     } catch (error: any) {
-      setErrorMessage(error.response?.data?.message || error.message || "Falha ao consultar o serviço de endereço.");
+      stopLoadingTimer();
+      const net =
+        error?.code === "ERR_NETWORK" || error?.message === "Network Error"
+          ? " Não foi possível contatar o servidor. Verifique sua conexão e tente novamente."
+          : "";
+      setErrorMessage(
+        (error.response?.data?.message || error.message || "Falha ao consultar o serviço de endereço.") + net
+      );
       setEnrichStatus("idle");
-      addLog("Falha ao consultar o serviço.");
+      addLog(`Falha: ${error.message || "erro desconhecido"}.`);
     }
-  }, [addLog, canEnrich, parsedRows]);
+  }, [addLog, canEnrich, parsedRows, startLoadingTimer, stopLoadingTimer, BATCH_SIZE]);
 
   // === Aba 2: Buscar Coordenadas ===
   const canFwdEnrich = useMemo(() => {
@@ -300,12 +378,6 @@ export const ConsultaEndereco: React.FC = () => {
 
   const executarBuscaCoordenada = useCallback(async () => {
     if (!canFwdEnrich) return;
-    setFwdEnrichStatus("loading");
-    setFwdErrorMessage(null);
-    setFwdResults([]);
-    setFwdApiInvalidRows([]);
-    setFwdApiErrors([]);
-    addFwdLog("Enviando endereços para busca de coordenadas...");
 
     const payload = fwdParsedRows.map((row) => {
       const mapped: Record<string, any> = { id: row.id };
@@ -315,23 +387,77 @@ export const ConsultaEndereco: React.FC = () => {
       return mapped;
     });
 
-    try {
-      const response = await api.post("/busca-coordenada", { rows: payload });
-      const data = response.data;
-      if (!data?.results) throw new Error("Resposta da API não contém resultados.");
-      setFwdResults(data.results);
-      setFwdApiInvalidRows(data.invalidRows || []);
-      setFwdApiErrors(data.errors || []);
-      setFwdEnrichStatus("done");
-      addFwdLog(`Busca concluída: ${data.results.length} endereços geocodificados (${data.provider}).`);
-      if (data.meta?.invalidRows) addFwdLog(`Endereços inválidos: ${data.meta.invalidRows}.`);
-      if (data.errors?.length) addFwdLog(`Falhas no provedor: ${data.errors.length}.`);
-    } catch (error: any) {
-      setFwdErrorMessage(error.response?.data?.message || error.message || "Falha ao buscar coordenadas.");
-      setFwdEnrichStatus("idle");
-      addFwdLog("Falha ao consultar o serviço.");
+    const batches: (typeof payload)[] = [];
+    for (let i = 0; i < payload.length; i += BATCH_SIZE) {
+      batches.push(payload.slice(i, i + BATCH_SIZE));
     }
-  }, [addFwdLog, canFwdEnrich, fwdColumns, fwdParsedRows]);
+
+    setFwdEnrichStatus("loading");
+    setFwdErrorMessage(null);
+    setFwdResults([]);
+    setFwdApiInvalidRows([]);
+    setFwdApiErrors([]);
+    setLoadingPhase("Preparando endereços...");
+    setLoadingRowCount(payload.length);
+    setBatchProgress({ current: 0, total: batches.length, processed: 0 });
+    startLoadingTimer();
+    addFwdLog(`Iniciando busca em ${batches.length} lote(s) de até ${BATCH_SIZE} endereços.`);
+
+    const allResults: ForwardResult[] = [];
+    const allInvalidRows: any[] = [];
+    const allErrors: any[] = [];
+    let provider = "google";
+
+    try {
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        setBatchProgress({ current: i + 1, total: batches.length, processed: i * BATCH_SIZE });
+        setLoadingPhase(`Geocodificando lote ${i + 1} de ${batches.length}...`);
+
+        const response = await api.post("/busca-coordenada", { rows: batch });
+        const data = response.data;
+
+        if (!data?.results) throw new Error(`Lote ${i + 1}: resposta inválida da API.`);
+
+        provider = data.provider ?? provider;
+        allResults.push(...(data.results ?? []));
+        allInvalidRows.push(...(data.invalidRows ?? []));
+        allErrors.push(...(data.errors ?? []));
+
+        addFwdLog(`Lote ${i + 1}/${batches.length}: ${data.results?.length ?? 0} geocodificados.`);
+      }
+
+      setBatchProgress({ current: batches.length, total: batches.length, processed: payload.length });
+      setLoadingPhase("Processando resultados...");
+
+      if (allResults.length === 0 && payload.length > 0) {
+        const detalhe = allErrors.length > 0 ? String(allErrors[0]?.reason || allErrors[0]) : "";
+        setFwdErrorMessage(
+          detalhe || "Nenhuma coordenada foi retornada. Verifique cotas da API Google ou tente novamente."
+        );
+      }
+
+      setFwdResults(allResults);
+      setFwdApiInvalidRows(allInvalidRows);
+      setFwdApiErrors(allErrors);
+      stopLoadingTimer();
+      setFwdEnrichStatus("done");
+      addFwdLog(`Busca concluída: ${allResults.length} endereços geocodificados (${provider}).`);
+      if (allInvalidRows.length) addFwdLog(`Endereços inválidos: ${allInvalidRows.length}.`);
+      if (allErrors.length) addFwdLog(`Falhas no provedor: ${allErrors.length}.`);
+    } catch (error: any) {
+      stopLoadingTimer();
+      const net =
+        error?.code === "ERR_NETWORK" || error?.message === "Network Error"
+          ? " Não foi possível contatar o servidor. Verifique sua conexão e tente novamente."
+          : "";
+      setFwdErrorMessage(
+        (error.response?.data?.message || error.message || "Falha ao buscar coordenadas.") + net
+      );
+      setFwdEnrichStatus("idle");
+      addFwdLog(`Falha: ${error.message || "erro desconhecido"}.`);
+    }
+  }, [addFwdLog, canFwdEnrich, fwdColumns, fwdParsedRows, startLoadingTimer, stopLoadingTimer, BATCH_SIZE]);
 
   // === Aba 1: Download ===
   const downloadExcel = useCallback(() => {
@@ -401,7 +527,28 @@ export const ConsultaEndereco: React.FC = () => {
   const isFwdProcessing = fwdUploadStatus === "processing";
   const isFwdEnriching = fwdEnrichStatus === "loading";
   const isBusy = isProcessingUpload || isEnriching || isFwdProcessing || isFwdEnriching;
-  const busyMessage = isProcessingUpload || isFwdProcessing ? "Processando planilha..." : isEnriching ? "Consultando endereços..." : isFwdEnriching ? "Buscando coordenadas..." : "";
+  const isGeocodingBusy = isEnriching || isFwdEnriching;
+  const accentColor = activeTab === "coordenadas-para-endereco" ? "#ff4600" : "#4f46e5";
+
+  const loadingSteps = isProcessingUpload || isFwdProcessing
+    ? [
+        { label: "Lendo arquivo", done: false, active: true },
+        { label: "Validando colunas", done: false, active: false },
+        { label: "Preparando dados", done: false, active: false },
+      ]
+    : [
+        { label: "Preparando", done: batchProgress.current > 0, active: batchProgress.current === 0 && loadingPhase !== "" },
+        { label: `Geocodificando${batchProgress.total > 1 ? ` (${batchProgress.current}/${batchProgress.total})` : ""}`, done: batchProgress.current === batchProgress.total && batchProgress.total > 0, active: batchProgress.current > 0 && batchProgress.current < batchProgress.total },
+        { label: "Finalizando", done: false, active: loadingPhase === "Processando resultados..." },
+      ];
+
+  const progressPercent = isProcessingUpload || isFwdProcessing
+    ? Math.min(90, elapsedSeconds * 35)
+    : batchProgress.total > 0
+      ? loadingPhase === "Processando resultados..."
+        ? 99
+        : Math.round((batchProgress.current / batchProgress.total) * 97)
+      : Math.min(10, elapsedSeconds * 5);
 
   const COLUMN_LABELS: Record<string, string> = {
     rua: "Rua / Logradouro",
@@ -668,11 +815,112 @@ export const ConsultaEndereco: React.FC = () => {
       </div>
 
       {isBusy && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-2xl px-8 py-6 flex flex-col items-center gap-3 text-[#333]">
-            <LoadingSpinner size="xl" color={activeTab === "coordenadas-para-endereco" ? "#ff4600" : "#4f46e5"} />
-            <p className="text-sm font-semibold">{busyMessage}</p>
-            <p className="text-xs text-[#666] text-center max-w-xs">Esse processo pode levar alguns segundos enquanto consultamos o serviço de geocodificação.</p>
+        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            {/* Cabeçalho colorido */}
+            <div
+              className="px-6 pt-6 pb-4"
+              style={{ background: `linear-gradient(135deg, ${accentColor}15, ${accentColor}08)`, borderBottom: `2px solid ${accentColor}20` }}
+            >
+              <div className="flex items-center gap-3 mb-1">
+                <LoadingSpinner size="lg" color={accentColor} />
+                <div>
+                  <p className="text-sm font-bold text-[#222]">
+                    {isProcessingUpload || isFwdProcessing ? "Processando planilha" : isEnriching ? "Consultando endereços" : "Buscando coordenadas"}
+                  </p>
+                  <p className="text-xs text-[#666] mt-0.5">{loadingPhase || "Iniciando..."}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-5 space-y-5">
+              {/* Barra de progresso */}
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-xs text-[#666]">Progresso estimado</span>
+                  <span className="text-xs font-bold" style={{ color: accentColor }}>{progressPercent}%</span>
+                </div>
+                <div className="h-2 bg-[#f0f0f0] rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-700 ease-out"
+                    style={{ width: `${progressPercent}%`, background: `linear-gradient(90deg, ${accentColor}, ${accentColor}cc)` }}
+                  />
+                </div>
+              </div>
+
+              {/* Etapas */}
+              <div className="space-y-2">
+                {loadingSteps.map((step, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div
+                      className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300"
+                      style={{
+                        background: step.done ? accentColor : step.active ? `${accentColor}20` : "#f0f0f0",
+                        border: step.active ? `2px solid ${accentColor}` : "2px solid transparent",
+                      }}
+                    >
+                      {step.done ? (
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : step.active ? (
+                        <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: accentColor }} />
+                      ) : (
+                        <div className="w-2 h-2 rounded-full bg-[#ccc]" />
+                      )}
+                    </div>
+                    <span
+                      className="text-xs font-medium transition-colors duration-300"
+                      style={{ color: step.done ? accentColor : step.active ? "#222" : "#aaa" }}
+                    >
+                      {step.label}
+                    </span>
+                    {step.done && <span className="text-xs text-green-500 ml-auto">✓</span>}
+                    {step.active && <span className="text-xs ml-auto" style={{ color: accentColor }}>em andamento...</span>}
+                  </div>
+                ))}
+              </div>
+
+              {/* Métricas inferiores */}
+              <div className="pt-3 border-t border-[#f0f0f0] space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs text-[#666]">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    <span>{elapsedSeconds}s decorridos</span>
+                  </div>
+                  {isGeocodingBusy && loadingRowCount > 0 && (
+                    <div className="flex items-center gap-1.5 text-xs text-[#666]">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+                        <rect x="9" y="3" width="6" height="4" rx="1" />
+                      </svg>
+                      <span>{loadingRowCount.toLocaleString("pt-BR")} linhas</span>
+                    </div>
+                  )}
+                </div>
+                {isGeocodingBusy && batchProgress.total > 1 && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[#888]">
+                      Lote <strong className="text-[#444]">{batchProgress.current}</strong> de <strong className="text-[#444]">{batchProgress.total}</strong>
+                      {batchProgress.processed > 0 && (
+                        <span className="ml-1 text-[#aaa]">· {batchProgress.processed.toLocaleString("pt-BR")} processadas</span>
+                      )}
+                    </span>
+                    {batchProgress.current > 0 && batchProgress.total > 0 && elapsedSeconds > 0 && (
+                      <span className="text-[#999]">
+                        {(() => {
+                          const rate = batchProgress.current / elapsedSeconds;
+                          const remaining = rate > 0 ? Math.ceil((batchProgress.total - batchProgress.current) / rate) : null;
+                          return remaining !== null ? `~${remaining}s restantes` : "";
+                        })()}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

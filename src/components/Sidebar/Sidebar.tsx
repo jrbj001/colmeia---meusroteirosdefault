@@ -18,8 +18,9 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido }) => {
   const location = useLocation();
   const { isAdmin } = usePermissions();
-  const { isAgencia } = useAuth();
+  const { isAgencia, isExibidor } = useAuth();
   const [bancoAtivosAberto, setBancoAtivosAberto] = useState(false);
+  const [atualizarInventarioAberto, setAtualizarInventarioAberto] = useState(false);
   const [adminAberto, setAdminAberto] = useState(false);
   
   // Verificar se estamos em alguma rota do banco de ativos para abrir o submenu automaticamente
@@ -31,11 +32,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
       '/banco-de-ativos/cadastrar/grupo-midia',
       '/banco-de-ativos/cadastrar/tipo-midia',
       '/banco-de-ativos/cadastrar/exibidor',
+      '/banco-de-ativos/exibidores',
       '/banco-de-ativos/importar/arquivo'
     ];
     
     if (rotasBancoAtivos.some(rota => location.pathname.startsWith(rota))) {
       setBancoAtivosAberto(true);
+    }
+
+    const rotasAtualizarInventario = [
+      '/exibidor/importar',
+      '/exibidor/enviados',
+      '/exibidor/editar',
+      '/exibidor/excluir',
+    ];
+    if (rotasAtualizarInventario.some((rota) => location.pathname.startsWith(rota))) {
+      setAtualizarInventarioAberto(true);
     }
 
     // Abrir submenu de admin automaticamente
@@ -56,6 +68,114 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
       </div>
 
       <nav className={`space-y-4 w-full ${menuReduzido ? "flex flex-col items-center" : ""}`}>
+        {isExibidor ? (
+          <>
+            {/* Visão geral (Dashboard) */}
+            <Link to="/exibidor/dashboard" className="block">
+              <div className={`flex items-center gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
+                location.pathname === '/exibidor/dashboard' ? 'bg-[#ededed] text-[#222]' : ''
+              }`}>
+                <svg className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10.75L12 3l9 7.75V20a1 1 0 01-1 1h-5.5a1 1 0 01-1-1v-4.5h-3V20a1 1 0 01-1 1H4a1 1 0 01-1-1v-9.25z" />
+                </svg>
+                {!menuReduzido && (
+                  <span className="font-medium text-sm text-[#757575] tracking-[0.50px] group-hover:text-[#222] transition-colors duration-200">
+                    Visão geral
+                  </span>
+                )}
+              </div>
+            </Link>
+
+            {/* Meu inventário */}
+            <Link to="/exibidor/inventario" className="block">
+              <div className={`flex items-center gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
+                location.pathname.startsWith('/exibidor/inventario') ? 'bg-[#ededed] text-[#222]' : ''
+              }`}>
+                <FindInPage className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" color="#757575" />
+                {!menuReduzido && (
+                  <span className="font-medium text-sm text-[#757575] tracking-[0.50px] group-hover:text-[#222] transition-colors duration-200">
+                    Meu inventário
+                  </span>
+                )}
+              </div>
+            </Link>
+
+            {/* Atualizar inventário (submenu) */}
+            {!menuReduzido ? (
+              <div className="w-full">
+                <button
+                  onClick={() => setAtualizarInventarioAberto(!atualizarInventarioAberto)}
+                  className={`w-full flex items-center justify-between gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
+                    ['/exibidor/importar', '/exibidor/enviados', '/exibidor/editar', '/exibidor/excluir'].some((r) => location.pathname.startsWith(r)) ? 'bg-[#ededed] text-[#222]' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <AddBox className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" color="#757575" />
+                    <span className="font-bold text-sm text-[#757575] group-hover:text-[#222] transition-colors duration-200">
+                      Atualizar inventário
+                    </span>
+                  </div>
+                  <KeyboardArrowDown
+                    className={`w-5 h-5 transition-all duration-200 ${
+                      atualizarInventarioAberto
+                        ? 'transform rotate-180 text-[#222]'
+                        : 'text-[#757575] group-hover:text-[#222]'
+                    }`}
+                  />
+                </button>
+
+                {atualizarInventarioAberto && (
+                  <div className="ml-4 mt-2 space-y-0.5">
+                    <Link to="/exibidor/importar" className="block">
+                      <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
+                        location.pathname === '/exibidor/importar' ? 'text-[#ff4600] font-medium' : 'text-[#3a3a3a] hover:bg-[#ededed]'
+                      }`}>
+                        Importar nova base
+                      </div>
+                    </Link>
+                    <Link to="/exibidor/editar" className="block">
+                      <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
+                        location.pathname === '/exibidor/editar' ? 'text-[#ff4600] font-medium' : 'text-[#3a3a3a] hover:bg-[#ededed]'
+                      }`}>
+                        Editar pontos enviados
+                      </div>
+                    </Link>
+                    <Link to="/exibidor/excluir" className="block">
+                      <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
+                        location.pathname === '/exibidor/excluir' ? 'text-[#ff4600] font-medium' : 'text-[#3a3a3a] hover:bg-[#ededed]'
+                      }`}>
+                        Excluir pontos enviados
+                      </div>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link to="/exibidor/importar" className="block">
+                <div className={`flex items-center gap-2.5 group hover:bg-[#ededed] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
+                  ['/exibidor/importar', '/exibidor/editar', '/exibidor/excluir'].some((r) => location.pathname.startsWith(r)) ? 'bg-[#ededed] text-[#222]' : ''
+                }`}>
+                  <AddBox className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" color="#757575" />
+                </div>
+              </Link>
+            )}
+
+            {/* Solicitações */}
+            <Link to="/exibidor/solicitacoes" className="block">
+              <div className={`flex items-center gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
+                location.pathname === '/exibidor/solicitacoes' ? 'bg-[#ededed] text-[#222]' : ''
+              }`}>
+                <PinDrop className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" />
+                {!menuReduzido && (
+                  <span className="font-medium text-sm text-[#757575] tracking-[0.50px] group-hover:text-[#222] transition-colors duration-200">
+                    Solicitações
+                  </span>
+                )}
+              </div>
+            </Link>
+          </>
+        ) : (
+          <>
         {/* Call to Action - Administração (oculto para agências) */}
         {!menuReduzido && !isAgencia && (
           <Link to="/admin/usuarios" className="block mb-6">
@@ -182,6 +302,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
                         Por exibidor
                       </div>
                     </Link>
+                    <Link to="/banco-de-ativos/exibidores" className="block">
+                      <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
+                        location.pathname === "/banco-de-ativos/exibidores"
+                          ? "text-[#ff4600] font-medium"
+                          : "text-[#3a3a3a] hover:bg-[#ededed]"
+                      }`}>
+                        Listar exibidores
+                      </div>
+                    </Link>
                   </div>
                 </div>
 
@@ -215,7 +344,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
                           ? "text-[#ff4600] font-medium"
                           : "text-[#3a3a3a] hover:bg-[#ededed]"
                       }`}>
-                        Exibidor
+                        Gestão de exibidores
                       </div>
                     </Link>
                   </div>
@@ -317,6 +446,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
               </div>
             )}
           </div>
+        )}
+          </>
         )}
       </nav>
 

@@ -84,7 +84,7 @@ module.exports = async function handler(req, res) {
 
     // POST /usuarios - Criar novo usuário
     if (req.method === 'POST') {
-      const { nome_st, email_st, telefone_st, perfil_pk, empresa_pk } = req.body;
+      const { nome_st, email_st, telefone_st, perfil_pk, empresa_pk, exibidor_fk } = req.body;
 
       // Validações
       if (!nome_st || !nome_st.trim()) {
@@ -116,10 +116,11 @@ module.exports = async function handler(req, res) {
         .input('telefone', telefone_st || null)
         .input('perfil', perfil_pk)
         .input('empresa', empresa_pk || null)
+        .input('exibidor', exibidor_fk || null)
         .query(`
           INSERT INTO [serv_product_be180].[usuario_dm] 
-          (nome_st, email_st, telefone_st, perfil_pk, empresa_pk, ativo_bl, date_dh, date_dt)
-          VALUES (@nome, @email, @telefone, @perfil, @empresa, 1, GETDATE(), CAST(GETDATE() AS DATE));
+          (nome_st, email_st, telefone_st, perfil_pk, empresa_pk, exibidor_fk, ativo_bl, date_dh, date_dt)
+          VALUES (@nome, @email, @telefone, @perfil, @empresa, @exibidor, 1, GETDATE(), CAST(GETDATE() AS DATE));
           
           SELECT SCOPE_IDENTITY() as id;
         `);
@@ -142,7 +143,7 @@ module.exports = async function handler(req, res) {
 
     // PUT /usuarios/:id - Atualizar usuário
     if (req.method === 'PUT' && id) {
-      const { nome_st, email_st, telefone_st, perfil_pk, empresa_pk } = req.body;
+      const { nome_st, email_st, telefone_st, perfil_pk, empresa_pk, exibidor_fk } = req.body;
 
       // Verificar se usuário existe
       const usuarioExists = await pool.request()
@@ -179,13 +180,15 @@ module.exports = async function handler(req, res) {
         .input('telefone', telefone_st || null)
         .input('perfil', perfil_pk)
         .input('empresa', empresa_pk || null)
+        .input('exibidor', exibidor_fk != null ? exibidor_fk : null)
         .query(`
           UPDATE [serv_product_be180].[usuario_dm]
           SET nome_st = @nome,
               email_st = @email,
               telefone_st = @telefone,
               perfil_pk = @perfil,
-              empresa_pk = @empresa
+              empresa_pk = @empresa,
+              exibidor_fk = @exibidor
           WHERE pk = @id
         `);
 
