@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../config/axios';
 import { ExibidorShell } from './components/ExibidorShell';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface DashboardData {
   totalPontos_vl?: number;
@@ -62,7 +63,45 @@ const SectionHeader: React.FC<{
   </div>
 );
 
+// ─── Passo do guia ───────────────────────────────────────────────────────────
+const GuideStep: React.FC<{
+  step: number;
+  done: boolean;
+  title: string;
+  description: string;
+  link: string;
+  linkLabel: string;
+}> = ({ step, done, title, description, link, linkLabel }) => (
+  <div className={`relative flex gap-5 p-6 border rounded-xl transition-colors ${
+    done ? 'border-gray-100 bg-gray-50/50' : 'border-gray-200 bg-white hover:border-gray-300'
+  }`}>
+    {/* número / check */}
+    <div className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold ${
+      done ? 'bg-gray-100 text-gray-400' : 'bg-[#ff4600] text-white'
+    }`}>
+      {done ? (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      ) : step}
+    </div>
+    <div className="flex-1 min-w-0">
+      <p className={`text-sm font-semibold ${done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{title}</p>
+      <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{description}</p>
+    </div>
+    {!done && (
+      <Link
+        to={link}
+        className="flex-shrink-0 self-center text-xs font-medium text-[#ff4600] hover:underline whitespace-nowrap"
+      >
+        {linkLabel} →
+      </Link>
+    )}
+  </div>
+);
+
 export const ExibidorDashboard: React.FC = () => {
+  const { user } = useAuth();
   const [data, setData]        = useState<DashboardData>({});
   const [solicitacoes, setSol] = useState<Solicitacao[]>([]);
   const [loading, setLoading]  = useState(true);
@@ -90,6 +129,21 @@ export const ExibidorDashboard: React.FC = () => {
   const pctN   = total > 0 ? Math.round((novo   / total) * 100) : 0;
   const pctVP  = total > 0 ? Math.round((vp     / total) * 100) : 0;
   const pctIN  = total > 0 ? Math.round((indoor / total) * 100) : 0;
+
+  // Primeiro nome para saudação
+  const primeiroNome = (user?.name || user?.email || 'Exibidor')
+    .split(/[\s@]/)[0];
+
+  // Determina hora para saudação contextual
+  const hora = new Date().getHours();
+  const saudacao =
+    hora < 12 ? 'Bom dia' :
+    hora < 18 ? 'Boa tarde' : 'Boa noite';
+
+  // Checklist: cada passo tem um critério de "concluído"
+  const temInventarioLegado = legado > 0;
+  const temEnvio            = (data.novoTotal_vl || 0) > 0;
+  const temCorrecaoPendente = (data.revisaoPendente_vl || 0) > 0;
 
   if (loading) {
     return (
@@ -125,6 +179,68 @@ export const ExibidorDashboard: React.FC = () => {
     >
       {/* container com max-width para respiração lateral em telas grandes */}
       <div className="max-w-7xl mx-auto space-y-16">
+
+        {/* ═══════════════════════════════════════════════════════════════
+            SAUDAÇÃO + GUIA DE INÍCIO
+        ═══════════════════════════════════════════════════════════════ */}
+        <section className="space-y-8">
+          {/* saudação */}
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.18em] text-[#ff4600] font-semibold mb-2">
+              Portal do Exibidor
+            </p>
+            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
+              {saudacao}, {primeiroNome}.
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Aqui você gerencia seu inventário de mídia OOH na plataforma Colmeia.
+            </p>
+          </div>
+
+          {/* guia de primeiros passos */}
+          <div>
+            <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold mb-4">
+              Primeiros passos
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+              <GuideStep
+                step={1}
+                done={temInventarioLegado}
+                title="Confira seu inventário atual"
+                description="Veja os pontos já cadastrados na base BE180 vinculados à sua empresa."
+                link="/exibidor/inventario"
+                linkLabel="Ver inventário"
+              />
+              <GuideStep
+                step={2}
+                done={temEnvio}
+                title="Importe novos pontos"
+                description="Envie uma planilha com os pontos que ainda não estão na base para aprovação."
+                link="/exibidor/importar"
+                linkLabel="Importar base"
+              />
+              <GuideStep
+                step={3}
+                done={temEnvio && !temCorrecaoPendente}
+                title="Acompanhe suas solicitações"
+                description="Monitore o status de cada lote enviado: em análise, aprovado ou para corrigir."
+                link="/exibidor/solicitacoes"
+                linkLabel="Ver solicitações"
+              />
+              <GuideStep
+                step={4}
+                done={false}
+                title="Mantenha o inventário atualizado"
+                description="Edite ou exclua pontos enviados conforme alterações no seu portfólio de mídia."
+                link="/exibidor/editar"
+                linkLabel="Editar pontos"
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* divisor */}
+        <div className="border-t border-gray-100" />
 
         {/* ═══════════════════════════════════════════════════════════════
             SEÇÃO 1 — HERO: total de pontos como número grande

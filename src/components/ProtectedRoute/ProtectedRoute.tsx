@@ -19,15 +19,15 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   adminOnly = false,
   allowedProfiles,
 }) => {
-  const { isAuthenticated, isLoading, temPermissao, isAgencia, user } = useAuth();
+  const { isAuthenticated, isLoading, temPermissao, isAgencia, isExibidor, user } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-orange-500 border-solid"></div>
-          <p className="text-gray-600">Carregando...</p>
+          <div className="w-10 h-10 border-4 border-gray-200 border-t-[#ff4600] rounded-full animate-spin" />
+          <p className="text-sm text-gray-500">Carregando...</p>
         </div>
       </div>
     );
@@ -46,10 +46,18 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   if (allowedProfiles && allowedProfiles.length > 0) {
+    // Usa includes (case-insensitive) para consistência com isExibidor — evita
+    // rejeitar perfis como "Perfil Exibidor" que passariam em isExibidor mas
+    // falhariam em comparação exata.
     const perfilUsuario = String(user?.perfil_nome || '').trim().toLowerCase();
-    const permitido = allowedProfiles.some((perfil) => perfilUsuario === perfil.trim().toLowerCase());
+    const permitido = allowedProfiles.some((perfil) =>
+      perfilUsuario.includes(perfil.trim().toLowerCase()) ||
+      perfil.trim().toLowerCase().includes(perfilUsuario)
+    );
     if (!permitido) {
-      return <Navigate to="/" replace />;
+      // Redireciona para o home correto do perfil atual
+      const destino = isExibidor ? '/exibidor/dashboard' : '/';
+      return <Navigate to={destino} replace />;
     }
   }
 

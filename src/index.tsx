@@ -2,8 +2,7 @@ import React, { StrictMode, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Auth0Provider } from "@auth0/auth0-react";
-import { AuthProvider } from "./contexts/AuthContext";
-import { useAuth } from "./contexts/AuthContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute/ProtectedRoute";
 import '../tailwind.css';
 import 'leaflet/dist/leaflet.css';
@@ -52,6 +51,14 @@ function AppGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Redireciona exibidores para /exibidor/dashboard; demais usuários ficam no HomeDashboard
+function HomeGuard() {
+  const { isExibidor, isLoading } = useAuth();
+  if (isLoading) return null; // ProtectedRoute já cuida do spinner
+  if (isExibidor) return <Navigate to="/exibidor/dashboard" replace />;
+  return <HomeDashboard />;
+}
+
 const appContainer = document.getElementById("app") as HTMLElement;
 const globalRoot = (globalThis as any).__COLMEIA_APP_ROOT__;
 const root = globalRoot || createRoot(appContainer);
@@ -77,10 +84,10 @@ root.render(
                 <Route path="/callback" element={<Callback />} />
 
                 <Route path="/" element={
-                  <ProtectedRoute><HomeDashboard /></ProtectedRoute>
+                  <ProtectedRoute><HomeGuard /></ProtectedRoute>
                 } />
                 <Route path="/home-dashboard" element={
-                  <ProtectedRoute><HomeDashboard /></ProtectedRoute>
+                  <ProtectedRoute><HomeGuard /></ProtectedRoute>
                 } />
                 <Route path="/meus-roteiros" element={
                   <ProtectedRoute><MeusRoteiros /></ProtectedRoute>
