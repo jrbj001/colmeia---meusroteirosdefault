@@ -15,19 +15,22 @@ module.exports = async (req, res) => {
       const pool = await getPool();
       const result = await pool.request().query(`
         SELECT TOP 500
-          exibidor_pk,
-          nome_st,
-          nome_fantasia_st,
-          codigo_st,
-          cnpj_st,
-          cidade_st,
-          estado_st,
-          dominio_st,
-          active_bl,
-          dataCriacao_dh
-        FROM [serv_product_be180].[exibidor_dm]
-        WHERE delete_bl = 0
-        ORDER BY nome_st
+          e.exibidor_pk,
+          e.nome_st,
+          e.nome_fantasia_st,
+          e.codigo_st,
+          e.cnpj_st,
+          e.cidade_st,
+          e.estado_st,
+          e.active_bl,
+          e.dataCriacao_dh,
+          (SELECT TOP 1 d.dominio_st
+           FROM [serv_product_be180].[exibidor_dominio_dm] d
+           WHERE d.exibidor_fk = e.exibidor_pk AND d.delete_bl = 0
+           ORDER BY d.primario_bl DESC, d.dominio_pk ASC) AS dominio_st
+        FROM [serv_product_be180].[exibidor_dm] e
+        WHERE e.delete_bl = 0
+        ORDER BY e.nome_st
       `);
       return res.status(200).json({ success: true, data: result.recordset });
     } catch (error) {
