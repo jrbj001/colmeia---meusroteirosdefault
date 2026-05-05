@@ -144,7 +144,7 @@ async function ensureSchema(pool) {
     END
   `);
 
-  // Adiciona exibidor_fk na tabela de lotes (migração idempotente)
+  // Migrações idempotentes na tabela de lotes
   await pool.request().query(`
     IF NOT EXISTS (
       SELECT 1 FROM sys.columns
@@ -155,6 +155,20 @@ async function ensureSchema(pool) {
       ALTER TABLE [serv_product_be180].[exibidor_inventario_upload_lote_dm]
         ADD [exibidor_fk] INT NULL;
     END
+  `);
+
+  // Migrações idempotentes na tabela de itens — novos campos do template 2026
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[serv_product_be180].[exibidor_inventario_item_dm]') AND name = 'praca_st')
+      ALTER TABLE [serv_product_be180].[exibidor_inventario_item_dm] ADD [praca_st] NVARCHAR(150) NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[serv_product_be180].[exibidor_inventario_item_dm]') AND name = 'uf_st')
+      ALTER TABLE [serv_product_be180].[exibidor_inventario_item_dm] ADD [uf_st] NVARCHAR(10) NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[serv_product_be180].[exibidor_inventario_item_dm]') AND name = 'numero_maximo_slots_vl')
+      ALTER TABLE [serv_product_be180].[exibidor_inventario_item_dm] ADD [numero_maximo_slots_vl] INT NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[serv_product_be180].[exibidor_inventario_item_dm]') AND name = 'pixels_especificacoes_st')
+      ALTER TABLE [serv_product_be180].[exibidor_inventario_item_dm] ADD [pixels_especificacoes_st] NVARCHAR(1000) NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[serv_product_be180].[exibidor_inventario_item_dm]') AND name = 'acabamento_st')
+      ALTER TABLE [serv_product_be180].[exibidor_inventario_item_dm] ADD [acabamento_st] NVARCHAR(255) NULL;
   `);
 }
 
@@ -231,25 +245,26 @@ function matchDePara(item, mappings) {
 function parsePayloadRow(row, lineNumber) {
   return {
     linhaArquivo: lineNumber,
-    codigo_ativo: parseString(row.codigo_ativo),
+    codigo_ativo: parseString(row.codigo_ativo) || `LINHA_${lineNumber}`,
     latitude: parseNumber(row.latitude),
     longitude: parseNumber(row.longitude),
+    praca: parseString(row.praca),
+    uf: parseString(row.uf),
     ambiente: parseString(row.ambiente),
     formato_midia: parseString(row.formato_midia),
     tipo_midia: parseString(row.tipo_midia),
     tipo_ambiente_indoor: parseString(row.tipo_ambiente_indoor),
-    nome_fantasia: parseString(row.nome_fantasia),
     valor_tabela: parseNumber(row.valor_tabela),
     periodo_tabela: parseString(row.periodo_tabela),
     area_total_largura: parseNumber(row.area_total_largura),
     area_total_altura: parseNumber(row.area_total_altura),
-    area_total_unidade: parseString(row.area_total_unidade),
     area_visual_largura: parseNumber(row.area_visual_largura),
     area_visual_altura: parseNumber(row.area_visual_altura),
-    area_visual_unidade: parseString(row.area_visual_unidade),
-    substrato: parseString(row.substrato),
-    especificacoes: parseString(row.especificacoes),
     secundagem: parseString(row.secundagem),
+    numero_maximo_slots: parseNumber(row.numero_maximo_slots),
+    pixels_especificacoes: parseString(row.pixels_especificacoes),
+    substrato: parseString(row.substrato),
+    acabamento: parseString(row.acabamento),
     observacoes: parseString(row.observacoes),
   };
 }
@@ -280,51 +295,40 @@ async function insertUpload(req, res, pool) {
   const mappings = await loadDePara(pool);
 
   let processados = 0;
-  let pendentes = 0;
-  let rejeitados = 0;
   const errors = [];
 
   for (let i = 0; i < registros.length; i += 1) {
     const source = parsePayloadRow(registros[i], i + 2);
-    let status = 'EM_ANALISE';
-    let erro = null;
-
-    if (!source.codigo_ativo) {
-      rejeitados += 1;
-      status = 'PARA_CORRIGIR';
-      erro = 'Campo obrigatório ausente: codigo_ativo';
-      errors.push({ linha: source.linhaArquivo, erro });
-    }
+    // Novos uploads sempre entram como EM_ANALISE.
+    // De-para ausente é flag informacional para a BE180 — não é erro do exibidor.
+    const status = 'EM_ANALISE';
+    const erro = null;
 
     const mapResult = matchDePara(source, mappings);
-    if (!mapResult.mapped && status !== 'PARA_CORRIGIR') {
-      pendentes += 1;
-      status = 'PARA_CORRIGIR';
-      erro = 'Midia sem de-para cadastrado';
-    }
 
     await pool.request()
       .input('lote_fk', sql.Int, lotePk)
       .input('linhaArquivo_vl', sql.Int, source.linhaArquivo)
-      .input('codigo_ativo_st', sql.NVarChar(100), source.codigo_ativo || `SEM_CODIGO_${i + 1}`)
+      .input('codigo_ativo_st', sql.NVarChar(100), source.codigo_ativo)
       .input('latitude_vl', sql.Decimal(12, 8), source.latitude)
       .input('longitude_vl', sql.Decimal(12, 8), source.longitude)
+      .input('praca_st', sql.NVarChar(150), source.praca)
+      .input('uf_st', sql.NVarChar(10), source.uf)
       .input('ambiente_st', sql.NVarChar(150), source.ambiente)
       .input('formato_midia_st', sql.NVarChar(150), source.formato_midia)
       .input('tipo_midia_st', sql.NVarChar(150), source.tipo_midia)
       .input('tipo_ambiente_indoor_st', sql.NVarChar(150), source.tipo_ambiente_indoor)
-      .input('nome_fantasia_st', sql.NVarChar(255), source.nome_fantasia)
       .input('valor_tabela_vl', sql.Decimal(18, 2), source.valor_tabela)
       .input('periodo_tabela_st', sql.NVarChar(100), source.periodo_tabela)
       .input('area_total_largura_vl', sql.Decimal(18, 4), source.area_total_largura)
       .input('area_total_altura_vl', sql.Decimal(18, 4), source.area_total_altura)
-      .input('area_total_unidade_st', sql.NVarChar(20), source.area_total_unidade)
       .input('area_visual_largura_vl', sql.Decimal(18, 4), source.area_visual_largura)
       .input('area_visual_altura_vl', sql.Decimal(18, 4), source.area_visual_altura)
-      .input('area_visual_unidade_st', sql.NVarChar(20), source.area_visual_unidade)
-      .input('substrato_st', sql.NVarChar(255), source.substrato)
-      .input('especificacoes_st', sql.NVarChar(1000), source.especificacoes)
       .input('secundagem_st', sql.NVarChar(100), source.secundagem)
+      .input('numero_maximo_slots_vl', sql.Int, source.numero_maximo_slots)
+      .input('pixels_especificacoes_st', sql.NVarChar(1000), source.pixels_especificacoes)
+      .input('substrato_st', sql.NVarChar(255), source.substrato)
+      .input('acabamento_st', sql.NVarChar(255), source.acabamento)
       .input('observacoes_st', sql.NVarChar(2000), source.observacoes)
       .input('mapped_ambiente_st', sql.NVarChar(150), mapResult.mappedAmbiente)
       .input('mapped_formato_st', sql.NVarChar(150), mapResult.mappedFormato)
@@ -335,19 +339,19 @@ async function insertUpload(req, res, pool) {
       .query(`
         INSERT INTO [serv_product_be180].[exibidor_inventario_item_dm] (
           lote_fk, linhaArquivo_vl, codigo_ativo_st, latitude_vl, longitude_vl,
-          ambiente_st, formato_midia_st, tipo_midia_st, tipo_ambiente_indoor_st,
-          nome_fantasia_st, valor_tabela_vl, periodo_tabela_st, area_total_largura_vl,
-          area_total_altura_vl, area_total_unidade_st, area_visual_largura_vl,
-          area_visual_altura_vl, area_visual_unidade_st, substrato_st, especificacoes_st,
-          secundagem_st, observacoes_st, mapped_ambiente_st, mapped_formato_st,
+          praca_st, uf_st, ambiente_st, formato_midia_st, tipo_midia_st, tipo_ambiente_indoor_st,
+          valor_tabela_vl, periodo_tabela_st, area_total_largura_vl, area_total_altura_vl,
+          area_visual_largura_vl, area_visual_altura_vl, secundagem_st,
+          numero_maximo_slots_vl, pixels_especificacoes_st, substrato_st, acabamento_st,
+          observacoes_st, mapped_ambiente_st, mapped_formato_st,
           mapped_tipo_st, mapped_bl, status_st, erroValidacao_st
         ) VALUES (
           @lote_fk, @linhaArquivo_vl, @codigo_ativo_st, @latitude_vl, @longitude_vl,
-          @ambiente_st, @formato_midia_st, @tipo_midia_st, @tipo_ambiente_indoor_st,
-          @nome_fantasia_st, @valor_tabela_vl, @periodo_tabela_st, @area_total_largura_vl,
-          @area_total_altura_vl, @area_total_unidade_st, @area_visual_largura_vl,
-          @area_visual_altura_vl, @area_visual_unidade_st, @substrato_st, @especificacoes_st,
-          @secundagem_st, @observacoes_st, @mapped_ambiente_st, @mapped_formato_st,
+          @praca_st, @uf_st, @ambiente_st, @formato_midia_st, @tipo_midia_st, @tipo_ambiente_indoor_st,
+          @valor_tabela_vl, @periodo_tabela_st, @area_total_largura_vl, @area_total_altura_vl,
+          @area_visual_largura_vl, @area_visual_altura_vl, @secundagem_st,
+          @numero_maximo_slots_vl, @pixels_especificacoes_st, @substrato_st, @acabamento_st,
+          @observacoes_st, @mapped_ambiente_st, @mapped_formato_st,
           @mapped_tipo_st, @mapped_bl, @status_st, @erroValidacao_st
         )
       `);
@@ -355,14 +359,14 @@ async function insertUpload(req, res, pool) {
     processados += 1;
   }
 
-  const statusLote = rejeitados > 0 || pendentes > 0 ? 'PARA_CORRIGIR' : 'APROVADO';
+  // Lote sempre começa como EM_ANALISE — a BE180 decide o status após revisão.
   await pool.request()
     .input('lote_pk', sql.Int, lotePk)
-    .input('status_st', sql.NVarChar(40), statusLote)
+    .input('status_st', sql.NVarChar(40), 'EM_ANALISE')
     .input('totalRegistros_vl', sql.Int, registros.length)
     .input('processados_vl', sql.Int, processados)
-    .input('pendentes_vl', sql.Int, pendentes)
-    .input('rejeitados_vl', sql.Int, rejeitados)
+    .input('pendentes_vl', sql.Int, 0)
+    .input('rejeitados_vl', sql.Int, 0)
     .query(`
       UPDATE [serv_product_be180].[exibidor_inventario_upload_lote_dm]
       SET
@@ -428,7 +432,7 @@ async function listItens(req, res, pool) {
   }
   if (search) {
     request.input('search', sql.NVarChar(255), `%${search}%`);
-    whereParts.push('(i.codigo_ativo_st LIKE @search OR i.nome_fantasia_st LIKE @search OR i.formato_midia_st LIKE @search)');
+    whereParts.push('(i.codigo_ativo_st LIKE @search OR i.formato_midia_st LIKE @search OR i.tipo_midia_st LIKE @search OR i.praca_st LIKE @search OR i.uf_st LIKE @search)');
   }
   if (exibidorFk) {
     request.input('exibidor_fk', sql.Int, exibidorFk);
@@ -444,13 +448,24 @@ async function listItens(req, res, pool) {
       i.codigo_ativo_st,
       i.latitude_vl,
       i.longitude_vl,
+      i.praca_st,
+      i.uf_st,
       i.ambiente_st,
       i.formato_midia_st,
       i.tipo_midia_st,
       i.tipo_ambiente_indoor_st,
-      i.nome_fantasia_st,
       i.valor_tabela_vl,
       i.periodo_tabela_st,
+      i.area_total_largura_vl,
+      i.area_total_altura_vl,
+      i.area_visual_largura_vl,
+      i.area_visual_altura_vl,
+      i.secundagem_st,
+      i.numero_maximo_slots_vl,
+      i.pixels_especificacoes_st,
+      i.substrato_st,
+      i.acabamento_st,
+      i.observacoes_st,
       i.mapped_ambiente_st,
       i.mapped_formato_st,
       i.mapped_tipo_st,
@@ -549,7 +564,7 @@ async function getDashboard(req, res, pool) {
       (SELECT COUNT(1) FROM [serv_product_be180].[exibidor_inventario_item_dm] i WHERE i.delete_bl = 0 AND i.status_st = 'APROVADO' ${loteFilter}) AS aprovadosNovo_vl,
       (SELECT COUNT(1) FROM [serv_product_be180].[exibidor_inventario_upload_lote_dm] WHERE status_st = 'EM_ANALISE' ${loteFilterStandalone}) AS emAnalise_vl,
       (SELECT COUNT(1) FROM [serv_product_be180].[exibidor_inventario_upload_lote_dm] WHERE status_st = 'PARA_CORRIGIR' ${loteFilterStandalone}) AS revisaoPendente_vl,
-      (SELECT MAX(dataAtualizacao_dh) FROM [serv_product_be180].[exibidor_inventario_upload_lote_dm] WHERE 1=1 ${loteFilterStandalone}) AS ultimaAtualizacao_dh
+      (SELECT MAX(ISNULL(dataAtualizacao_dh, dataCriacao_dh)) FROM [serv_product_be180].[exibidor_inventario_upload_lote_dm] WHERE 1=1 ${loteFilterStandalone}) AS ultimaAtualizacao_dh
   `);
 
   const l = legado.recordset[0] || {};
@@ -677,7 +692,10 @@ async function getConsolidado(req, res, pool) {
   // Construímos UNION ALL para legado + novo aprovado
   const reqUnion = pool.request().input('exibidor_fk', sql.Int, exibidorFk);
   const filtrosLegado = ['b.valid_bl = 1', 'b.exibidor_fk = @exibidor_fk'];
-  const filtrosNovo = ['i.delete_bl = 0', "i.status_st = 'APROVADO'", 'l.exibidor_fk = @exibidor_fk'];
+  // Para consolidado/legado: apenas APROVADO. Para aba "exibidor": todos os statuses.
+  const filtrosNovo = origemFiltro === 'exibidor'
+    ? ['i.delete_bl = 0', 'l.exibidor_fk = @exibidor_fk']
+    : ['i.delete_bl = 0', "i.status_st = 'APROVADO'", 'l.exibidor_fk = @exibidor_fk'];
 
   if (search) {
     reqUnion.input('search', sql.NVarChar(255), `%${search}%`);
@@ -709,7 +727,8 @@ async function getConsolidado(req, res, pool) {
       b.media_format_st                   AS formato,
       b.grupo_st                          AS grupo,
       CAST(b.latitude AS FLOAT)           AS latitude,
-      CAST(b.longitude AS FLOAT)          AS longitude
+      CAST(b.longitude AS FLOAT)          AS longitude,
+      CAST(NULL AS NVARCHAR(40))          AS status_st
     FROM [serv_product_be180].[bancoAtivosJoin_ft] b
     WHERE ${filtrosLegado.join(' AND ')}
   `;
@@ -719,14 +738,15 @@ async function getConsolidado(req, res, pool) {
       i.item_pk                           AS pk,
       'exibidor'                          AS origem,
       i.codigo_ativo_st                   AS code,
-      CAST(NULL AS NVARCHAR(150))         AS cidade,
-      CAST(NULL AS NVARCHAR(10))          AS estado,
+      ISNULL(i.praca_st, CAST(NULL AS NVARCHAR(150))) AS cidade,
+      ISNULL(i.uf_st,    CAST(NULL AS NVARCHAR(10)))  AS estado,
       ISNULL(i.mapped_tipo_st, i.tipo_midia_st)         AS tipo_midia,
       ISNULL(i.mapped_ambiente_st, i.ambiente_st)       AS ambiente,
       ISNULL(i.mapped_formato_st, i.formato_midia_st)   AS formato,
       CAST(NULL AS NVARCHAR(150))         AS grupo,
       CAST(i.latitude_vl AS FLOAT)        AS latitude,
-      CAST(i.longitude_vl AS FLOAT)       AS longitude
+      CAST(i.longitude_vl AS FLOAT)       AS longitude,
+      i.status_st                         AS status_st
     FROM [serv_product_be180].[exibidor_inventario_item_dm] i
     JOIN [serv_product_be180].[exibidor_inventario_upload_lote_dm] l ON l.lote_pk = i.lote_fk
     WHERE ${filtrosNovo.join(' AND ')}
@@ -756,7 +776,7 @@ async function getConsolidado(req, res, pool) {
       (SELECT COUNT(1) FROM [serv_product_be180].[bancoAtivosJoin_ft] b WHERE b.valid_bl=1 AND b.exibidor_fk=@exibidor_fk) AS legado_vl,
       (SELECT COUNT(1) FROM [serv_product_be180].[exibidor_inventario_item_dm] i
         JOIN [serv_product_be180].[exibidor_inventario_upload_lote_dm] l ON l.lote_pk=i.lote_fk
-        WHERE i.delete_bl=0 AND i.status_st='APROVADO' AND l.exibidor_fk=@exibidor_fk) AS exibidor_vl
+        WHERE i.delete_bl=0 AND l.exibidor_fk=@exibidor_fk) AS exibidor_vl
   `);
 
   return res.status(200).json({
@@ -961,29 +981,49 @@ async function updateItem(req, res, pool) {
     return res.status(400).json({ success: false, error: 'item_pk é obrigatório' });
   }
 
-  const ambiente = parseString(req.body?.ambiente_st);
-  const formato = parseString(req.body?.formato_midia_st);
-  const tipo = parseString(req.body?.tipo_midia_st);
-  const nomeFantasia = parseString(req.body?.nome_fantasia_st);
-  const valorTabela = parseNumber(req.body?.valor_tabela_vl);
-
   await pool.request()
-    .input('item_pk', sql.Int, itemPk)
-    .input('ambiente_st', sql.NVarChar(150), ambiente)
-    .input('formato_midia_st', sql.NVarChar(150), formato)
-    .input('tipo_midia_st', sql.NVarChar(150), tipo)
-    .input('nome_fantasia_st', sql.NVarChar(255), nomeFantasia)
-    .input('valor_tabela_vl', sql.Decimal(18, 2), valorTabela)
+    .input('item_pk',                sql.Int,           itemPk)
+    .input('praca_st',               sql.NVarChar(150), parseString(req.body?.praca_st))
+    .input('uf_st',                  sql.NVarChar(10),  parseString(req.body?.uf_st))
+    .input('ambiente_st',            sql.NVarChar(150), parseString(req.body?.ambiente_st))
+    .input('formato_midia_st',       sql.NVarChar(150), parseString(req.body?.formato_midia_st))
+    .input('tipo_midia_st',          sql.NVarChar(150), parseString(req.body?.tipo_midia_st))
+    .input('tipo_ambiente_indoor_st',sql.NVarChar(150), parseString(req.body?.tipo_ambiente_indoor_st))
+    .input('valor_tabela_vl',        sql.Decimal(18,2), parseNumber(req.body?.valor_tabela_vl))
+    .input('periodo_tabela_st',      sql.NVarChar(100), parseString(req.body?.periodo_tabela_st))
+    .input('area_total_largura_vl',  sql.Decimal(18,4), parseNumber(req.body?.area_total_largura_vl))
+    .input('area_total_altura_vl',   sql.Decimal(18,4), parseNumber(req.body?.area_total_altura_vl))
+    .input('area_visual_largura_vl', sql.Decimal(18,4), parseNumber(req.body?.area_visual_largura_vl))
+    .input('area_visual_altura_vl',  sql.Decimal(18,4), parseNumber(req.body?.area_visual_altura_vl))
+    .input('secundagem_st',          sql.NVarChar(100), parseString(req.body?.secundagem_st))
+    .input('numero_maximo_slots_vl', sql.Int,           parseNumber(req.body?.numero_maximo_slots_vl))
+    .input('pixels_especificacoes_st',sql.NVarChar(1000),parseString(req.body?.pixels_especificacoes_st))
+    .input('substrato_st',           sql.NVarChar(255), parseString(req.body?.substrato_st))
+    .input('acabamento_st',          sql.NVarChar(255), parseString(req.body?.acabamento_st))
+    .input('observacoes_st',         sql.NVarChar(2000),parseString(req.body?.observacoes_st))
     .query(`
       UPDATE [serv_product_be180].[exibidor_inventario_item_dm]
       SET
-        ambiente_st = COALESCE(@ambiente_st, ambiente_st),
-        formato_midia_st = COALESCE(@formato_midia_st, formato_midia_st),
-        tipo_midia_st = COALESCE(@tipo_midia_st, tipo_midia_st),
-        nome_fantasia_st = COALESCE(@nome_fantasia_st, nome_fantasia_st),
-        valor_tabela_vl = COALESCE(@valor_tabela_vl, valor_tabela_vl),
-        status_st = 'EM_ANALISE',
-        dataAtualizacao_dh = SYSDATETIME()
+        praca_st                = COALESCE(@praca_st,                praca_st),
+        uf_st                   = COALESCE(@uf_st,                   uf_st),
+        ambiente_st             = COALESCE(@ambiente_st,             ambiente_st),
+        formato_midia_st        = COALESCE(@formato_midia_st,        formato_midia_st),
+        tipo_midia_st           = COALESCE(@tipo_midia_st,           tipo_midia_st),
+        tipo_ambiente_indoor_st = COALESCE(@tipo_ambiente_indoor_st, tipo_ambiente_indoor_st),
+        valor_tabela_vl         = COALESCE(@valor_tabela_vl,         valor_tabela_vl),
+        periodo_tabela_st       = COALESCE(@periodo_tabela_st,       periodo_tabela_st),
+        area_total_largura_vl   = COALESCE(@area_total_largura_vl,   area_total_largura_vl),
+        area_total_altura_vl    = COALESCE(@area_total_altura_vl,    area_total_altura_vl),
+        area_visual_largura_vl  = COALESCE(@area_visual_largura_vl,  area_visual_largura_vl),
+        area_visual_altura_vl   = COALESCE(@area_visual_altura_vl,   area_visual_altura_vl),
+        secundagem_st           = COALESCE(@secundagem_st,           secundagem_st),
+        numero_maximo_slots_vl  = COALESCE(@numero_maximo_slots_vl,  numero_maximo_slots_vl),
+        pixels_especificacoes_st= COALESCE(@pixels_especificacoes_st,pixels_especificacoes_st),
+        substrato_st            = COALESCE(@substrato_st,            substrato_st),
+        acabamento_st           = COALESCE(@acabamento_st,           acabamento_st),
+        observacoes_st          = COALESCE(@observacoes_st,          observacoes_st),
+        status_st               = 'EM_ANALISE',
+        dataAtualizacao_dh      = SYSDATETIME()
       WHERE item_pk = @item_pk
     `);
 

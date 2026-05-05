@@ -40,6 +40,7 @@ const STATUS: Record<string, { label: string; color: string }> = {
   APROVADO:      { label: 'Aprovado',      color: '#16a34a' },
   EM_ANALISE:    { label: 'Em análise',    color: '#d97706' },
   PARA_CORRIGIR: { label: 'Para corrigir', color: '#dc2626' },
+  REJEITADO:     { label: 'Rejeitado',     color: '#6b7280' },
 };
 
 // ─── Cabeçalho de seção (título minúsculo + linha) ───────────────────────────
@@ -171,8 +172,11 @@ export const ExibidorDashboard: React.FC = () => {
       actions={
         <Link
           to="/exibidor/importar"
-          className="inline-flex items-center h-10 px-5 rounded-lg bg-[#ff4600] hover:bg-[#e33d00] text-white text-sm font-medium transition-colors"
+          className="inline-flex items-center gap-2.5 h-11 px-6 rounded-lg bg-[#ff4600] hover:bg-[#e33d00] active:scale-95 text-white text-sm font-semibold transition-all shadow-sm shadow-orange-200"
         >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M8 12l4-4m0 0l4 4m-4-4v9" />
+          </svg>
           Importar nova base
         </Link>
       }
@@ -370,21 +374,65 @@ export const ExibidorDashboard: React.FC = () => {
           />
 
           {/* contadores rápidos */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-px bg-gray-200 mt-8 mb-10 border border-gray-200 rounded-xl overflow-hidden">
-            <div className="bg-white p-6">
-              <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold">Em análise</p>
-              <p className="text-3xl font-bold text-gray-900 mt-3 tracking-tight">{data.emAnalise_vl || 0}</p>
-              <p className="text-xs text-gray-400 mt-1">aguardando revisão</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8 mb-10">
+            {/* Em análise */}
+            <div className="flex items-center gap-4 border border-amber-100 bg-amber-50/60 rounded-xl px-5 py-5">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900 leading-none">{data.emAnalise_vl || 0}</p>
+                <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mt-1">Em análise</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">lote(s) aguardando revisão BE180</p>
+              </div>
             </div>
-            <div className="bg-white p-6">
-              <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold">Para corrigir</p>
-              <p className="text-3xl font-bold text-gray-900 mt-3 tracking-tight">{data.revisaoPendente_vl || 0}</p>
-              <p className="text-xs text-gray-400 mt-1">requerem ação sua</p>
-            </div>
-            <div className="bg-white p-6">
-              <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold">Total enviados</p>
-              <p className="text-3xl font-bold text-gray-900 mt-3 tracking-tight">{n(data.novoTotal_vl || 0)}</p>
-              <p className="text-xs text-gray-400 mt-1">pontos em todos os lotes</p>
+
+            {/* Para corrigir */}
+            {(data.revisaoPendente_vl || 0) > 0 ? (
+              <Link
+                to="/exibidor/solicitacoes"
+                className="flex items-center gap-4 border border-red-200 bg-red-50/60 rounded-xl px-5 py-5 hover:border-red-300 transition-colors group"
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className="text-2xl font-bold text-red-700 leading-none">{data.revisaoPendente_vl}</p>
+                  <p className="text-xs font-semibold text-red-600 uppercase tracking-wide mt-1">Para corrigir</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">clique para ver e corrigir →</p>
+                </div>
+              </Link>
+            ) : (
+              <div className="flex items-center gap-4 border border-green-100 bg-green-50/40 rounded-xl px-5 py-5">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900 leading-none">0</p>
+                  <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mt-1">Para corrigir</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">nenhuma ação necessária</p>
+                </div>
+              </div>
+            )}
+
+            {/* Total enviados */}
+            <div className="flex items-center gap-4 border border-gray-200 bg-white rounded-xl px-5 py-5">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900 leading-none">{n(data.novoTotal_vl || 0)}</p>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-1">Total enviados</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">pontos em todos os lotes</p>
+              </div>
             </div>
           </div>
 
