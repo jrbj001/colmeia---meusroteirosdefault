@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect, useMemo } from 'react';
+import api from '../../../config/axios';
 import { usePermissions } from '../../../hooks';
-import { Navbar } from '../../../components/Navbar';
+import { Sidebar } from '../../../components/Sidebar/Sidebar';
+import { Topbar } from '../../../components/Topbar/Topbar';
 
 interface Usuario {
   usuario_pk: number;
@@ -34,20 +35,57 @@ interface ExibidorItem {
   dominio_st: string | null;
 }
 
+const PERFIL_COLOR: Record<string, { bg: string; color: string }> = {
+  admin:        { bg: '#fee2e2', color: '#b91c1c' },
+  editor:       { bg: '#dbeafe', color: '#1d4ed8' },
+  visualizador: { bg: '#dcfce7', color: '#15803d' },
+  'analista bi':{ bg: '#ede9fe', color: '#6d28d9' },
+  exibidor:     { bg: '#ffedd5', color: '#c2410c' },
+};
+
+const PerfilBadge: React.FC<{ nome: string }> = ({ nome }) => {
+  const cfg = PERFIL_COLOR[nome.toLowerCase()] ?? { bg: '#f3f4f6', color: '#374151' };
+  return (
+    <span
+      className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide"
+      style={{ backgroundColor: cfg.bg, color: cfg.color }}
+    >
+      {nome}
+    </span>
+  );
+};
+
+const Skeleton: React.FC = () => (
+  <div className="animate-pulse space-y-3 p-6">
+    {Array.from({ length: 6 }).map((_, i) => (
+      <div key={i} className="flex gap-4">
+        <div className="h-4 bg-gray-100 rounded w-1/4" />
+        <div className="h-4 bg-gray-100 rounded w-1/3" />
+        <div className="h-4 bg-gray-100 rounded w-16" />
+        <div className="h-4 bg-gray-100 rounded w-16" />
+        <div className="h-4 bg-gray-100 rounded w-12" />
+      </div>
+    ))}
+  </div>
+);
+
 export const AdminUsuarios: React.FC = () => {
   usePermissions();
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [perfis, setPerfis] = useState<Perfil[]>([]);
-  const [agencias, setAgencias] = useState<Agencia[]>([]);
-  const [exibidores, setExibidores] = useState<ExibidorItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [menuReduzido, setMenuReduzido] = useState(false);
+
+  const [usuarios, setUsuarios]         = useState<Usuario[]>([]);
+  const [perfis, setPerfis]             = useState<Perfil[]>([]);
+  const [agencias, setAgencias]         = useState<Agencia[]>([]);
+  const [exibidores, setExibidores]         = useState<ExibidorItem[]>([]);
+  const [loadingExibidores, setLoadingExibidores] = useState(false);
+  const [loading, setLoading]           = useState(true);
+  const [searchTerm, setSearchTerm]     = useState('');
   const [filtroPerfil, setFiltroPerfil] = useState('');
   const [mostrarInativos, setMostrarInativos] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [modoEdicao, setModoEdicao] = useState(false);
+  const [showModal, setShowModal]       = useState(false);
+  const [modoEdicao, setModoEdicao]     = useState(false);
   const [usuarioSelecionado, setUsuarioSelecionado] = useState<Usuario | null>(null);
-  
+
   const [formData, setFormData] = useState({
     nome_st: '',
     email_st: '',
@@ -57,19 +95,14 @@ export const AdminUsuarios: React.FC = () => {
     exibidor_fk: null as number | null,
   });
 
-  // Carregar usuários e perfis
-  useEffect(() => {
-    carregarDados();
-  }, [searchTerm, filtroPerfil, mostrarInativos]);
+  useEffect(() => { carregarDados(); }, [searchTerm, filtroPerfil, mostrarInativos]);
 
   const carregarDados = async () => {
     setLoading(true);
     try {
-      // Carregar usuários
-      const usuariosResponse = await axios.get('/usuarios', {
+      const usuariosResponse = await api.get('/usuarios', {
         params: {
-          page: 1,
-          limit: 100,
+          page: 1, limit: 100,
           search: searchTerm,
           perfil: filtroPerfil,
           incluirInativos: mostrarInativos ? '1' : '0',
@@ -77,25 +110,17 @@ export const AdminUsuarios: React.FC = () => {
       });
       setUsuarios(usuariosResponse.data.usuarios || []);
 
-      // Carregar perfis e agências (apenas uma vez)
       if (perfis.length === 0) {
-        const perfisResponse = await axios.get('/perfis');
+        const perfisResponse = await api.get('/perfis');
         setPerfis(perfisResponse.data.perfis || []);
       }
       if (agencias.length === 0) {
-        const agenciasResponse = await axios.get('/referencia?action=agencia');
+        const agenciasResponse = await api.get('/referencia?action=agencia');
         const agenciasData = Array.isArray(agenciasResponse.data)
           ? agenciasResponse.data
           : Array.isArray(agenciasResponse.data?.agencias)
-            ? agenciasResponse.data.agencias
-            : [];
+            ? agenciasResponse.data.agencias : [];
         setAgencias(agenciasData);
-      }
-      if (exibidores.length === 0) {
-        try {
-          const exibRes = await axios.get('/referencia?action=exibidor-cadastro');
-          setExibidores(exibRes.data?.data || []);
-        } catch { /* tabela pode não existir ainda */ }
       }
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -104,17 +129,28 @@ export const AdminUsuarios: React.FC = () => {
     }
   };
 
+  const carregarExibidores = async () => {
+    setLoadingExibidores(true);
+    try {
+      const exibRes = await api.get('/referencia?action=exibidor-cadastro');
+      setExibidores(exibRes.data?.data || []);
+    } catch (err: any) {
+      console.error('[exibidor-cadastro]', err?.response?.data || err?.message);
+      setExibidores([]);
+    } finally {
+      setLoadingExibidores(false);
+    }
+  };
+
   const abrirModalCriar = () => {
     setModoEdicao(false);
     setUsuarioSelecionado(null);
     setFormData({
-      nome_st: '',
-      email_st: '',
-      telefone_st: '',
+      nome_st: '', email_st: '', telefone_st: '',
       perfil_pk: perfis.length > 0 ? perfis[0].perfil_pk : 0,
-      empresa_pk: null,
-      exibidor_fk: null,
+      empresa_pk: null, exibidor_fk: null,
     });
+    carregarExibidores();
     setShowModal(true);
   };
 
@@ -129,19 +165,18 @@ export const AdminUsuarios: React.FC = () => {
       empresa_pk: usuario.empresa_pk ?? null,
       exibidor_fk: usuario.exibidor_fk ?? null,
     });
+    carregarExibidores();
     setShowModal(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     try {
       if (modoEdicao && usuarioSelecionado) {
-        await axios.put(`/usuarios?id=${usuarioSelecionado.usuario_pk}`, formData);
+        await api.put(`/usuarios?id=${usuarioSelecionado.usuario_pk}`, formData);
       } else {
-        await axios.post('/usuarios', formData);
+        await api.post('/usuarios', formData);
       }
-
       setShowModal(false);
       carregarDados();
     } catch (error: any) {
@@ -150,12 +185,9 @@ export const AdminUsuarios: React.FC = () => {
   };
 
   const desativarUsuario = async (id: number) => {
-    if (!window.confirm('Tem certeza que deseja desativar este usuário?')) {
-      return;
-    }
-
+    if (!window.confirm('Tem certeza que deseja desativar este usuário?')) return;
     try {
-      await axios.delete(`/usuarios?id=${id}`);
+      await api.delete(`/usuarios?id=${id}`);
       carregarDados();
     } catch (error: any) {
       window.alert(error.response?.data?.error || 'Erro ao desativar usuário');
@@ -163,333 +195,381 @@ export const AdminUsuarios: React.FC = () => {
   };
 
   const reativarUsuario = async (id: number) => {
-    if (!window.confirm('Tem certeza que deseja reativar este usuário?')) {
-      return;
-    }
-
+    if (!window.confirm('Tem certeza que deseja reativar este usuário?')) return;
     try {
-      await axios.patch(`/usuarios?id=${id}`);
+      await api.patch(`/usuarios?id=${id}`);
       carregarDados();
     } catch (error: any) {
       window.alert(error.response?.data?.error || 'Erro ao reativar usuário');
     }
   };
 
-  const getBadgeColor = (perfilNome: string) => {
-    switch (perfilNome) {
-      case 'Admin':
-        return 'bg-red-100 text-red-800';
-      case 'Editor':
-        return 'bg-blue-100 text-blue-800';
-      case 'Visualizador':
-        return 'bg-green-100 text-green-800';
-      case 'Analista BI':
-        return 'bg-purple-100 text-purple-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
   const agenciasSeguras = Array.isArray(agencias) ? agencias : [];
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Gerenciar Usuários</h1>
-          <p className="mt-2 text-gray-600">
-            Adicione, edite ou desative usuários do sistema
-          </p>
-        </div>
+  const perfilSelecionado = perfis.find(p => p.perfil_pk === formData.perfil_pk);
+  const isExibidorPerfil = perfilSelecionado?.perfil_nome?.toLowerCase().includes('exibidor') ?? false;
 
-        {/* Filtros e Busca */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-2">
-              <input
-                type="text"
-                placeholder="Buscar por nome ou email..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-              />
+  const stats = useMemo(() => ({
+    total:    usuarios.length,
+    ativos:   usuarios.filter(u => u.usuario_ativo).length,
+    inativos: usuarios.filter(u => !u.usuario_ativo).length,
+    exibidores: usuarios.filter(u => u.perfil_nome?.toLowerCase().includes('exibidor')).length,
+  }), [usuarios]);
+
+  return (
+    <div className="min-h-screen bg-white flex font-sans">
+      <Sidebar menuReduzido={menuReduzido} setMenuReduzido={setMenuReduzido} />
+      <div className={`fixed top-0 z-20 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? 'left-20' : 'left-64'}`} />
+      <div
+        className={`flex-1 transition-all duration-300 min-h-screen w-full ${
+          menuReduzido ? 'ml-20' : 'ml-64'
+        } flex flex-col`}
+      >
+        <Topbar
+          menuReduzido={menuReduzido}
+          breadcrumb={{
+            items: [
+              { label: 'Home', path: '/' },
+              { label: 'Administração' },
+              { label: 'Gerenciar Usuários' },
+            ],
+          }}
+        />
+        <div
+          className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${
+            menuReduzido ? 'left-20 w-[calc(100%-5rem)]' : 'left-64 w-[calc(100%-16rem)]'
+          }`}
+        />
+
+        <div className="flex-1 pt-24 pb-16 px-8 overflow-auto">
+          <div className="max-w-7xl mx-auto">
+
+            {/* Cabeçalho */}
+            <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
+              <div>
+                <h1 className="text-3xl font-bold text-[#ff4600] mb-2 uppercase tracking-wide">
+                  Gerenciar Usuários
+                </h1>
+                <p className="text-[#3a3a3a] text-base leading-relaxed max-w-2xl">
+                  Adicione, edite ou desative usuários do sistema e controle perfis de acesso.
+                </p>
+              </div>
+              <button
+                onClick={abrirModalCriar}
+                className="bg-[#ff4600] hover:bg-[#e33d00] active:scale-95 text-white font-medium h-[44px] px-6 rounded-lg transition-all"
+              >
+                + Novo Usuário
+              </button>
             </div>
-            <div>
+
+            {/* Métricas */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+              <div className="rounded-xl border border-[#a8c2ef] bg-white p-4">
+                <p className="text-xs uppercase text-[#666] mb-1">Total</p>
+                <p className="text-2xl text-[#0a52e6] font-bold">{stats.total}</p>
+              </div>
+              <div className="rounded-xl border border-[#bbf7d0] bg-white p-4">
+                <p className="text-xs uppercase text-[#666] mb-1">Ativos</p>
+                <p className="text-2xl text-[#15803d] font-bold">{stats.ativos}</p>
+              </div>
+              <div className="rounded-xl border border-[#e5e7eb] bg-white p-4">
+                <p className="text-xs uppercase text-[#666] mb-1">Inativos</p>
+                <p className="text-2xl text-[#6b7280] font-bold">{stats.inativos}</p>
+              </div>
+              <div className="rounded-xl border border-[#f6c69b] bg-white p-4">
+                <p className="text-xs uppercase text-[#666] mb-1">Exibidores</p>
+                <p className="text-2xl text-[#ff4600] font-bold">{stats.exibidores}</p>
+              </div>
+            </div>
+
+            {/* Filtros */}
+            <div className="flex items-center gap-3 mb-4 flex-wrap">
+              <div className="relative flex-1 min-w-[220px]">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Buscar por nome ou e-mail..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 text-sm border border-[#d1d5db] rounded-lg focus:ring-2 focus:ring-[#ff4600] focus:border-transparent outline-none"
+                />
+              </div>
               <select
                 value={filtroPerfil}
                 onChange={(e) => setFiltroPerfil(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                className="border border-[#d1d5db] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#ff4600] outline-none"
               >
                 <option value="">Todos os perfis</option>
-                {perfis.map(perfil => (
-                  <option key={perfil.perfil_pk} value={perfil.perfil_nome}>
-                    {perfil.perfil_nome}
-                  </option>
+                {perfis.map(p => (
+                  <option key={p.perfil_pk} value={p.perfil_nome}>{p.perfil_nome}</option>
                 ))}
               </select>
+              <label className="flex items-center gap-2 text-sm text-[#3a3a3a] cursor-pointer select-none ml-auto">
+                <input
+                  type="checkbox"
+                  checked={mostrarInativos}
+                  onChange={(e) => setMostrarInativos(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 accent-[#ff4600]"
+                />
+                Mostrar inativos
+              </label>
             </div>
-          </div>
-          
-          <div className="mt-4 flex items-center justify-between">
-            <button
-              onClick={abrirModalCriar}
-              className="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-6 rounded-lg transition-colors"
-            >
-              + Novo Usuário
-            </button>
-            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={mostrarInativos}
-                onChange={(e) => setMostrarInativos(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
-              />
-              Mostrar usuários inativos
-            </label>
+
+            {/* Tabela */}
+            <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
+              {loading ? (
+                <Skeleton />
+              ) : usuarios.length === 0 ? (
+                <div className="py-16 text-center text-[#6b7280] text-sm">
+                  Nenhum usuário encontrado.
+                </div>
+              ) : (
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="border-b border-[#e5e7eb] bg-[#f9fafb]">
+                      <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Usuário</th>
+                      <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">E-mail</th>
+                      <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Perfil</th>
+                      <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Vínculo</th>
+                      <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Status</th>
+                      <th className="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#f3f4f6]">
+                    {usuarios.map((usuario) => (
+                      <tr key={usuario.usuario_pk} className="hover:bg-[#fafafa] transition-colors">
+                        <td className="px-5 py-3.5">
+                          <span className="text-sm font-medium text-[#111827]">{usuario.usuario_nome}</span>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className="text-sm text-[#6b7280]">{usuario.usuario_email || '—'}</span>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <PerfilBadge nome={usuario.perfil_nome} />
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className="text-sm text-[#6b7280]">
+                            {usuario.exibidor_fk
+                              ? <span className="text-[#c2410c] font-medium">Exibidor #{usuario.exibidor_fk}</span>
+                              : usuario.empresa_pk
+                                ? agenciasSeguras.find(a => a.id_agencia === usuario.empresa_pk)?.nome_agencia || `Agência #${usuario.empresa_pk}`
+                                : <span className="text-[#9ca3af] italic">Be (interno)</span>
+                            }
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span
+                            className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
+                            style={usuario.usuario_ativo
+                              ? { backgroundColor: '#dcfce7', color: '#15803d' }
+                              : { backgroundColor: '#f3f4f6', color: '#6b7280' }
+                            }
+                          >
+                            {usuario.usuario_ativo ? 'Ativo' : 'Inativo'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          {usuario.usuario_ativo ? (
+                            <span className="inline-flex gap-4">
+                              <button
+                                onClick={() => abrirModalEditar(usuario)}
+                                className="text-sm text-[#ff4600] hover:text-[#c2410c] font-medium"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                onClick={() => desativarUsuario(usuario.usuario_pk)}
+                                className="text-sm text-red-500 hover:text-red-700 font-medium"
+                              >
+                                Desativar
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => reativarUsuario(usuario.usuario_pk)}
+                              className="text-sm text-green-600 hover:text-green-800 font-medium"
+                            >
+                              Reativar
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Tabela de Usuários */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-orange-500 border-solid mx-auto"></div>
-              <p className="mt-4 text-gray-600">Carregando usuários...</p>
-            </div>
-          ) : usuarios.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
-              Nenhum usuário encontrado
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Usuário
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Email
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Perfil
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Agência
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Ações
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {usuarios.map((usuario) => (
-                    <tr key={usuario.usuario_pk} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {usuario.usuario_nome}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-500">
-                          {usuario.usuario_email || '-'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getBadgeColor(usuario.perfil_nome)}`}>
-                          {usuario.perfil_nome}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-500">
-                          {usuario.empresa_pk
-                            ? agenciasSeguras.find(a => a.id_agencia === usuario.empresa_pk)?.nome_agencia || `ID ${usuario.empresa_pk}`
-                            : <span className="text-gray-300">Be (interno)</span>
-                          }
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          usuario.usuario_ativo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {usuario.usuario_ativo ? 'Ativo' : 'Inativo'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        {usuario.usuario_ativo ? (
-                          <>
-                            <button
-                              onClick={() => abrirModalEditar(usuario)}
-                              className="text-orange-600 hover:text-orange-900 mr-4"
-                            >
-                              Editar
-                            </button>
-                            <button
-                              onClick={() => desativarUsuario(usuario.usuario_pk)}
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              Desativar
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            onClick={() => reativarUsuario(usuario.usuario_pk)}
-                            className="text-green-600 hover:text-green-900"
-                          >
-                            Reativar
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+        {/* Footer */}
+        <div
+          className={`fixed bottom-0 z-30 flex flex-col items-center pointer-events-none transition-all duration-300 ${
+            menuReduzido ? 'left-20 w-[calc(100%-5rem)]' : 'left-64 w-[calc(100%-16rem)]'
+          }`}
+        >
+          <div className="absolute left-0 top-0 h-full w-px bg-[#c1c1c1]" />
+          <footer className="w-full border-t border-[#c1c1c1] p-4 text-center text-[10px] italic text-[#b0b0b0] tracking-wide bg-white z-10 font-sans pointer-events-auto relative">
+            <div className="w-full h-[1px] bg-[#c1c1c1] absolute top-0 left-0" />
+            © 2025 Colmeia. All rights are reserved to Be Mediatech OOH.
+          </footer>
         </div>
       </div>
 
-      {/* Modal de Criar/Editar */}
+      {/* Modal Criar / Editar */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">
-              {modoEdicao ? 'Editar Usuário' : 'Novo Usuário'}
-            </h2>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            {/* Header modal */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#f3f4f6]">
+              <h2 className="text-lg font-bold text-[#111827]">
+                {modoEdicao ? 'Editar Usuário' : 'Novo Usuário'}
+              </h2>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-[#9ca3af] hover:text-[#374151] text-xl leading-none"
+              >
+                ✕
+              </button>
+            </div>
 
             <form onSubmit={handleSubmit}>
-              <div className="space-y-4">
+              <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+
+                {/* Nome */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nome *
-                  </label>
+                  <label className="block text-xs font-semibold text-[#374151] uppercase tracking-wide mb-1">Nome *</label>
                   <input
-                    type="text"
-                    required
+                    type="text" required
                     value={formData.nome_st}
                     onChange={(e) => setFormData({ ...formData, nome_st: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    className="w-full px-3 py-2 text-sm border border-[#d1d5db] rounded-lg focus:ring-2 focus:ring-[#ff4600] focus:border-transparent outline-none"
                   />
                 </div>
 
+                {/* Email */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email
-                  </label>
+                  <label className="block text-xs font-semibold text-[#374151] uppercase tracking-wide mb-1">E-mail</label>
                   <input
                     type="email"
                     value={formData.email_st}
                     onChange={(e) => setFormData({ ...formData, email_st: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    className="w-full px-3 py-2 text-sm border border-[#d1d5db] rounded-lg focus:ring-2 focus:ring-[#ff4600] focus:border-transparent outline-none"
                   />
                 </div>
 
+                {/* Telefone */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Telefone
-                  </label>
+                  <label className="block text-xs font-semibold text-[#374151] uppercase tracking-wide mb-1">Telefone</label>
                   <input
                     type="tel"
                     value={formData.telefone_st}
                     onChange={(e) => setFormData({ ...formData, telefone_st: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    className="w-full px-3 py-2 text-sm border border-[#d1d5db] rounded-lg focus:ring-2 focus:ring-[#ff4600] focus:border-transparent outline-none"
                   />
                 </div>
 
+                {/* Perfil */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Perfil *
-                  </label>
+                  <label className="block text-xs font-semibold text-[#374151] uppercase tracking-wide mb-1">Perfil *</label>
                   <select
                     required
                     value={formData.perfil_pk}
-                    onChange={(e) => setFormData({ ...formData, perfil_pk: parseInt(e.target.value) })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      perfil_pk: parseInt(e.target.value),
+                      empresa_pk: null,
+                      exibidor_fk: null,
+                    })}
+                    className="w-full px-3 py-2 text-sm border border-[#d1d5db] rounded-lg focus:ring-2 focus:ring-[#ff4600] focus:border-transparent outline-none"
                   >
                     <option value="">Selecione um perfil</option>
-                    {perfis.map(perfil => (
-                      <option key={perfil.perfil_pk} value={perfil.perfil_pk}>
-                        {perfil.perfil_nome} - {perfil.perfil_descricao}
+                    {perfis.map(p => (
+                      <option key={p.perfil_pk} value={p.perfil_pk}>
+                        {p.perfil_nome} — {p.perfil_descricao}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Agência
-                  </label>
-                  <select
-                    value={formData.empresa_pk ?? ''}
-                    onChange={(e) =>
-                      setFormData({
+                {/* Agência — só para não-exibidores */}
+                {!isExibidorPerfil && (
+                  <div>
+                    <label className="block text-xs font-semibold text-[#374151] uppercase tracking-wide mb-1">Agência</label>
+                    <select
+                      value={formData.empresa_pk ?? ''}
+                      onChange={(e) => setFormData({
                         ...formData,
                         empresa_pk: e.target.value ? parseInt(e.target.value) : null,
-                      })
-                    }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  >
-                    <option value="">Nenhuma (usuário interno Be)</option>
-                    {agenciasSeguras.map((ag) => (
-                      <option key={ag.id_agencia} value={ag.id_agencia}>
-                        {ag.nome_agencia}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Vincule a uma agência para acesso externo
-                  </p>
-                </div>
-
-                {perfis.find(p => p.perfil_pk === formData.perfil_pk)?.perfil_nome?.toLowerCase().includes('exibidor') && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Exibidor
-                    </label>
-                    <select
-                      value={formData.exibidor_fk ?? ''}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          exibidor_fk: e.target.value ? parseInt(e.target.value) : null,
-                        })
-                      }
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                      })}
+                      className="w-full px-3 py-2 text-sm border border-[#d1d5db] rounded-lg focus:ring-2 focus:ring-[#ff4600] focus:border-transparent outline-none"
                     >
-                      <option value="">Selecione o exibidor</option>
-                      {exibidores.map((ex) => (
-                        <option key={ex.exibidor_pk} value={ex.exibidor_pk}>
-                          {ex.nome_fantasia_st || ex.nome_st}
-                          {ex.dominio_st ? ` (${ex.dominio_st})` : ''}
-                        </option>
+                      <option value="">Nenhuma (usuário interno Be)</option>
+                      {agenciasSeguras.map((ag) => (
+                        <option key={ag.id_agencia} value={ag.id_agencia}>{ag.nome_agencia}</option>
                       ))}
                     </select>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Vincula o usuário a um exibidor específico
-                    </p>
+                    <p className="text-[11px] text-[#9ca3af] mt-1">Vincule a uma agência para acesso externo.</p>
+                  </div>
+                )}
+
+                {/* Exibidor — só para perfil Exibidor */}
+                {isExibidorPerfil && (
+                  <div>
+                    <label className="block text-xs font-semibold text-[#374151] uppercase tracking-wide mb-1">Exibidor *</label>
+                    {loadingExibidores ? (
+                      <div className="w-full px-3 py-2.5 border border-[#d1d5db] bg-[#f9fafb] rounded-lg text-sm text-[#9ca3af] flex items-center gap-2">
+                        <svg className="animate-spin w-4 h-4 text-[#ff4600]" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                        </svg>
+                        Carregando exibidores...
+                      </div>
+                    ) : exibidores.length === 0 ? (
+                      <div className="w-full px-3 py-2.5 border border-amber-200 bg-amber-50 rounded-lg text-sm text-amber-700">
+                        Nenhum exibidor cadastrado. Cadastre primeiro em Gestão de Exibidores.
+                      </div>
+                    ) : (
+                      <select
+                        required
+                        value={formData.exibidor_fk ?? ''}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          exibidor_fk: e.target.value ? parseInt(e.target.value) : null,
+                          empresa_pk: null,
+                        })}
+                        className="w-full px-3 py-2 text-sm border border-[#d1d5db] rounded-lg focus:ring-2 focus:ring-[#ff4600] focus:border-transparent outline-none"
+                      >
+                        <option value="">Selecione o exibidor</option>
+                        {exibidores.map((ex) => (
+                          <option key={ex.exibidor_pk} value={ex.exibidor_pk}>
+                            {ex.nome_fantasia_st || ex.nome_st}
+                            {ex.dominio_st ? ` — ${ex.dominio_st}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <p className="text-[11px] text-[#9ca3af] mt-1">Vincula o usuário ao portal do exibidor.</p>
                   </div>
                 )}
               </div>
 
-              <div className="mt-6 flex gap-3">
+              {/* Footer modal */}
+              <div className="px-6 py-4 border-t border-[#f3f4f6] flex gap-3">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition-colors"
+                  className="flex-1 border border-[#d1d5db] hover:bg-[#f9fafb] text-[#374151] font-medium py-2 px-4 rounded-lg text-sm transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                  className="flex-1 bg-[#ff4600] hover:bg-[#e33d00] text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors"
                 >
-                  {modoEdicao ? 'Salvar' : 'Criar'}
+                  {modoEdicao ? 'Salvar alterações' : 'Criar usuário'}
                 </button>
               </div>
             </form>
