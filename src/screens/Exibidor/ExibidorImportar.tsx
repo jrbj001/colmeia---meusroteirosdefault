@@ -136,11 +136,14 @@ export const ExibidorImportar: React.FC = () => {
       ]}
       actions={
         <a
-          href="#"
-          className="text-sm text-gray-600 hover:text-[#ff4600] transition-colors font-medium"
-          onClick={(e) => e.preventDefault()}
+          href="/Template_Inventario exibidores_2026.xlsx"
+          download
+          className="inline-flex items-center gap-2 h-10 px-5 rounded-lg border border-gray-200 hover:border-[#ff4600] hover:text-[#ff4600] text-sm font-medium text-gray-700 transition-colors"
         >
-          Baixar template Excel ↓
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 12v6m0 0l-3-3m3 3l3-3M12 4v8" />
+          </svg>
+          Baixar template
         </a>
       }
     >
@@ -189,7 +192,35 @@ export const ExibidorImportar: React.FC = () => {
             description="Aceitamos arquivos .xlsx ou .xls. Após o envio, processamos automaticamente."
           />
 
-          <div className="pt-8">
+          {/* ── Banner de download do template ── */}
+          <div className="mt-8 flex items-center justify-between gap-6 bg-orange-50 border border-orange-100 rounded-xl px-6 py-5">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-[#ff4600] flex items-center justify-center">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Use o template oficial</p>
+                <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                  Baixe o arquivo <span className="font-medium text-gray-700">Template_Inventario exibidores_2026.xlsx</span> e preencha a aba{' '}
+                  <span className="font-medium text-gray-700">"Pontos de mídia"</span> com seus pontos antes de enviar.
+                </p>
+              </div>
+            </div>
+            <a
+              href="/Template_Inventario exibidores_2026.xlsx"
+              download
+              className="flex-shrink-0 inline-flex items-center gap-2 h-10 px-5 rounded-lg bg-[#ff4600] hover:bg-[#e33d00] text-white text-sm font-semibold transition-colors whitespace-nowrap"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 4v12m0 0l-3-3m3 3l3-3" />
+              </svg>
+              Baixar template
+            </a>
+          </div>
+
+          <div className="pt-6">
             <label
               className={`group relative block border-2 border-dashed rounded-xl px-8 py-14 text-center cursor-pointer transition-colors ${
                 sending
@@ -232,26 +263,20 @@ export const ExibidorImportar: React.FC = () => {
 
           {/* ── Resultado ── */}
           {lastResult && (
-            <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-px bg-gray-200 border border-gray-200 rounded-xl overflow-hidden">
-              <div className="bg-white p-5 border-l-4 border-[#16a34a]">
-                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Lote</p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">#{lastResult.lote_pk}</p>
-                <p className="text-[10px] text-gray-400 mt-1">processado com sucesso</p>
+            <div className="mt-6 border border-green-100 bg-green-50/40 rounded-xl p-5 flex items-start gap-4">
+              <div className="flex-shrink-0 w-9 h-9 rounded-full bg-green-100 flex items-center justify-center">
+                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
               </div>
-              <div className="bg-white p-5">
-                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Total</p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">{lastResult.total}</p>
-                <p className="text-[10px] text-gray-400 mt-1">linhas processadas</p>
-              </div>
-              <div className="bg-white p-5">
-                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Pendentes</p>
-                <p className="text-2xl font-bold text-[#d97706] mt-2">{lastResult.pendentes}</p>
-                <p className="text-[10px] text-gray-400 mt-1">aguardam de-para</p>
-              </div>
-              <div className="bg-white p-5">
-                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Rejeitadas</p>
-                <p className="text-2xl font-bold text-[#dc2626] mt-2">{lastResult.rejeitados}</p>
-                <p className="text-[10px] text-gray-400 mt-1">requerem correção</p>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  Lote <span className="text-[#ff4600]">#{lastResult.lote_pk}</span> enviado com sucesso
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  <span className="font-medium text-gray-700">{lastResult.total} pontos</span> recebidos e encaminhados para análise da BE180.
+                  Acompanhe o status em <span className="font-medium text-gray-700">Solicitações</span>.
+                </p>
               </div>
             </div>
           )}

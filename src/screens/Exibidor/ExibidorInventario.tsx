@@ -18,7 +18,27 @@ interface LinhaConsolidado {
   grupo: string | null;
   latitude: number | null;
   longitude: number | null;
+  status_st: string | null;
 }
+
+const STATUS_BADGE: Record<string, { label: string; color: string; bg: string }> = {
+  APROVADO:      { label: 'Aprovado',      color: '#15803d', bg: '#dcfce7' },
+  EM_ANALISE:    { label: 'Em análise',    color: '#b45309', bg: '#fef3c7' },
+  PARA_CORRIGIR: { label: 'Para corrigir', color: '#b91c1c', bg: '#fee2e2' },
+};
+
+const StatusBadge: React.FC<{ status: string | null }> = ({ status }) => {
+  if (!status) return null;
+  const cfg = STATUS_BADGE[status] ?? { label: status, color: '#374151', bg: '#f3f4f6' };
+  return (
+    <span
+      style={{ color: cfg.color, backgroundColor: cfg.bg }}
+      className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap"
+    >
+      {cfg.label}
+    </span>
+  );
+};
 
 interface RespConsolidado {
   success: boolean;
@@ -242,7 +262,12 @@ export const ExibidorInventario: React.FC = () => {
                       <th className="text-left px-4 py-3 text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Tipo de mídia</th>
                       <th className="text-left px-4 py-3 text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Formato</th>
                       <th className="text-left px-4 py-3 text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Ambiente</th>
-                      <th className="text-left px-4 py-3 text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Grupo</th>
+                      {aba !== 'exibidor' && (
+                        <th className="text-left px-4 py-3 text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Grupo</th>
+                      )}
+                      {aba === 'exibidor' && (
+                        <th className="text-left px-4 py-3 text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Status</th>
+                      )}
                       <th className="w-8 pr-1" />
                     </tr>
                   </thead>
@@ -278,7 +303,14 @@ export const ExibidorInventario: React.FC = () => {
                           <td className="px-4 py-3.5 text-sm text-gray-700">{l.tipo_midia || '—'}</td>
                           <td className="px-4 py-3.5 text-sm text-gray-500">{l.formato || '—'}</td>
                           <td className="px-4 py-3.5 text-sm text-gray-500">{l.ambiente || '—'}</td>
-                          <td className="px-4 py-3.5 text-sm text-gray-500">{l.grupo || '—'}</td>
+                          {aba !== 'exibidor' && (
+                            <td className="px-4 py-3.5 text-sm text-gray-500">{l.grupo || '—'}</td>
+                          )}
+                          {aba === 'exibidor' && (
+                            <td className="px-4 py-3.5">
+                              <StatusBadge status={l.status_st} />
+                            </td>
+                          )}
                           <td className="pr-1 py-3.5 text-right">
                             <span className="text-xs text-gray-300 group-hover:text-[#ff4600] transition-colors">→</span>
                           </td>
