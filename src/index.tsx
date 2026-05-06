@@ -22,6 +22,7 @@ const VisualizarResultados   = lazy(() => import("./screens/VisualizarResultados
 const BancoDeAtivos          = lazy(() => import("./screens/BancoDeAtivos").then(m => ({ default: m.BancoDeAtivos })));
 const RelatorioPorPraca      = lazy(() => import("./screens/RelatorioPorPraca").then(m => ({ default: m.RelatorioPorPraca })));
 const RelatorioPorExibidor   = lazy(() => import("./screens/RelatorioPorExibidor").then(m => ({ default: m.RelatorioPorExibidor })));
+const RelatorioP1A           = lazy(() => import("./screens/RelatorioP1A").then(m => ({ default: m.RelatorioP1A })));
 const AdminUsuarios          = lazy(() => import("./screens/Admin").then(m => ({ default: m.AdminUsuarios })));
 const AdminPerfis            = lazy(() => import("./screens/Admin").then(m => ({ default: m.AdminPerfis })));
 const PaginaEmDesenvolvimento = lazy(() => import("./components/PaginaEmDesenvolvimento").then(m => ({ default: m.PaginaEmDesenvolvimento })));
@@ -91,6 +92,9 @@ root.render(
                 } />
                 <Route path="/meus-roteiros" element={
                   <ProtectedRoute><MeusRoteiros /></ProtectedRoute>
+                } />
+                <Route path="/relatorio-p1a" element={
+                  <ProtectedRoute><RelatorioP1A /></ProtectedRoute>
                 } />
                 <Route path="/mapa" element={
                   <ProtectedRoute><Mapa /></ProtectedRoute>
