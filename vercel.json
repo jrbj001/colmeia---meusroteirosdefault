@@ -82,11 +82,12 @@
     { "source": "/api/banco-ativos-relatorio-exibidor","destination": "/api/banco-ativos?action=relatorio-exibidor" },
     { "source": "/banco-ativos-relatorio-exibidor",    "destination": "/api/banco-ativos?action=relatorio-exibidor" },
 
-    { "source": "/api/relatorio-p1a-options",  "destination": "/api/relatorio-p1a?action=options"  },
-    { "source": "/api/relatorio-p1a-refresh",  "destination": "/api/relatorio-p1a?action=refresh"  },
-    { "source": "/api/relatorio-p1a-colmeia",  "destination": "/api/relatorio-p1a?action=colmeia"  },
-    { "source": "/api/relatorio-p1a-exibidor", "destination": "/api/relatorio-p1a?action=exibidor" },
-    { "source": "/api/relatorio-p1a-modelo",   "destination": "/api/relatorio-p1a?action=modelo"   },
+    { "source": "/api/relatorio-p1a-options",      "destination": "/api/relatorio-p1a?action=options"      },
+    { "source": "/api/relatorio-p1a-refresh",      "destination": "/api/relatorio-p1a?action=refresh"      },
+    { "source": "/api/relatorio-p1a-colmeia",      "destination": "/api/relatorio-p1a?action=colmeia"      },
+    { "source": "/api/relatorio-p1a-exibidor",     "destination": "/api/relatorio-p1a?action=exibidor"     },
+    { "source": "/api/relatorio-p1a-modelo",       "destination": "/api/relatorio-p1a?action=modelo"       },
+    { "source": "/api/relatorio-p1a-empilhamento", "destination": "/api/relatorio-p1a?action=empilhamento" },
 
     { "source": "/api/agencia", "destination": "/api/referencia?action=agencia" },
     { "source": "/api/marca", "destination": "/api/referencia?action=marca" },

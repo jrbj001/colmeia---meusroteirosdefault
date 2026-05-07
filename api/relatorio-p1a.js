@@ -4,6 +4,7 @@ const handlers = {
   colmeia: require('../handlers/relatorio-p1a-colmeia'),
   exibidor: require('../handlers/relatorio-p1a-exibidor'),
   modelo: require('../handlers/relatorio-p1a-modelo'),
+  empilhamento: require('../handlers/relatorio-p1a-empilhamento'),
 };
 
 module.exports = async (req, res) => {

@@ -9,7 +9,7 @@ import { P1aColmeiaTab } from './components/P1aColmeiaTab';
 import { P1aExibidorTab } from './components/P1aExibidorTab';
 import { P1aModeloTab } from './components/P1aModeloTab';
 import { P1aRefreshLoader } from './components/P1aLoader';
-import { exportP1aWorkbook } from './utils/exportXlsx';
+import { exportP1aWorkbook, exportP1aEmpilhado, EmpilhadoRow } from './utils/exportXlsx';
 import { formatDateBr } from './utils/formatters';
 import {
   ColmeiaRow,
@@ -90,6 +90,7 @@ export const RelatorioP1A: React.FC = () => {
 
   const [erro, setErro] = useState<string | null>(null);
   const [exportando, setExportando] = useState(false);
+  const [exportandoEmpilhado, setExportandoEmpilhado] = useState(false);
 
   const selectedKey = pksKey(filters.reportPks);
 
@@ -259,6 +260,27 @@ export const RelatorioP1A: React.FC = () => {
     }
   }, [filters.reportPks, fetchColmeia, fetchExibidor, fetchModelo]);
 
+  const handleExportEmpilhado = useCallback(async () => {
+    if (filters.reportPks.length === 0) return;
+    try {
+      setExportandoEmpilhado(true);
+      setErro(null);
+      const resp = await api.post('/relatorio-p1a-empilhamento', {
+        reportPks: filters.reportPks,
+      });
+      const rows: EmpilhadoRow[] = resp.data?.rows || [];
+      if (rows.length === 0) {
+        setErro('Nenhum dado empilhado encontrado. Verifique se os roteiros já foram atualizados.');
+        return;
+      }
+      exportP1aEmpilhado(rows, filters.reportPks);
+    } catch (err: any) {
+      setErro(err?.response?.data?.error || 'Erro ao exportar dados empilhados');
+    } finally {
+      setExportandoEmpilhado(false);
+    }
+  }, [filters.reportPks]);
+
   const handleExport = useCallback(async () => {
     if (filters.reportPks.length === 0) return;
     try {
@@ -349,7 +371,7 @@ export const RelatorioP1A: React.FC = () => {
                   os filtros para comparar GEO, praça ou UF.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap justify-end">
                 <button
                   type="button"
                   onClick={handleRefreshForcado}
@@ -358,6 +380,33 @@ export const RelatorioP1A: React.FC = () => {
                 >
                   {refreshing ? 'Atualizando…' : 'Atualizar'}
                 </button>
+
+                {/* Export empilhado — dados brutos do stage */}
+                <button
+                  type="button"
+                  onClick={handleExportEmpilhado}
+                  disabled={filters.reportPks.length === 0 || refreshing || exportandoEmpilhado}
+                  title="Exporta todas as linhas do stage (empilhamento) com informações completas para cada roteiro selecionado"
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border border-[#ff4600] text-[#ff4600] hover:bg-[#fff5ef] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {exportandoEmpilhado ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Exportando…
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      Exportar empilhado
+                    </>
+                  )}
+                </button>
+
+                {/* Export das 3 visões P1A */}
                 <button
                   type="button"
                   onClick={handleExport}
@@ -369,6 +418,7 @@ export const RelatorioP1A: React.FC = () => {
                       exibidorRows.length === 0 &&
                       modeloRows.length === 0)
                   }
+                  title="Exporta as 3 visões do relatório P1A (Colmeia, Exibidor, Modelo)"
                   className="px-3 py-2 text-sm rounded-md bg-[#ff4600] text-white hover:bg-[#e63d00] disabled:opacity-50"
                 >
                   {exportando ? 'Exportando…' : 'Exportar .xlsx'}
