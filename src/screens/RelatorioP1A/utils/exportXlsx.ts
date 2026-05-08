@@ -2,93 +2,165 @@ import * as XLSX from 'xlsx';
 import { ColmeiaRow, Dimension, ExibidorRow, ModeloRow } from '../types';
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   Export "empilhado" — dados brutos do stage para todos os roteiros
+   Export "Planos Empilhados" — formato e colunas idênticos ao
+   "public/Modelo Planos Empilhados.xlsx" (100 colunas, A..CV).
    ───────────────────────────────────────────────────────────────────────────── */
 
-/**
- * Larguras (em caracteres) para cada coluna do export empilhado.
- * A ordem deve bater com as colunas retornadas pelo handler.
- */
-const COLUNAS_EMPILHADO: Array<{ key: string; label: string; wch: number }> = [
-  { key: 'Roteiro PK',              label: 'Roteiro PK',              wch: 12  },
-  { key: 'Nome do roteiro',         label: 'Nome do roteiro',         wch: 40  },
-  { key: 'Usuário',                 label: 'Usuário',                 wch: 22  },
-  { key: 'Agência',                 label: 'Agência',                 wch: 22  },
-  { key: 'Data criação roteiro',    label: 'Data criação roteiro',    wch: 22  },
-  { key: 'Semana',                  label: 'Semana',                  wch: 9   },
-  { key: 'Data da semana',          label: 'Data da semana',          wch: 16  },
-  { key: 'Marca',                   label: 'Marca',                   wch: 22  },
-  { key: 'Campanha',                label: 'Campanha',                wch: 30  },
-  { key: 'Produto',                 label: 'Produto',                 wch: 22  },
-  { key: 'Cidade',                  label: 'Cidade',                  wch: 20  },
-  { key: 'UF',                      label: 'UF',                      wch: 6   },
-  { key: 'GEO',                     label: 'GEO',                     wch: 14  },
-  { key: 'Exibidor (raw)',          label: 'Exibidor (raw)',          wch: 22  },
-  { key: 'Exibidor P1A',            label: 'Exibidor P1A',            wch: 20  },
-  { key: 'Tipo P1A',                label: 'Tipo P1A',                wch: 18  },
-  { key: 'Negociação P1A',          label: 'Negociação P1A',          wch: 18  },
-  { key: 'Faturável',               label: 'Faturável',               wch: 10  },
-  { key: 'Qtd semanas (flight)',    label: 'Qtd sem. (flight)',       wch: 16  },
-  { key: 'Faces vias públicas',     label: 'Faces vias públicas',     wch: 18  },
-  { key: 'Localidades indoor',      label: 'Localidades indoor',      wch: 18  },
-  { key: 'Investimento',            label: 'Investimento',            wch: 16  },
-  { key: 'Impactos indoor',         label: 'Impactos indoor',         wch: 16  },
-  { key: 'Valor líquido',           label: 'Valor líquido',           wch: 16  },
-  { key: 'Total faces (TT)',        label: 'Total faces (TT)',        wch: 14  },
-  { key: 'Divisor flight/face',     label: 'Divisor flight/face',     wch: 18  },
-  { key: 'Impacto IPV',             label: 'Impacto IPV',             wch: 16  },
-  { key: 'Atualizado em (stage)',   label: 'Atualizado em (stage)',   wch: 22  },
+type EmpilhadoCellType = 'st' | 'vl' | 'dt' | 'pct';
+
+interface EmpilhadoColumn {
+  /** Cabeçalho exato como no modelo (incluindo `\r\n`). */
+  label: string;
+  /** Chave do JSON retornada pelo handler `/api/relatorio-p1a-empilhamento`.
+   *  `null` = coluna vazia (placeholder de posição, p.ex. coluna Q sem header). */
+  key: string | null;
+  /** Largura da coluna em caracteres (Excel `wch`). */
+  wch: number;
+  /** Tipo da célula (define formatação numérica/data). */
+  type: EmpilhadoCellType;
+}
+
+const MESES_ABREV = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+/** Gera labels W1..W52 no formato "W{N} - DD/mmm" começando em 04/jan/2026
+ *  (mesma base usada no modelo). */
+function gerarLabelsSemanas(): string[] {
+  const labels: string[] = [];
+  const base = new Date(2026, 0, 4); // 04/jan/2026 (domingo, igual ao modelo)
+  for (let w = 1; w <= 52; w++) {
+    const d = new Date(base);
+    d.setDate(base.getDate() + (w - 1) * 7);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mes = MESES_ABREV[d.getMonth()];
+    labels.push(`W${w} - ${dd}/${mes}`);
+  }
+  return labels;
+}
+
+const SEMANAS_LABELS = gerarLabelsSemanas();
+
+/** Cabeçalhos / posicionamento idênticos ao "Modelo Planos Empilhados.xlsx" */
+const COLUNAS_EMPILHADO: EmpilhadoColumn[] = [
+  { label: 'JOB',                                                                     key: 'job_st',                          wch: 10, type: 'st' },
+  { label: 'CAMPANHA',                                                                key: 'campanha_st',                     wch: 38, type: 'st' },
+  { label: 'Produto',                                                                 key: 'produto_st',                      wch: 22, type: 'st' },
+  { label: 'Classif para P1A\r\nEscolher manual\r\nPacote SSA \r\nEmpenas RJ',        key: 'classifP1a_st',                   wch: 18, type: 'st' },
+  { label: 'TIPO DE NEGOCIAÇÃO',                                                      key: 'tipoNegociacao_st',               wch: 18, type: 'st' },
+  { label: 'Descrição\r\nEx Pacote Lola, Pacote Carnaval',                            key: 'descricaoPacote_st',              wch: 28, type: 'st' },
+  { label: 'GEO',                                                                     key: 'geoAmbev_st',                     wch: 10, type: 'st' },
+  { label: 'UF',                                                                      key: 'uf_st',                           wch: 6,  type: 'st' },
+  { label: 'PRAÇA',                                                                   key: 'praca_st',                        wch: 18, type: 'st' },
+  { label: 'EXIBIDOR',                                                                key: 'exibidor_st',                     wch: 18, type: 'st' },
+  { label: 'AMBIENTE',                                                                key: 'ambiente_st',                     wch: 18, type: 'st' },
+  { label: 'FORMATO',                                                                 key: 'formato_st',                      wch: 26, type: 'st' },
+  { label: 'DESCRIÇÃO',                                                               key: 'descricao_st',                    wch: 26, type: 'st' },
+  { label: 'GRUPO',                                                                   key: 'grupo_st',                        wch: 8,  type: 'st' },
+  { label: 'TIPO',                                                                    key: 'tipo_st',                         wch: 10, type: 'st' },
+  { label: 'KV',                                                                      key: 'kv_st',                           wch: 10, type: 'st' },
+  /* Coluna Q (índice 16): sem cabeçalho no modelo — placeholder vazio */
+  { label: '',                                                                        key: null,                              wch: 4,  type: 'st' },
+  { label: 'ESPECIFICAÇÕES',                                                          key: 'especificacoes_st',               wch: 18, type: 'st' },
+  { label: 'Numero de SLOTS',                                                         key: 'numeroSlots_vl',                  wch: 10, type: 'vl' },
+  { label: 'Especificações\r\nDigital\r\ninserções',                                  key: 'specDigitalInsercoes_vl',         wch: 10, type: 'vl' },
+  { label: 'Especificações\r\nDigital\r\nsecundagem',                                 key: 'specDigitalSecundagem_vl',        wch: 10, type: 'vl' },
+  { label: 'Faixa de inserções para IPV',                                             key: 'faixaInsercoesIpv_st',            wch: 22, type: 'st' },
+  { label: 'Número de inserções compradas',                                           key: 'numeroInsercoesCompradas_vl',     wch: 14, type: 'vl' },
+  { label: 'Especificação Estático\r\nLargura',                                       key: 'specEstaticoLargura_vl',          wch: 10, type: 'vl' },
+  { label: 'Especificação Estático\r\nAltura',                                        key: 'specEstaticoAltura_vl',           wch: 10, type: 'vl' },
+  { label: 'Deflator de visibilidade\r\n(se estático)',                               key: 'deflatorVisibilidadeEstatico_vl', wch: 12, type: 'vl' },
+  { label: 'TT DE PONTOS',                                                            key: 'ttPontos_vl',                     wch: 10, type: 'vl' },
+  { label: 'PERIODO DA TABELA',                                                       key: 'periodoTabela_st',                wch: 14, type: 'st' },
+  { label: 'NUM DIAS PERIODO TABELA',                                                 key: 'numeroDiasReferencia_vl',         wch: 12, type: 'vl' },
+  { label: 'INÍCIO',                                                                  key: 'inicio_dt',                       wch: 12, type: 'dt' },
+  { label: 'TÉRMINO',                                                                 key: 'termino_dt',                      wch: 12, type: 'dt' },
+  { label: 'PERÍODO',                                                                 key: 'periodo_st',                      wch: 12, type: 'st' },
+  { label: 'No. dias Campanha\r\nDigitar manualmente caso períodos com intervalos',   key: 'noDiasCampanhaManual_vl',         wch: 14, type: 'vl' },
+  /* AH..CG — semanas W1..W52 (label dinâmico) */
+  ...SEMANAS_LABELS.map((label, i) => ({
+    label,
+    key: `week${String(i + 1).padStart(2, '0')}_vl`,
+    wch: 11,
+    type: 'vl' as const,
+  })),
+  { label: 'Divisor\r\npara cálculo de flight e face',                                key: 'divisorFlightFace_vl',            wch: 12, type: 'vl' },
+  { label: 'TT Flights',                                                              key: 'ttFlights_vl',                    wch: 9,  type: 'vl' },
+  { label: 'TT Faces',                                                                key: 'ttFaces_vl',                      wch: 9,  type: 'vl' },
+  { label: 'Modelo de compra (faces ou flights)',                                     key: 'modeloCompra_st',                 wch: 16, type: 'st' },
+  { label: 'Justficativa do valor tabela diferente / métrica\r\nOBRIGATÓRIO',         key: 'justificativaValorTabela_st',     wch: 28, type: 'st' },
+  { label: 'Tabela ORIGINAL DO VEICULO',                                              key: 'tabelaOriginalVeiculo_vl',        wch: 14, type: 'vl' },
+  { label: 'TABELA Unitária',                                                         key: 'tabelaUnitaria_vl',               wch: 14, type: 'vl' },
+  { label: 'Tabela Total',                                                            key: 'tabelaTotal_vl',                  wch: 14, type: 'vl' },
+  { label: '%',                                                                       key: 'pctNegociado_vl',                 wch: 8,  type: 'pct' },
+  { label: 'Negociado',                                                               key: 'negociado_vl',                    wch: 14, type: 'vl' },
+  { label: 'Total Negociado',                                                         key: 'totalNegociado_vl',               wch: 14, type: 'vl' },
+  { label: 'Valor liquido',                                                           key: 'valorLiquido_vl',                 wch: 14, type: 'vl' },
+  { label: 'Faturavel ou NÃO faturável',                                              key: 'faturavel_st',                    wch: 18, type: 'st' },
+  { label: 'Impacto IPV',                                                             key: 'impactoIpv_vl',                   wch: 16, type: 'vl' },
+  { label: 'CpView',                                                                  key: 'cpmView_vl',                      wch: 12, type: 'vl' },
 ];
 
 export interface EmpilhadoRow {
   [key: string]: unknown;
 }
 
+/* Excel epoch: dia 1 = 1900-01-01 (com bug do 1900 bissexto).
+   Diferença em dias entre 1899-12-30 (00:00 UTC) e a data informada. */
+const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
+
+function dateToExcelSerial(d: Date): number {
+  const ms = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  return Math.floor((ms - EXCEL_EPOCH_MS) / 86_400_000);
+}
+
+/** Converte o valor cru (vindo do banco) para o tipo apropriado no Excel.
+ *  Datas viram número serial Excel (igual ao modelo: AD2 = 46084). */
+function coerceCellValue(val: unknown, type: EmpilhadoCellType): unknown {
+  if (val === null || val === undefined || val === '') return null;
+
+  if (type === 'dt') {
+    let d: Date | null = null;
+    if (val instanceof Date) d = val;
+    else if (typeof val === 'string') {
+      const m = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (m) d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    }
+    return d ? dateToExcelSerial(d) : null;
+  }
+
+  if (type === 'vl' || type === 'pct') {
+    if (typeof val === 'number') return val;
+    const n = Number(val);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  return String(val);
+}
+
 export function exportP1aEmpilhado(rows: EmpilhadoRow[], reportPks: number[]) {
   if (rows.length === 0) return;
 
-  const wb = XLSX.utils.book_new();
-
-  // Garante a ordem das colunas e usa labels amigáveis como cabeçalhos
   const headers = COLUNAS_EMPILHADO.map((c) => c.label);
   const data: unknown[][] = [headers];
 
   for (const row of rows) {
     data.push(
       COLUNAS_EMPILHADO.map((c) => {
-        const val = row[c.key];
-        if (val === null || val === undefined) return '';
-        // Formatar datas como string legível (evita número serial do Excel)
-        if (
-          typeof val === 'string' &&
-          /^\d{4}-\d{2}-\d{2}T/.test(val)
-        ) {
-          return new Date(val).toLocaleString('pt-BR', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          });
-        }
-        return val;
+        if (c.key === null) return null;
+        return coerceCellValue(row[c.key], c.type);
       }),
     );
   }
 
+  /* Gera a sheet sem flags de cellDates — datas já estão como número serial. */
   const ws = XLSX.utils.aoa_to_sheet(data);
 
-  // Larguras das colunas
-  ws['!cols'] = COLUNAS_EMPILHADO.map((c) => ({ wch: c.wch }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Planilha1');
 
-  // Freeze na linha de cabeçalho
-  ws['!freeze'] = { xSplit: 0, ySplit: 1 };
-
-  XLSX.utils.book_append_sheet(wb, ws, 'Empilhamento P1A');
-
-  const pksStr = reportPks.slice(0, 5).join('-') + (reportPks.length > 5 ? '-etc' : '');
+  const pksStr =
+    reportPks.slice(0, 5).join('-') + (reportPks.length > 5 ? '-etc' : '');
   const date = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `P1A_Empilhado_${pksStr}_${date}.xlsx`);
+  XLSX.writeFile(wb, `Planos_Empilhados_${pksStr}_${date}.xlsx`);
 }
 
 interface ExportArgs {
