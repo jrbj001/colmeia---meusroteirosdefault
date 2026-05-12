@@ -428,9 +428,6 @@ export const RelatorioP1A: React.FC = () => {
 
             {/* Seletor de roteiros */}
             <div className="mb-4">
-              <label className="block text-xs font-medium text-[#757575] uppercase tracking-wide mb-1">
-                Roteiros
-              </label>
               <P1aReportSelector
                 reports={optionsGlobal?.reports || []}
                 selected={filters.reportPks}

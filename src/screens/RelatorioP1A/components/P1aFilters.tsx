@@ -27,7 +27,6 @@ export const P1aFiltersBar: React.FC<P1aFiltersProps> = ({
   disabled,
 }) => {
   const dimensionValues = options?.dimensions[filters.dimension] ?? [];
-  const marcas = options?.marcas ?? [];
 
   const update = (patch: Partial<P1aFilters>) => onChange({ ...filters, ...patch });
 
@@ -35,26 +34,7 @@ export const P1aFiltersBar: React.FC<P1aFiltersProps> = ({
     'h-[44px] px-3 rounded-lg border bg-white text-sm text-[#3a3a3a] focus:outline-none focus:ring-2 focus:ring-[#ff4600]/30 focus:border-[#ff4600] disabled:bg-[#f8f8f8] disabled:text-[#999]';
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-      <div className="flex flex-col gap-1">
-        <label className="text-xs font-medium text-[#757575] uppercase tracking-wide">
-          Marca
-        </label>
-        <select
-          className={`${baseSelectClass} border-[#d9d9d9]`}
-          value={filters.marca ?? ''}
-          onChange={(e) => update({ marca: e.target.value || null })}
-          disabled={disabled || marcas.length === 0}
-        >
-          <option value="">Todas</option>
-          {marcas.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-      </div>
-
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-[#757575] uppercase tracking-wide">
           Dimensão
