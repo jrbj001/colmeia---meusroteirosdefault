@@ -19,8 +19,8 @@ export interface ReportOption {
   semanasMax_vl: number | null;
   date_dh: string;
   agencia_st: string | null;
+  marca_st: string | null;
   liberadoAgencia_bl: number | null;
-  marca_st?: string | null;
 }
 
 export interface OptionsResponse {

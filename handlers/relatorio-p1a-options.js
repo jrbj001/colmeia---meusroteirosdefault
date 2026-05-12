@@ -41,6 +41,7 @@ async function listReports(pool, empresaPk) {
       semanasMax_vl,
       date_dh,
       agencia_st,
+      marca_st,
       liberadoAgencia_bl
     FROM [serv_product_be180].[planoMidiaGrupo_dm_vw]
     WHERE delete_bl = 0 ${agenciaFilter}
