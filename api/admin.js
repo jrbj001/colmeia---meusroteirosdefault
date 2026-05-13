@@ -5,6 +5,7 @@ const handlers = {
   'perfis-permissoes': require('../handlers/perfis-permissoes'),
   'areas': require('../handlers/areas'),
   'verificar-acesso': require('../handlers/verificar-acesso'),
+  'inventario-analise': require('../handlers/admin-inventario-analise'),
 };
 
 module.exports = async (req, res) => {
