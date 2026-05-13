@@ -117,6 +117,7 @@
     { "source": "/api/perfis-permissoes", "destination": "/api/admin?action=perfis-permissoes" },
     { "source": "/api/areas", "destination": "/api/admin?action=areas" },
     { "source": "/api/verificar-acesso", "destination": "/api/admin?action=verificar-acesso" },
+    { "source": "/api/admin-inventario-analise", "destination": "/api/admin?action=inventario-analise" },
 
     { "source": "/api/sharepoint-download", "destination": "/api/integracoes?action=sharepoint" },
     { "source": "/api/consulta-endereco", "destination": "/api/integracoes?action=consulta-endereco" },

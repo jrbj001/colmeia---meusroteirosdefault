@@ -50,7 +50,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
     }
 
     // Abrir submenu de admin automaticamente
-    const rotasAdmin = ['/admin/usuarios', '/admin/perfis'];
+    const rotasAdmin = ['/admin/usuarios', '/admin/perfis', '/admin/inventarios-exibidor'];
     if (rotasAdmin.some(rota => location.pathname.startsWith(rota))) {
       setAdminAberto(true);
     }
@@ -448,6 +448,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
                       : "text-[#3a3a3a] hover:bg-[#ededed]"
                   }`}>
                     Gerenciar Perfis
+                  </div>
+                </Link>
+                <Link to="/admin/inventarios-exibidor" className="block">
+                  <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
+                    location.pathname === "/admin/inventarios-exibidor"
+                      ? "text-[#ff4600] font-medium"
+                      : "text-[#3a3a3a] hover:bg-[#ededed]"
+                  }`}>
+                    Inventários de exibidores
                   </div>
                 </Link>
               </div>

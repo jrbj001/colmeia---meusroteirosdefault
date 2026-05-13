@@ -25,6 +25,7 @@ const RelatorioPorExibidor   = lazy(() => import("./screens/RelatorioPorExibidor
 const RelatorioP1A           = lazy(() => import("./screens/RelatorioP1A").then(m => ({ default: m.RelatorioP1A })));
 const AdminUsuarios          = lazy(() => import("./screens/Admin").then(m => ({ default: m.AdminUsuarios })));
 const AdminPerfis            = lazy(() => import("./screens/Admin").then(m => ({ default: m.AdminPerfis })));
+const AdminInventarios       = lazy(() => import("./screens/AdminInventarios/AdminInventarios").then(m => ({ default: m.AdminInventarios })));
 const PaginaEmDesenvolvimento = lazy(() => import("./components/PaginaEmDesenvolvimento").then(m => ({ default: m.PaginaEmDesenvolvimento })));
 const CadastrarExibidor      = lazy(() => import("./screens/CadastrarExibidor/CadastrarExibidor").then(m => ({ default: m.CadastrarExibidor })));
 const GestaoExibidores       = lazy(() => import("./screens/GestaoExibidores/GestaoExibidores").then(m => ({ default: m.GestaoExibidores })));
@@ -191,6 +192,9 @@ root.render(
                 } />
                 <Route path="/admin/perfis" element={
                   <ProtectedRoute internalOnly adminOnly><AdminPerfis /></ProtectedRoute>
+                } />
+                <Route path="/admin/inventarios-exibidor" element={
+                  <ProtectedRoute internalOnly adminOnly><AdminInventarios /></ProtectedRoute>
                 } />
 
                 <Route path="*" element={<div>Página não encontrada</div>} />
