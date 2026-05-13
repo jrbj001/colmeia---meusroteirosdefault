@@ -43,7 +43,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
     const rotasAtualizarInventario = [
       '/exibidor/importar',
       '/exibidor/enviados',
-      '/exibidor/editar',
       '/exibidor/excluir',
     ];
     if (rotasAtualizarInventario.some((rota) => location.pathname.startsWith(rota))) {
@@ -106,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
                 <button
                   onClick={() => setAtualizarInventarioAberto(!atualizarInventarioAberto)}
                   className={`w-full flex items-center justify-between gap-2.5 group hover:bg-[#ededed] hover:text-[#222] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
-                    ['/exibidor/importar', '/exibidor/enviados', '/exibidor/editar', '/exibidor/excluir'].some((r) => location.pathname.startsWith(r)) ? 'bg-[#ededed] text-[#222]' : ''
+                    ['/exibidor/importar', '/exibidor/enviados', '/exibidor/excluir'].some((r) => location.pathname.startsWith(r)) ? 'bg-[#ededed] text-[#222]' : ''
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
@@ -133,13 +132,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
                         Importar nova base
                       </div>
                     </Link>
-                    <Link to="/exibidor/editar" className="block">
-                      <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
-                        location.pathname === '/exibidor/editar' ? 'text-[#ff4600] font-medium' : 'text-[#3a3a3a] hover:bg-[#ededed]'
-                      }`}>
-                        Editar pontos enviados
-                      </div>
-                    </Link>
                     <Link to="/exibidor/excluir" className="block">
                       <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
                         location.pathname === '/exibidor/excluir' ? 'text-[#ff4600] font-medium' : 'text-[#3a3a3a] hover:bg-[#ededed]'
@@ -153,7 +145,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
             ) : (
               <Link to="/exibidor/importar" className="block">
                 <div className={`flex items-center gap-2.5 group hover:bg-[#ededed] rounded-lg px-2 py-1 transition-colors duration-200 cursor-pointer ${
-                  ['/exibidor/importar', '/exibidor/editar', '/exibidor/excluir'].some((r) => location.pathname.startsWith(r)) ? 'bg-[#ededed] text-[#222]' : ''
+                  ['/exibidor/importar', '/exibidor/excluir'].some((r) => location.pathname.startsWith(r)) ? 'bg-[#ededed] text-[#222]' : ''
                 }`}>
                   <AddBox className="w-5 h-5 text-[#757575] group-hover:text-[#222] transition-colors duration-200" color="#757575" />
                 </div>
