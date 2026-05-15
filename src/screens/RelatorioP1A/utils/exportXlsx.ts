@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx';
 import { ColmeiaRow, Dimension, ExibidorRow, ModeloRow } from '../types';
+import { nomeExibidor, ordenarExibidores } from './exibidores';
+import { toNum } from './formatters';
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Export "Planos Empilhados" — formato e colunas idênticos ao
@@ -163,6 +165,146 @@ export function exportP1aEmpilhado(rows: EmpilhadoRow[], reportPks: number[]) {
   XLSX.writeFile(wb, `Planos_Empilhados_${pksStr}_${date}.xlsx`);
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   Modelo P1A — sheet com o mesmo layout visual da aba na tela:
+     • Uma seção por valor de dimensão (ex.: "GEO MG")
+     • Cabeçalho de 2 linhas: exibidores mesclados (colspan 6) × métricas
+     • Coluna "SEMANA" mesclada nas 2 linhas do cabeçalho
+     • Linhas de dados: W{n} + valores numéricos brutos com formatação Excel
+   ─────────────────────────────────────────────────────────────────────────── */
+
+interface MetricaCol {
+  label: string;
+  field: keyof ModeloRow;
+  /** Formato numérico Excel (numFmt). */
+  numFmt: string;
+}
+
+const METRICAS_MODELO: MetricaCol[] = [
+  { label: 'Investimento',     field: 'investimento_vl',          numFmt: '"R$"#,##0.00'  },
+  { label: 'Cob%',             field: 'coberturaProp_vl',         numFmt: '0.00%'          },
+  { label: 'Freq.',            field: 'frequencia_vl',            numFmt: '0.00'           },
+  { label: 'Faces',            field: 'faces_vl',                 numFmt: '#,##0'          },
+  { label: 'Alcance',          field: 'alcance_vl',               numFmt: '#,##0'          },
+  { label: 'Impressões Qual.', field: 'impressoesQualificadas_vl', numFmt: '#,##0'         },
+];
+
+/**
+ * Constrói a WorkSheet "Modelo P1A" com layout idêntico à tela:
+ * seções por GEO/Praça/UF, cabeçalho duplo com exibidores mesclados e
+ * métricas nas sub-colunas, linhas de dados por semana.
+ */
+function exportModeloSheet(rows: ModeloRow[]): XLSX.WorkSheet {
+  const N = METRICAS_MODELO.length; // 6
+
+  // ── Agrupa e ordena por dimensionValue (mesmo lógica do P1aModeloTab) ──
+  const byDim = new Map<string, ModeloRow[]>();
+  rows.forEach((row) => {
+    const k = (row.dimensionValue_st as string) || '—';
+    const arr = byDim.get(k) || [];
+    arr.push(row);
+    byDim.set(k, arr);
+  });
+
+  const blocos = Array.from(byDim.entries())
+    .sort((a, b) => a[0].localeCompare(b[0], 'pt-BR'))
+    .map(([dimVal, dimRows]) => {
+      const semanas = Array.from(
+        new Set(dimRows.map((r) => toNum(r.week_vl)).filter((v): v is number => v !== null)),
+      ).sort((a, b) => a - b);
+
+      const exibidores = ordenarExibidores(dimRows.map((r) => r.exibidorP1a_st));
+
+      const idx = new Map<string, Map<number, ModeloRow>>();
+      dimRows.forEach((r) => {
+        const e = nomeExibidor(r.exibidorP1a_st);
+        const w = toNum(r.week_vl);
+        if (w === null) return;
+        let m = idx.get(e);
+        if (!m) { m = new Map(); idx.set(e, m); }
+        m.set(w, r);
+      });
+
+      return { dimVal, semanas, exibidores, idx };
+    });
+
+  // ── Monta AOA (array-of-arrays) e lista de merges ──
+  const aoa: (string | number | null)[][] = [];
+  const merges: XLSX.Range[] = [];
+
+  for (const { dimVal, semanas, exibidores, idx } of blocos) {
+    const totalCols = 1 + exibidores.length * N;
+
+    // Linha de seção: "GEO MG" (mesclada por toda a largura)
+    const secRow = aoa.length;
+    aoa.push([dimVal, ...Array(totalCols - 1).fill(null)]);
+    merges.push({ s: { r: secRow, c: 0 }, e: { r: secRow, c: totalCols - 1 } });
+
+    // Cabeçalho linha 1: SEMANA | Exibidor (colspan N) ...
+    const h1Row = aoa.length;
+    const h1: (string | null)[] = ['SEMANA'];
+    exibidores.forEach((ex) => { h1.push(ex); for (let i = 1; i < N; i++) h1.push(null); });
+    aoa.push(h1);
+
+    // Cabeçalho linha 2: (vazio) | métrica × exibidor
+    const h2Row = aoa.length;
+    const h2: (string | null)[] = [null];
+    exibidores.forEach(() => METRICAS_MODELO.forEach((m) => h2.push(m.label)));
+    aoa.push(h2);
+
+    // Merge SEMANA (rowspan 2)
+    merges.push({ s: { r: h1Row, c: 0 }, e: { r: h2Row, c: 0 } });
+
+    // Merge de cada exibidor (colspan N)
+    exibidores.forEach((_, i) => {
+      const c = 1 + i * N;
+      merges.push({ s: { r: h1Row, c }, e: { r: h1Row, c: c + N - 1 } });
+    });
+
+    // Linhas de dados
+    semanas.forEach((s) => {
+      const dataRow: (string | number | null)[] = [`W${s}`];
+      exibidores.forEach((ex) => {
+        const row = idx.get(ex)?.get(s);
+        METRICAS_MODELO.forEach((m) => {
+          dataRow.push(row ? (toNum(row[m.field]) ?? null) : null);
+        });
+      });
+      aoa.push(dataRow);
+    });
+
+    // Linha em branco entre blocos
+    aoa.push([]);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!merges'] = merges;
+
+  // Aplica formatação numérica célula a célula nas colunas de métricas
+  // (só funciona quando o valor é number; células nulas/string ficam intactas)
+  let currentAoaRow = 0;
+  for (const { semanas, exibidores } of blocos) {
+    currentAoaRow++; // pula seção
+    currentAoaRow += 2; // pula h1 + h2 → aponta para a 1ª linha de dados
+
+    semanas.forEach(() => {
+      exibidores.forEach((_, ei) => {
+        METRICAS_MODELO.forEach((m, mi) => {
+          const col = 1 + ei * N + mi;
+          const addr = XLSX.utils.encode_cell({ r: currentAoaRow, c: col });
+          const cell = ws[addr];
+          if (cell && cell.t === 'n') cell.z = m.numFmt;
+        });
+      });
+      currentAoaRow++;
+    });
+
+    currentAoaRow++; // linha em branco entre blocos
+  }
+
+  return ws;
+}
+
 interface ExportArgs {
   filename?: string;
   dimension: Dimension;
@@ -173,11 +315,9 @@ interface ExportArgs {
 }
 
 /**
- * Exporta as 3 abas + abas "(raw)" do Relatório P1A em um único .xlsx.
- *
- * Versão "simples" usando a lib `xlsx` que já temos no projeto. Não traz
- * cores/merges/freeze do workbook original — esse enriquecimento pode ser
- * adicionado em fase futura (com `xlsx-js-style` ou `exceljs`).
+ * Exporta o Relatório P1A em um único .xlsx com três abas:
+ *  • "Modelo P1A" — layout visual idêntico à tela (seções × semanas × exibidores)
+ *  • "Colmeia (raw)" e "Exibidor (raw)" — dados brutos para análise complementar
  */
 export function exportP1aWorkbook({
   filename,
@@ -193,22 +333,18 @@ export function exportP1aWorkbook({
     XLSX.utils.book_append_sheet(
       wb,
       XLSX.utils.json_to_sheet(colmeiaRows),
-      truncSheetName('5 Colmeia (raw)'),
+      truncSheetName('Colmeia (raw)'),
     );
   }
   if (exibidorRows.length > 0) {
     XLSX.utils.book_append_sheet(
       wb,
       XLSX.utils.json_to_sheet(exibidorRows),
-      truncSheetName('6 Exibidor (raw)'),
+      truncSheetName('Exibidor (raw)'),
     );
   }
   if (modeloRows.length > 0) {
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(modeloRows),
-      truncSheetName('7 Modelo P1A (raw)'),
-    );
+    XLSX.utils.book_append_sheet(wb, exportModeloSheet(modeloRows), 'Modelo P1A');
   }
 
   if (wb.SheetNames.length === 0) {
