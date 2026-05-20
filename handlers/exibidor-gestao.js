@@ -175,28 +175,75 @@ async function detalhePendente(req, res, pool) {
   const nome = String(req.query.nome_legado || '').trim();
   if (!nome) return res.status(400).json({ success: false, error: 'nome_legado é obrigatório' });
 
-  const ativos = await pool.request()
-    .input('nome', sql.NVarChar(255), nome)
-    .query(`
-      SELECT TOP 50 pk, code, cidade_st, estado_st, tipoMidia_st, environment_st, media_format_st
-      FROM [serv_product_be180].[bancoAtivosJoin_ft]
-      WHERE valid_bl = 1 AND UPPER(LTRIM(RTRIM(exibidor_st))) = UPPER(LTRIM(RTRIM(@nome)))
-      ORDER BY cidade_st, code
-    `);
+  const makeReq = () => pool.request().input('nome', sql.NVarChar(255), nome);
+  const filtro = `j.valid_bl = 1 AND UPPER(LTRIM(RTRIM(j.exibidor_st))) = UPPER(LTRIM(RTRIM(@nome)))`;
 
-  const total = await pool.request()
-    .input('nome', sql.NVarChar(255), nome)
-    .query(`
+  const [ativos, total, cidadeTop, empresa] = await Promise.all([
+    // Amostra de pontos
+    makeReq().query(`
+      SELECT TOP 50 j.pk, j.code, j.cidade_st, j.estado_st, j.tipoMidia_st, j.environment_st, j.media_format_st
+      FROM [serv_product_be180].[bancoAtivosJoin_ft] j
+      WHERE ${filtro}
+      ORDER BY j.cidade_st, j.code
+    `),
+    // Total de pontos
+    makeReq().query(`
       SELECT COUNT(1) AS total
-      FROM [serv_product_be180].[bancoAtivosJoin_ft]
-      WHERE valid_bl = 1 AND UPPER(LTRIM(RTRIM(exibidor_st))) = UPPER(LTRIM(RTRIM(@nome)))
-    `);
+      FROM [serv_product_be180].[bancoAtivosJoin_ft] j
+      WHERE ${filtro}
+    `),
+    // Cidade e UF com mais pontos (fallback)
+    makeReq().query(`
+      SELECT TOP 1 j.cidade_st, j.estado_st
+      FROM [serv_product_be180].[bancoAtivosJoin_ft] j
+      WHERE ${filtro}
+        AND j.cidade_st IS NOT NULL AND LTRIM(RTRIM(j.cidade_st)) <> ''
+        AND j.estado_st IS NOT NULL AND LTRIM(RTRIM(j.estado_st)) <> ''
+      GROUP BY j.cidade_st, j.estado_st
+      ORDER BY COUNT(1) DESC
+    `),
+    // Dados completos da empresa: direto em bancoAtivosExibidor_dm → bancoAtivosExibidorEmpresa_dm
+    // (sem tocar em bancoAtivosJoin_ft para evitar full scan na tabela fato)
+    makeReq().query(`
+      SELECT TOP 1
+        emp.empresa_st,
+        emp.cnpj_st,
+        emp.contatoNome_st,
+        emp.contatoEmail_st,
+        emp.contatoTelefone_st,
+        emp.cep_st,
+        emp.endereco_st,
+        emp.complemento_st,
+        emp.bairro_st
+      FROM [serv_product_be180].[bancoAtivosExibidor_dm] ex
+      JOIN [serv_product_be180].[bancoAtivosExibidorEmpresa_dm] emp
+        ON emp.media_exhibitor_id = ex.media_exhibitor_id
+      WHERE UPPER(LTRIM(RTRIM(ex.exibidor_st))) = UPPER(LTRIM(RTRIM(@nome)))
+      ORDER BY emp.pk
+    `),
+  ]);
+
+  const cidade1 = cidadeTop.recordset[0] || null;
+  const emp     = empresa.recordset[0]   || null;
 
   return res.status(200).json({
     success: true,
     nome_legado: nome,
     ativosLegado: ativos.recordset,
     totalAtivosLegado: total.recordset[0]?.total || 0,
+    // Dados de empresa para pré-preenchimento
+    empresa_st:         emp?.empresa_st         || null,
+    cnpj_st:            emp?.cnpj_st            || null,
+    contatoNome_st:     emp?.contatoNome_st     || null,
+    contatoEmail_st:    emp?.contatoEmail_st    || null,
+    contatoTelefone_st: emp?.contatoTelefone_st || null,
+    cep_st:             emp?.cep_st             || null,
+    endereco_st:        emp?.endereco_st        || null,
+    complemento_st:     emp?.complemento_st     || null,
+    bairro_st:          emp?.bairro_st          || null,
+    // Cidade/UF dos pontos (usados se empresa não tiver endereço)
+    cidadePrincipal_st: cidade1?.cidade_st || null,
+    estadoPrincipal_st: cidade1?.estado_st || null,
   });
 }
 
