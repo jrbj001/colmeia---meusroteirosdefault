@@ -16,7 +16,7 @@ module.exports = async (req, res) => {
 
     const r = await pool.request()
       .input('pk', sql.Int, pk)
-      .query('SELECT midiaKit_url_st FROM [dbo].[exibidor_dm] WHERE exibidor_pk = @pk');
+      .query('SELECT midiaKit_url_st FROM [serv_product_be180].[exibidor_dm] WHERE exibidor_pk = @pk');
 
     const row = r.recordset[0];
     if (!row) return res.status(404).json({ success: false, error: 'Exibidor não encontrado' });
@@ -40,7 +40,7 @@ module.exports = async (req, res) => {
       }
       await pool.request()
         .input('pk', sql.Int, exibidor_pk)
-        .query("UPDATE [dbo].[exibidor_dm] SET midiaKit_url_st = NULL WHERE exibidor_pk = @pk");
+        .query("UPDATE [serv_product_be180].[exibidor_dm] SET midiaKit_url_st = NULL WHERE exibidor_pk = @pk");
       return res.json({ success: true });
     }
 
@@ -61,7 +61,7 @@ module.exports = async (req, res) => {
       // Remove kit anterior se existir
       const atual = await pool.request()
         .input('pk', sql.Int, exibidor_pk)
-        .query('SELECT midiaKit_url_st FROM [dbo].[exibidor_dm] WHERE exibidor_pk = @pk');
+        .query('SELECT midiaKit_url_st FROM [serv_product_be180].[exibidor_dm] WHERE exibidor_pk = @pk');
       const urlAnterior = atual.recordset[0]?.midiaKit_url_st;
       if (urlAnterior) {
         try { await del(urlAnterior); } catch (_) { /* ignora */ }
@@ -79,7 +79,7 @@ module.exports = async (req, res) => {
       await pool.request()
         .input('pk', sql.Int, exibidor_pk)
         .input('url', sql.NVarChar(2000), blob.url)
-        .query("UPDATE [dbo].[exibidor_dm] SET midiaKit_url_st = @url WHERE exibidor_pk = @pk");
+        .query("UPDATE [serv_product_be180].[exibidor_dm] SET midiaKit_url_st = @url WHERE exibidor_pk = @pk");
 
       return res.json({ success: true, midiaKit_url_st: blob.url });
     }
