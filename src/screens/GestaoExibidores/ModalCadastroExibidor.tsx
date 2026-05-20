@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import api from '../../config/axios';
 
 const UFS_BR = [
@@ -61,6 +61,37 @@ export const ModalCadastroExibidor: React.FC<Props> = ({ mode, onClose, onSucces
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [step, setStep] = useState<'dados' | 'dominios'>('dados');
+  const [carregandoLegado, setCarregandoLegado] = useState(false);
+  const [semDadosEmpresa, setSemDadosEmpresa] = useState(false);
+
+  // Ao abrir em modo do-legado, busca dados derivados dos pontos e pré-preenche
+  useEffect(() => {
+    if (mode.tipo !== 'do-legado') return;
+    setCarregandoLegado(true);
+    api
+      .get(`/referencia?action=exibidor-gestao&mode=detalhe-pendente&nome_legado=${encodeURIComponent(mode.nome_legado)}`)
+      .then(({ data }) => {
+        if (!data.success) return;
+        const temDados = !!(data.cnpj_st || data.contatoEmail_st || data.cep_st || data.cidadePrincipal_st);
+        setSemDadosEmpresa(!temDados);
+        setForm((f) => ({
+          ...f,
+          nome_fantasia_st: data.empresa_st         || f.nome_fantasia_st,
+          cnpj_st:          data.cnpj_st            || f.cnpj_st,
+          email_st:         data.contatoEmail_st    || f.email_st,
+          telefone_st:      data.contatoTelefone_st || f.telefone_st,
+          cep_st:           data.cep_st             || f.cep_st,
+          logradouro_st:    data.endereco_st        || f.logradouro_st,
+          complemento_st:   data.complemento_st     || f.complemento_st,
+          bairro_st:        data.bairro_st          || f.bairro_st,
+          cidade_st:        data.cidadePrincipal_st || f.cidade_st,
+          estado_st:        data.estadoPrincipal_st || f.estado_st,
+        }));
+      })
+      .catch(() => setSemDadosEmpresa(true))
+      .finally(() => setCarregandoLegado(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const setField = (k: keyof ReturnType<typeof emptyForm>, v: string) => {
     setForm((f) => ({ ...f, [k]: v }));
@@ -155,7 +186,7 @@ export const ModalCadastroExibidor: React.FC<Props> = ({ mode, onClose, onSucces
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+      <div className="relative bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-start justify-between p-6 border-b border-[#eee]">
           <div>
@@ -192,6 +223,31 @@ export const ModalCadastroExibidor: React.FC<Props> = ({ mode, onClose, onSucces
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6">
+          {/* Loading overlay — estilo Apple: spinner + texto discreto */}
+          {carregandoLegado && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-2xl bg-white/80 backdrop-blur-sm">
+              <svg
+                className="animate-spin"
+                width="28"
+                height="28"
+                viewBox="0 0 28 28"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <circle cx="14" cy="14" r="11" stroke="#e5e5e7" strokeWidth="2.5" />
+                <path
+                  d="M14 3 A11 11 0 0 1 25 14"
+                  stroke="#3a3a3c"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <p className="text-[13px] text-[#6e6e73] font-medium tracking-tight">
+                Buscando dados do banco de ativos…
+              </p>
+            </div>
+          )}
+
           {step === 'dados' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
@@ -241,7 +297,14 @@ export const ModalCadastroExibidor: React.FC<Props> = ({ mode, onClose, onSucces
               </div>
 
               <div className="md:col-span-2 border-t border-[#eee] pt-4 mt-2">
-                <p className="text-xs uppercase font-bold text-[#888] mb-3">Endereço (opcional)</p>
+                <p className="text-xs uppercase font-bold text-[#888] mb-1">
+                  Endereço (opcional)
+                </p>
+                {!carregandoLegado && semDadosEmpresa && mode.tipo === 'do-legado' && (
+                  <p className="text-xs text-[#999] mb-3">
+                    Não encontramos cadastro de empresa para este exibidor no banco de ativos. Preencha manualmente.
+                  </p>
+                )}
               </div>
               <div className="flex gap-2">
                 <div className="flex-1">
