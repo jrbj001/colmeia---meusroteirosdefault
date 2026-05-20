@@ -14,6 +14,7 @@ const handlers = {
   'exibidor-gestao': require('../handlers/exibidor-gestao'),
   'exibidor-inventario': require('../handlers/exibidor-inventario'),
   'exibidor-resolve-domain': require('../handlers/exibidor-resolve-domain'),
+  'exibidor-midia-kit': require('../handlers/exibidor-midia-kit'),
   'bairros': require('../handlers/bairros'),
   'grupos-midia': require('../handlers/grupos-midia'),
   'tipos-midia-indoor': require('../handlers/tipos-midia-indoor'),

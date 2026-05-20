@@ -52,6 +52,160 @@ const emptyForm = (nomePreSet?: string) => ({
   observacao_st: '',
 });
 
+/* ── Componente da aba Mídia Kit ── */
+interface MidiaKitTabProps {
+  midiaKitUrl: string | null;
+  midiaKitFile: File | null;
+  midiaKitPreview: string | null;
+  uploading: boolean;
+  erro: string | null;
+  onSelect: (f: File) => void;
+  onRemoveFile: () => void;
+  onRemoveUrl?: () => void;
+  onUploadNow?: () => void;
+}
+
+function MidiaKitTab({
+  midiaKitUrl, midiaKitFile, midiaKitPreview,
+  uploading, erro, onSelect, onRemoveFile, onRemoveUrl, onUploadNow,
+}: MidiaKitTabProps) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = React.useState(false);
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) onSelect(file);
+  };
+
+  return (
+    <div className="space-y-5">
+      <p className="text-sm text-[#666]">
+        O mídia kit é um PDF enviado pelo exibidor (ou pelo admin Be) com informações comerciais sobre o inventário.
+        Fique disponível para agências e anunciantes.
+      </p>
+
+      {/* Arquivo já salvo */}
+      {midiaKitUrl && !midiaKitFile && (
+        <div className="flex items-center justify-between bg-[#f7f7f7] border border-[#e5e5e5] rounded-xl px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">📄</span>
+            <div>
+              <p className="text-sm font-medium text-[#222]">Mídia Kit atual</p>
+              <a
+                href={midiaKitUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-[#0a52e6] underline"
+              >
+                Abrir PDF
+              </a>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="text-xs px-3 py-1.5 border border-[#d9d9d9] rounded-lg hover:bg-white text-[#444]"
+            >
+              Substituir
+            </button>
+            {onRemoveUrl && (
+              <button
+                type="button"
+                onClick={onRemoveUrl}
+                disabled={uploading}
+                className="text-xs px-3 py-1.5 border border-[#f4caca] text-[#a8410d] rounded-lg hover:bg-[#fff5f5] disabled:opacity-50"
+              >
+                {uploading ? '...' : 'Remover'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Arquivo selecionado aguardando upload */}
+      {midiaKitFile && (
+        <div className="flex items-center justify-between bg-[#f0fdf4] border border-[#bbf7d0] rounded-xl px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">📄</span>
+            <div>
+              <p className="text-sm font-medium text-[#222]">{midiaKitFile.name}</p>
+              <p className="text-xs text-[#666]">{(midiaKitFile.size / 1024 / 1024).toFixed(2)} MB</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {onUploadNow && (
+              <button
+                type="button"
+                onClick={onUploadNow}
+                disabled={uploading}
+                className="text-xs px-3 py-1.5 bg-[#22c55e] hover:bg-[#16a34a] text-white rounded-lg font-medium disabled:opacity-50"
+              >
+                {uploading ? 'Enviando…' : 'Enviar agora'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onRemoveFile}
+              className="text-xs px-3 py-1.5 border border-[#d9d9d9] rounded-lg hover:bg-white text-[#666]"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Drop zone */}
+      {!midiaKitFile && (
+        <div
+          className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-colors ${
+            dragging ? 'border-[#ff4600] bg-[#fff5f2]' : 'border-[#ddd] hover:border-[#bbb]'
+          }`}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={handleDrop}
+          onClick={() => inputRef.current?.click()}
+        >
+          <div className="text-4xl mb-3">☁️</div>
+          <p className="text-sm font-medium text-[#444]">
+            {midiaKitUrl ? 'Solte um novo PDF aqui para substituir' : 'Arraste o PDF aqui ou clique para selecionar'}
+          </p>
+          <p className="text-xs text-[#999] mt-1">PDF · máximo 20 MB</p>
+          {!onUploadNow && !midiaKitUrl && (
+            <p className="text-xs text-[#bbb] mt-3">
+              O arquivo será enviado quando o exibidor for cadastrado.
+            </p>
+          )}
+        </div>
+      )}
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,application/pdf"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onSelect(f); e.target.value = ''; }}
+      />
+
+      {erro && (
+        <p className="text-sm text-[#a8410d] bg-[#fff5f5] border border-[#f4caca] rounded-lg px-3 py-2">
+          {erro}
+        </p>
+      )}
+
+      {midiaKitPreview && (
+        <iframe
+          src={midiaKitPreview}
+          title="Preview mídia kit"
+          className="w-full h-64 rounded-xl border border-[#e5e5e5]"
+        />
+      )}
+    </div>
+  );
+}
+
 export const ModalCadastroExibidor: React.FC<Props> = ({ mode, onClose, onSuccess }) => {
   const nomePreSet = mode.tipo === 'do-legado' ? mode.nome_legado : '';
   const [form, setForm] = useState(emptyForm(nomePreSet));
@@ -60,9 +214,16 @@ export const ModalCadastroExibidor: React.FC<Props> = ({ mode, onClose, onSucces
   const [submitting, setSubmitting] = useState(false);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [step, setStep] = useState<'dados' | 'dominios'>('dados');
+  const [step, setStep] = useState<'dados' | 'dominios' | 'midia-kit'>('dados');
   const [carregandoLegado, setCarregandoLegado] = useState(false);
   const [semDadosEmpresa, setSemDadosEmpresa] = useState(false);
+
+  // Mídia Kit
+  const [midiaKitUrl, setMidiaKitUrl] = useState<string | null>(null);
+  const [midiaKitFile, setMidiaKitFile] = useState<File | null>(null);
+  const [midiaKitPreview, setMidiaKitPreview] = useState<string | null>(null);
+  const [uploadingKit, setUploadingKit] = useState(false);
+  const [kitErro, setKitErro] = useState<string | null>(null);
 
   // Ao abrir em modo do-legado, busca dados derivados dos pontos e pré-preenche
   useEffect(() => {
@@ -92,6 +253,78 @@ export const ModalCadastroExibidor: React.FC<Props> = ({ mode, onClose, onSucces
       .finally(() => setCarregandoLegado(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Busca URL do mídia kit quando abre em modo editar
+  useEffect(() => {
+    if (mode.tipo !== 'editar') return;
+    api
+      .get(`/referencia?action=exibidor-midia-kit&exibidor_pk=${mode.exibidor_pk}`)
+      .then(({ data }) => { if (data.success) setMidiaKitUrl(data.midiaKit_url_st); })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const selecionarArquivoKit = (file: File) => {
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      setKitErro('Somente arquivos PDF são aceitos');
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      setKitErro('O arquivo deve ter menos de 20 MB');
+      return;
+    }
+    setKitErro(null);
+    setMidiaKitFile(file);
+    setMidiaKitPreview(URL.createObjectURL(file));
+  };
+
+  const uploadKit = async (exibidor_pk: number) => {
+    if (!midiaKitFile) return;
+    setUploadingKit(true);
+    setKitErro(null);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = (reader.result as string).split(',')[1];
+          resolve(result);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(midiaKitFile);
+      });
+      const { data } = await api.post('/referencia?action=exibidor-midia-kit', {
+        op: 'upload',
+        exibidor_pk,
+        filename: midiaKitFile.name,
+        contentBase64: base64,
+        urlAtual: midiaKitUrl,
+      });
+      if (data.success) setMidiaKitUrl(data.midiaKit_url_st);
+      else setKitErro(data.error || 'Erro ao fazer upload');
+    } catch {
+      setKitErro('Erro ao fazer upload');
+    } finally {
+      setUploadingKit(false);
+      setMidiaKitFile(null);
+      setMidiaKitPreview(null);
+    }
+  };
+
+  const removerKit = async (exibidor_pk: number) => {
+    setUploadingKit(true);
+    try {
+      await api.post('/referencia?action=exibidor-midia-kit', {
+        op: 'delete',
+        exibidor_pk,
+        urlAtual: midiaKitUrl,
+      });
+      setMidiaKitUrl(null);
+    } catch {
+      setKitErro('Erro ao remover');
+    } finally {
+      setUploadingKit(false);
+    }
+  };
 
   const setField = (k: keyof ReturnType<typeof emptyForm>, v: string) => {
     setForm((f) => ({ ...f, [k]: v }));
@@ -168,6 +401,10 @@ export const ModalCadastroExibidor: React.FC<Props> = ({ mode, onClose, onSucces
 
       const { data } = await api.post('/referencia?action=exibidor-gestao', payload);
       if (data?.success) {
+        // Faz upload do mídia kit se selecionado
+        if (midiaKitFile && data.exibidor_pk) {
+          await uploadKit(data.exibidor_pk);
+        }
         onSuccess();
       } else {
         setErro(data?.error || 'Erro ao cadastrar');
@@ -208,15 +445,22 @@ export const ModalCadastroExibidor: React.FC<Props> = ({ mode, onClose, onSucces
 
         {/* Tabs */}
         <div className="flex border-b border-[#eee] px-6">
-          {(['dados', 'dominios'] as const).map((s) => (
+          {([
+            { id: 'dados', label: '1. Dados da empresa' },
+            { id: 'dominios', label: `2. Domínios (${dominios.length})` },
+            { id: 'midia-kit', label: '3. Mídia Kit', badge: midiaKitUrl || midiaKitFile ? true : false },
+          ] as const).map((s) => (
             <button
-              key={s}
-              onClick={() => setStep(s)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px ${
-                step === s ? 'border-[#ff4600] text-[#ff4600]' : 'border-transparent text-[#666] hover:text-[#222]'
+              key={s.id}
+              onClick={() => setStep(s.id)}
+              className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 -mb-px ${
+                step === s.id ? 'border-[#ff4600] text-[#ff4600]' : 'border-transparent text-[#666] hover:text-[#222]'
               }`}
             >
-              {s === 'dados' ? '1. Dados da empresa' : `2. Domínios (${dominios.length})`}
+              {s.label}
+              {s.badge && (
+                <span className="w-2 h-2 rounded-full bg-[#22c55e] inline-block" />
+              )}
             </button>
           ))}
         </div>
@@ -420,6 +664,20 @@ export const ModalCadastroExibidor: React.FC<Props> = ({ mode, onClose, onSucces
                 </ul>
               )}
             </div>
+          )}
+
+          {step === 'midia-kit' && (
+            <MidiaKitTab
+              midiaKitUrl={midiaKitUrl}
+              midiaKitFile={midiaKitFile}
+              midiaKitPreview={midiaKitPreview}
+              uploading={uploadingKit}
+              erro={kitErro}
+              onSelect={selecionarArquivoKit}
+              onRemoveFile={() => { setMidiaKitFile(null); setMidiaKitPreview(null); setKitErro(null); }}
+              onRemoveUrl={mode.tipo === 'editar' ? () => removerKit(mode.exibidor_pk) : undefined}
+              onUploadNow={mode.tipo === 'editar' ? () => uploadKit(mode.exibidor_pk) : undefined}
+            />
           )}
 
           {erro ? (
