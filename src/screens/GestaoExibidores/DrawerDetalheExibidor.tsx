@@ -27,7 +27,7 @@ interface Detalhe {
   totalAtivosLegado: number;
 }
 
-type Aba = 'dados' | 'dominios' | 'usuarios' | 'legado';
+type Aba = 'dados' | 'dominios' | 'usuarios' | 'legado' | 'midia-kit';
 
 function normalizarDominio(s: string) {
   return s.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
@@ -40,6 +40,15 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
   const [novoDominio, setNovoDominio] = useState('');
   const [adicionando, setAdicionando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  // Mídia Kit
+  const [midiaKitUrl, setMidiaKitUrl] = useState<string | null>(null);
+  const [kitFile, setKitFile] = useState<File | null>(null);
+  const [kitPreview, setKitPreview] = useState<string | null>(null);
+  const [kitUploading, setKitUploading] = useState(false);
+  const [kitErro, setKitErro] = useState<string | null>(null);
+  const [kitDragging, setKitDragging] = useState(false);
+  const kitInputRef = React.useRef<HTMLInputElement>(null);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -59,6 +68,52 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
   useEffect(() => {
     carregar();
   }, [carregar]);
+
+  // Busca URL do mídia kit ao abrir
+  useEffect(() => {
+    api
+      .get(`/referencia?action=exibidor-midia-kit&exibidor_pk=${exibidor_pk}`)
+      .then(({ data: r }) => { if (r.success) setMidiaKitUrl(r.midiaKit_url_st); })
+      .catch(() => {});
+  }, [exibidor_pk]);
+
+  const selecionarKitFile = (file: File) => {
+    if (!file.name.toLowerCase().endsWith('.pdf')) { setKitErro('Somente PDF'); return; }
+    if (file.size > 20 * 1024 * 1024) { setKitErro('Máximo 20 MB'); return; }
+    setKitErro(null);
+    setKitFile(file);
+    setKitPreview(URL.createObjectURL(file));
+  };
+
+  const uploadKit = async () => {
+    if (!kitFile) return;
+    setKitUploading(true);
+    setKitErro(null);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(kitFile);
+      });
+      const { data: r } = await api.post('/referencia?action=exibidor-midia-kit', {
+        op: 'upload', exibidor_pk, filename: kitFile.name, contentBase64: base64, urlAtual: midiaKitUrl,
+      });
+      if (r.success) { setMidiaKitUrl(r.midiaKit_url_st); setKitFile(null); setKitPreview(null); }
+      else setKitErro(r.error || 'Erro ao enviar');
+    } catch { setKitErro('Erro ao enviar'); }
+    finally { setKitUploading(false); }
+  };
+
+  const removerKit = async () => {
+    if (!confirm('Remover o mídia kit deste exibidor?')) return;
+    setKitUploading(true);
+    try {
+      await api.post('/referencia?action=exibidor-midia-kit', { op: 'delete', exibidor_pk, urlAtual: midiaKitUrl });
+      setMidiaKitUrl(null);
+    } catch { setKitErro('Erro ao remover'); }
+    finally { setKitUploading(false); }
+  };
 
   const adicionarDominio = async () => {
     const d = normalizarDominio(novoDominio);
@@ -153,20 +208,22 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
         <div className="flex border-b border-[#eee] px-6">
           {(
             [
-              ['dados', 'Dados'],
-              ['dominios', `Domínios (${data.dominios.length})`],
-              ['usuarios', `Usuários (${data.usuarios.length})`],
-              ['legado', `Inventário legado (${data.totalAtivosLegado})`],
-            ] as Array<[Aba, string]>
-          ).map(([id, label]) => (
+              { id: 'dados', label: 'Dados' },
+              { id: 'dominios', label: `Domínios (${data.dominios.length})` },
+              { id: 'usuarios', label: `Usuários (${data.usuarios.length})` },
+              { id: 'legado', label: `Inventário legado (${data.totalAtivosLegado})` },
+              { id: 'midia-kit', label: 'Mídia Kit', badge: !!midiaKitUrl },
+            ] as Array<{ id: Aba; label: string; badge?: boolean }>
+          ).map(({ id, label, badge }) => (
             <button
               key={id}
               onClick={() => setAba(id)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px ${
+              className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 -mb-px ${
                 aba === id ? 'border-[#ff4600] text-[#ff4600]' : 'border-transparent text-[#666]'
               }`}
             >
               {label}
+              {badge && <span className="w-2 h-2 rounded-full bg-[#22c55e] inline-block" />}
             </button>
           ))}
         </div>
@@ -321,6 +378,123 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
                     </tbody>
                   </table>
                 </>
+              )}
+            </div>
+          ) : null}
+
+          {aba === 'midia-kit' ? (
+            <div className="space-y-5">
+              <p className="text-sm text-[#666]">
+                PDF enviado pelo exibidor com informações comerciais sobre o inventário.
+              </p>
+
+              {/* Kit salvo */}
+              {midiaKitUrl && !kitFile && (
+                <div className="rounded-2xl border border-[#e5e5e5] overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 bg-[#f7f7f7]">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">📄</span>
+                      <span className="text-sm font-medium text-[#222]">Mídia Kit atual</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <a
+                        href={midiaKitUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs px-3 py-1.5 border border-[#0a52e6] text-[#0a52e6] rounded-lg hover:bg-[#eaf0fb]"
+                      >
+                        Abrir PDF ↗
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => kitInputRef.current?.click()}
+                        className="text-xs px-3 py-1.5 border border-[#d9d9d9] rounded-lg hover:bg-white text-[#444]"
+                      >
+                        Substituir
+                      </button>
+                      <button
+                        type="button"
+                        onClick={removerKit}
+                        disabled={kitUploading}
+                        className="text-xs px-3 py-1.5 border border-[#f4caca] text-[#a8410d] rounded-lg hover:bg-[#fff5f5] disabled:opacity-50"
+                      >
+                        {kitUploading ? '…' : 'Remover'}
+                      </button>
+                    </div>
+                  </div>
+                  {/* Preview embutido */}
+                  <iframe
+                    src={midiaKitUrl}
+                    title="Mídia Kit"
+                    className="w-full h-[480px]"
+                  />
+                </div>
+              )}
+
+              {/* Arquivo selecionado aguardando envio */}
+              {kitFile && (
+                <div className="flex items-center justify-between bg-[#f0fdf4] border border-[#bbf7d0] rounded-xl px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">📄</span>
+                    <div>
+                      <p className="text-sm font-medium text-[#222]">{kitFile.name}</p>
+                      <p className="text-xs text-[#666]">{(kitFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={uploadKit}
+                      disabled={kitUploading}
+                      className="text-xs px-4 py-1.5 bg-[#22c55e] hover:bg-[#16a34a] text-white rounded-lg font-medium disabled:opacity-50"
+                    >
+                      {kitUploading ? 'Enviando…' : 'Enviar'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setKitFile(null); setKitPreview(null); setKitErro(null); }}
+                      className="text-xs px-3 py-1.5 border border-[#d9d9d9] rounded-lg hover:bg-white text-[#666]"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Preview antes de enviar */}
+              {kitPreview && !midiaKitUrl && (
+                <iframe src={kitPreview} title="Preview" className="w-full h-64 rounded-xl border border-[#e5e5e5]" />
+              )}
+
+              {/* Drop zone — só aparece sem kit salvo e sem arquivo selecionado */}
+              {!midiaKitUrl && !kitFile && (
+                <div
+                  className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-colors ${
+                    kitDragging ? 'border-[#ff4600] bg-[#fff5f2]' : 'border-[#ddd] hover:border-[#bbb]'
+                  }`}
+                  onDragOver={(e) => { e.preventDefault(); setKitDragging(true); }}
+                  onDragLeave={() => setKitDragging(false)}
+                  onDrop={(e) => { e.preventDefault(); setKitDragging(false); const f = e.dataTransfer.files[0]; if (f) selecionarKitFile(f); }}
+                  onClick={() => kitInputRef.current?.click()}
+                >
+                  <div className="text-4xl mb-3">☁️</div>
+                  <p className="text-sm font-medium text-[#444]">Arraste o PDF aqui ou clique para selecionar</p>
+                  <p className="text-xs text-[#999] mt-1">PDF · máximo 20 MB</p>
+                </div>
+              )}
+
+              <input
+                ref={kitInputRef}
+                type="file"
+                accept=".pdf,application/pdf"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) selecionarKitFile(f); e.target.value = ''; }}
+              />
+
+              {kitErro && (
+                <p className="text-sm text-[#a8410d] bg-[#fff5f5] border border-[#f4caca] rounded-lg px-3 py-2">
+                  {kitErro}
+                </p>
               )}
             </div>
           ) : null}
