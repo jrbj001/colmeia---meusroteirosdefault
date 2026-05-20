@@ -41,8 +41,8 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
   const [adicionando, setAdicionando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  // Mídia Kit
-  const [midiaKitUrl, setMidiaKitUrl] = useState<string | null>(null);
+  // Mídia Kit — temKit indica se há PDF salvo; a URL real é sempre via proxy /stream
+  const [temKit, setTemKit] = useState(false);
   const [kitFile, setKitFile] = useState<File | null>(null);
   const [kitPreview, setKitPreview] = useState<string | null>(null);
   const [kitUploading, setKitUploading] = useState(false);
@@ -69,13 +69,16 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
     carregar();
   }, [carregar]);
 
-  // Busca URL do mídia kit ao abrir
+  // Verifica se há mídia kit salvo ao abrir
   useEffect(() => {
     api
       .get(`/referencia?action=exibidor-midia-kit&exibidor_pk=${exibidor_pk}`)
-      .then(({ data: r }) => { if (r.success) setMidiaKitUrl(r.midiaKit_url_st); })
+      .then(({ data: r }) => { if (r.success) setTemKit(r.temKit); })
       .catch(() => {});
   }, [exibidor_pk]);
+
+  // URL de stream — sempre via proxy backend para funcionar com store privado
+  const streamUrl = `/api/referencia?action=exibidor-midia-kit&mode=stream&exibidor_pk=${exibidor_pk}`;
 
   const selecionarKitFile = (file: File) => {
     if (!file.name.toLowerCase().endsWith('.pdf')) { setKitErro('Somente PDF'); return; }
@@ -97,9 +100,9 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
         reader.readAsDataURL(kitFile);
       });
       const { data: r } = await api.post('/referencia?action=exibidor-midia-kit', {
-        op: 'upload', exibidor_pk, filename: kitFile.name, contentBase64: base64, urlAtual: midiaKitUrl,
+        op: 'upload', exibidor_pk, filename: kitFile.name, contentBase64: base64,
       });
-      if (r.success) { setMidiaKitUrl(r.midiaKit_url_st); setKitFile(null); setKitPreview(null); }
+      if (r.success) { setTemKit(true); setKitFile(null); setKitPreview(null); }
       else setKitErro(r.error || 'Erro ao enviar');
     } catch { setKitErro('Erro ao enviar'); }
     finally { setKitUploading(false); }
@@ -109,8 +112,8 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
     if (!confirm('Remover o mídia kit deste exibidor?')) return;
     setKitUploading(true);
     try {
-      await api.post('/referencia?action=exibidor-midia-kit', { op: 'delete', exibidor_pk, urlAtual: midiaKitUrl });
-      setMidiaKitUrl(null);
+      await api.post('/referencia?action=exibidor-midia-kit', { op: 'delete', exibidor_pk });
+      setTemKit(false);
     } catch { setKitErro('Erro ao remover'); }
     finally { setKitUploading(false); }
   };
@@ -212,7 +215,7 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
               { id: 'dominios', label: `Domínios (${data.dominios.length})` },
               { id: 'usuarios', label: `Usuários (${data.usuarios.length})` },
               { id: 'legado', label: `Inventário legado (${data.totalAtivosLegado})` },
-              { id: 'midia-kit', label: 'Mídia Kit', badge: !!midiaKitUrl },
+              { id: 'midia-kit', label: 'Mídia Kit', badge: temKit },
             ] as Array<{ id: Aba; label: string; badge?: boolean }>
           ).map(({ id, label, badge }) => (
             <button
@@ -388,8 +391,8 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
                 PDF enviado pelo exibidor com informações comerciais sobre o inventário.
               </p>
 
-              {/* Kit salvo */}
-              {midiaKitUrl && !kitFile && (
+              {/* Kit salvo — usa rota de stream (proxy) para store privado */}
+              {temKit && !kitFile && (
                 <div className="rounded-2xl border border-[#e5e5e5] overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-3 bg-[#f7f7f7]">
                     <div className="flex items-center gap-2">
@@ -398,7 +401,7 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
                     </div>
                     <div className="flex gap-2">
                       <a
-                        href={midiaKitUrl}
+                        href={streamUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs px-3 py-1.5 border border-[#0a52e6] text-[#0a52e6] rounded-lg hover:bg-[#eaf0fb]"
@@ -422,9 +425,9 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
                       </button>
                     </div>
                   </div>
-                  {/* Preview embutido */}
+                  {/* Preview embutido via proxy */}
                   <iframe
-                    src={midiaKitUrl}
+                    src={streamUrl}
                     title="Mídia Kit"
                     className="w-full h-[480px]"
                   />
@@ -467,7 +470,7 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
               )}
 
               {/* Drop zone — só aparece sem kit salvo e sem arquivo selecionado */}
-              {!midiaKitUrl && !kitFile && (
+              {!temKit && !kitFile && (
                 <div
                   className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-colors ${
                     kitDragging ? 'border-[#ff4600] bg-[#fff5f2]' : 'border-[#ddd] hover:border-[#bbb]'
