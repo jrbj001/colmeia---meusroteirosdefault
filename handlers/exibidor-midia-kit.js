@@ -55,8 +55,13 @@ module.exports = async (req, res) => {
 
     /* ── Delete ── */
     if (op === 'delete') {
-      if (urlAtual) {
-        try { await del(urlAtual); } catch (_) { /* ignora se já removido */ }
+      // Busca a URL do banco antes de deletar do Blob
+      const urlRow = await pool.request()
+        .input('pk', sql.Int, exibidor_pk)
+        .query('SELECT midiaKit_url_st FROM [serv_product_be180].[exibidor_dm] WHERE exibidor_pk = @pk');
+      const urlParaDeletar = urlRow.recordset[0]?.midiaKit_url_st;
+      if (urlParaDeletar) {
+        try { await del(urlParaDeletar); } catch (_) { /* ignora se já removido */ }
       }
       await pool.request()
         .input('pk', sql.Int, exibidor_pk)
