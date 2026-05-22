@@ -52,7 +52,7 @@ module.exports = async function handler(req, res) {
           c.exibidorP1a_st                        AS classifP1a_st,
           /* Coluna E — TIPO DE NEGOCIAÇÃO */
           i.tipoNegociacao_st,
-          /* Coluna F — Descrição (Ex Pacote Lola, Pacote Carnaval) */
+          /* Coluna F — Pacote (1ª coluna DESCRICAO do upload OOH) */
           i.outrasEspecificacoesDigitar_st        AS descricaoPacote_st,
           /* Coluna G — GEO */
           ufgeo.geoAmbev_st,
