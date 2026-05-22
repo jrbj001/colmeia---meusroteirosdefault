@@ -81,16 +81,23 @@ const FIXED_FIELD_HEADERS: Array<{
   { headers: ['CAMPANHA'], key: 'campanha_st', type: 'st' },
   { headers: ['PRODUTO'], key: 'produto_st', type: 'st' },
   { headers: ['TIPO DE NEGOCIACAO'], key: 'tipoNegociacao_st', type: 'st' },
+  /* Coluna F — Pacote: prioriza coluna explícita OUTRAS ESPECIFICAÇÕES; senão 1ª DESCRICAO */
+  { headers: ['OUTRAS ESPECIFICACOES DIGITAR', 'OUTRAS ESPECIFICACOES'], key: 'outrasEspecificacoesDigitar_st', type: 'st' },
+  {
+    headers: ['DESCRICAO'],
+    key: 'outrasEspecificacoesDigitar_st',
+    type: 'st',
+    occurrence: 'first',
+  },
   { headers: ['UF'], key: 'uf_st', type: 'st' },
   { headers: ['PRACA'], key: 'praca_st', type: 'st' },
   { headers: ['EXIBIDOR'], key: 'exibidor_st', type: 'st' },
   { headers: ['AMBIENTE'], key: 'ambiente_st', type: 'st' },
   { headers: ['FORMATO'], key: 'formato_st', type: 'st' },
-  // DESCRICAO pode aparecer em coluna extra antes da coluna original; usar sempre a última
+  /* Coluna M — DESCRIÇÃO (2ª coluna DESCRICAO no modelo empilhado) */
   { headers: ['DESCRICAO'], key: 'descricao_st', type: 'st', occurrence: 'last' },
   { headers: ['GRUPO'], key: 'grupo_st', type: 'st' },
   { headers: ['TIPO'], key: 'tipo_st', type: 'st' },
-  { headers: ['OUTRAS ESPECIFICACOES DIGITAR', 'OUTRAS ESPECIFICACOES'], key: 'outrasEspecificacoesDigitar_st', type: 'st' },
   { headers: ['ESPECIFICACOES'], key: 'especificacoes_st', type: 'st' },
   { headers: ['NUMERO DE SLOTS'], key: 'numeroSlots_vl', type: 'vl' },
   { headers: ['ESPECIFICACOES DIGITAL INSERCOES'], key: 'specDigitalInsercoes_st', type: 'st' },
@@ -184,8 +191,10 @@ function buildColMapping(
 
   const mapping: Record<number, { key: string; type: 'st' | 'vl' | 'dt' }> = {};
   const usedIndices = new Set<number>();
+  const assignedKeys = new Set<string>();
 
   for (const fieldDef of FIXED_FIELD_HEADERS) {
+    if (assignedKeys.has(fieldDef.key)) continue;
     let colIdx = -1;
     for (const headerAlias of fieldDef.headers) {
       const indices = hMapAll.get(headerAlias) ?? [];
@@ -201,6 +210,7 @@ function buildColMapping(
     if (colIdx !== -1) {
       mapping[colIdx] = { key: fieldDef.key, type: fieldDef.type };
       usedIndices.add(colIdx);
+      assignedKeys.add(fieldDef.key);
     }
   }
 
