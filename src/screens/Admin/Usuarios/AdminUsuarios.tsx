@@ -15,6 +15,8 @@ interface Usuario {
   perfil_descricao: string;
   empresa_pk: number | null;
   exibidor_fk: number | null;
+  primeiroAcesso_dh: string | null;
+  ultimoAcesso_dh: string | null;
 }
 
 interface Perfil {
@@ -52,6 +54,51 @@ const PerfilBadge: React.FC<{ nome: string }> = ({ nome }) => {
     >
       {nome}
     </span>
+  );
+};
+
+function formatarAcesso(dh: string | null): { label: string; relativo: string | null } {
+  if (!dh) return { label: 'Nunca acessou', relativo: null };
+  const d = new Date(dh);
+  if (Number.isNaN(d.getTime())) return { label: 'Nunca acessou', relativo: null };
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
+  const label = `${dd}/${mm}/${yy}`;
+  const diffMs = Date.now() - d.getTime();
+  const diffDays = Math.floor(diffMs / 86_400_000);
+  let relativo: string;
+  if (diffDays <= 0) relativo = 'hoje';
+  else if (diffDays === 1) relativo = 'ontem';
+  else if (diffDays < 30) relativo = `há ${diffDays} dias`;
+  else if (diffDays < 365) relativo = `há ${Math.floor(diffDays / 30)} mês(es)`;
+  else relativo = `há ${Math.floor(diffDays / 365)} ano(s)`;
+  return { label, relativo };
+}
+
+const AcessoBadge: React.FC<{ dh: string | null }> = ({ dh }) => {
+  if (!dh) {
+    return (
+      <span
+        className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
+        style={{ backgroundColor: '#fef3c7', color: '#92400e' }}
+        title="Este usuário ainda não fez login no sistema"
+      >
+        Nunca acessou
+      </span>
+    );
+  }
+  const { label, relativo } = formatarAcesso(dh);
+  return (
+    <div className="flex flex-col">
+      <span
+        className="inline-block w-fit px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
+        style={{ backgroundColor: '#dcfce7', color: '#15803d' }}
+      >
+        ✓ {label}
+      </span>
+      {relativo && <span className="text-[10px] text-[#9ca3af] mt-0.5">{relativo}</span>}
+    </div>
   );
 };
 
@@ -214,6 +261,8 @@ export const AdminUsuarios: React.FC = () => {
     ativos:   usuarios.filter(u => u.usuario_ativo).length,
     inativos: usuarios.filter(u => !u.usuario_ativo).length,
     exibidores: usuarios.filter(u => u.perfil_nome?.toLowerCase().includes('exibidor')).length,
+    jaAcessaram: usuarios.filter(u => !!u.ultimoAcesso_dh).length,
+    nuncaAcessaram: usuarios.filter(u => !u.ultimoAcesso_dh).length,
   }), [usuarios]);
 
   return (
@@ -263,7 +312,7 @@ export const AdminUsuarios: React.FC = () => {
             </div>
 
             {/* Métricas */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
               <div className="rounded-xl border border-[#a8c2ef] bg-white p-4">
                 <p className="text-xs uppercase text-[#666] mb-1">Total</p>
                 <p className="text-2xl text-[#0a52e6] font-bold">{stats.total}</p>
@@ -279,6 +328,14 @@ export const AdminUsuarios: React.FC = () => {
               <div className="rounded-xl border border-[#f6c69b] bg-white p-4">
                 <p className="text-xs uppercase text-[#666] mb-1">Exibidores</p>
                 <p className="text-2xl text-[#ff4600] font-bold">{stats.exibidores}</p>
+              </div>
+              <div className="rounded-xl border border-[#bbf7d0] bg-white p-4">
+                <p className="text-xs uppercase text-[#666] mb-1">Já acessaram</p>
+                <p className="text-2xl text-[#15803d] font-bold">{stats.jaAcessaram}</p>
+              </div>
+              <div className="rounded-xl border border-[#fde68a] bg-white p-4">
+                <p className="text-xs uppercase text-[#666] mb-1">Nunca acessaram</p>
+                <p className="text-2xl text-[#92400e] font-bold">{stats.nuncaAcessaram}</p>
               </div>
             </div>
 
@@ -334,6 +391,7 @@ export const AdminUsuarios: React.FC = () => {
                       <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Perfil</th>
                       <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Vínculo</th>
                       <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Status</th>
+                      <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Último acesso</th>
                       <th className="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Ações</th>
                     </tr>
                   </thead>
@@ -369,6 +427,9 @@ export const AdminUsuarios: React.FC = () => {
                           >
                             {usuario.usuario_ativo ? 'Ativo' : 'Inativo'}
                           </span>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <AcessoBadge dh={usuario.ultimoAcesso_dh} />
                         </td>
                         <td className="px-5 py-3.5 text-right">
                           {usuario.usuario_ativo ? (

@@ -113,6 +113,8 @@
     { "source": "/perfis-permissoes", "destination": "/api/admin?action=perfis-permissoes" },
     { "source": "/api/usuarios", "destination": "/api/admin?action=usuarios" },
     { "source": "/api/usuarios-permissoes", "destination": "/api/admin?action=usuarios-permissoes" },
+    { "source": "/api/usuarios-registrar-acesso", "destination": "/api/admin?action=usuarios-registrar-acesso" },
+    { "source": "/usuarios-registrar-acesso", "destination": "/api/admin?action=usuarios-registrar-acesso" },
     { "source": "/api/perfis", "destination": "/api/admin?action=perfis" },
     { "source": "/api/perfis-permissoes", "destination": "/api/admin?action=perfis-permissoes" },
     { "source": "/api/areas", "destination": "/api/admin?action=areas" },

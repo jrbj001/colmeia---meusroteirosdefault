@@ -56,6 +56,33 @@ interface CachedProfile {
 
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 min — revalida após meia hora
 
+// ── Marca o acesso no backend apenas uma vez por sessão (sessionStorage) ──
+//    Fire-and-forget: nunca bloqueia ou propaga erro para o fluxo de login.
+const ACESSO_REGISTRADO_KEY = 'colmeia_acesso_registrado_v1';
+
+function registrarAcessoUmaVez(email: string, auth0Sub: string) {
+  if (!email) return;
+  try {
+    const ja = sessionStorage.getItem(ACESSO_REGISTRADO_KEY);
+    if (ja === email.toLowerCase()) return;
+    sessionStorage.setItem(ACESSO_REGISTRADO_KEY, email.toLowerCase());
+  } catch { /* sessionStorage indisponível — segue sem caching */ }
+
+  axios
+    .post('/usuarios-registrar-acesso', {
+      email: email.toLowerCase(),
+      auth0_sub: auth0Sub || undefined,
+    })
+    .then((r) => {
+      // eslint-disable-next-line no-console
+      console.log('[acesso] registrado:', r.data);
+    })
+    .catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[acesso] falha (silencioso):', err?.response?.status, err?.response?.data);
+    });
+}
+
 function lerCache(sub: string): CachedProfile | null {
   try {
     const raw = sessionStorage.getItem(CACHE_PREFIX + sub);
@@ -135,6 +162,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           localUser.exibidor_fk = cached.exibidor_fk ?? null;
           setAcessoBloqueado(false);
           setUser({ ...localUser });
+          registrarAcessoUmaVez(email, sub);
         }
         setIsLoading(false);
         return; // cache válido — não bate na API
@@ -172,10 +200,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             });
             setAcessoBloqueado(false);
             setUser({ ...localUser });
+            registrarAcessoUmaVez(email, sub);
           } else if (isEmailInterno(email)) {
             gravarCache(sub, { bloqueado: false });
             setAcessoBloqueado(false);
             setUser({ ...localUser });
+            registrarAcessoUmaVez(email, sub);
           } else {
             // Email externo sem cadastro — tenta resolução por domínio
             try {
@@ -197,6 +227,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 });
                 setAcessoBloqueado(false);
                 setUser({ ...localUser });
+                registrarAcessoUmaVez(email, sub);
               } else {
                 gravarCache(sub, { bloqueado: true });
                 setAcessoBloqueado(true);
@@ -216,6 +247,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             gravarCache(sub, { bloqueado: false });
             setUser(localUser);
             setAcessoBloqueado(false);
+            registrarAcessoUmaVez(email, sub);
           } else {
             setAcessoBloqueado(true);
             setUser(null);
@@ -245,6 +277,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_data');
     localStorage.removeItem('user_permissoes');
+    try { sessionStorage.removeItem(ACESSO_REGISTRADO_KEY); } catch { /* ok */ }
     // Limpa cache de perfil do usuário atual
     if (user?.id) limparCache(user.id);
     setUser(null);
