@@ -4,6 +4,31 @@ import { usePermissions } from '../../../hooks';
 import { Sidebar } from '../../../components/Sidebar/Sidebar';
 import { Topbar } from '../../../components/Topbar/Topbar';
 
+/* ── Ordenação ─────────────────────────────────────────────────────────────
+   Coluna "perfil" usa ordem hierárquica fixa do sistema, em vez de alfabética. */
+type SortKey =
+  | 'usuario_nome'
+  | 'usuario_email'
+  | 'perfil_nome'
+  | 'vinculo'
+  | 'usuario_ativo'
+  | 'ultimoAcesso_dh';
+
+type SortDir = 'asc' | 'desc';
+
+const PERFIL_ORDEM: Record<string, number> = {
+  'admin': 1,
+  'editor': 2,
+  'visualizador': 3,
+  'analista bi': 4,
+  'exibidor': 5,
+};
+
+function ordemPerfil(nome: string | null | undefined): number {
+  if (!nome) return 99;
+  return PERFIL_ORDEM[nome.toLowerCase()] ?? 50;
+}
+
 interface Usuario {
   usuario_pk: number;
   usuario_nome: string;
@@ -102,6 +127,40 @@ const AcessoBadge: React.FC<{ dh: string | null }> = ({ dh }) => {
   );
 };
 
+const MetricaInline: React.FC<{ label: string; value: number; color: string }> = ({ label, value, color }) => (
+  <div className="flex items-baseline gap-2">
+    <span className="text-[11px] uppercase tracking-wide text-[#6b7280]">{label}</span>
+    <span className="text-lg font-bold" style={{ color }}>{value}</span>
+  </div>
+);
+
+interface SortableThProps {
+  col: SortKey;
+  current: SortKey;
+  dir: SortDir;
+  onSort: (col: SortKey) => void;
+  children: React.ReactNode;
+}
+
+const SortableTh: React.FC<SortableThProps> = ({ col, current, dir, onSort, children }) => {
+  const isActive = current === col;
+  return (
+    <th
+      onClick={() => onSort(col)}
+      className={`px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider select-none cursor-pointer transition-colors ${
+        isActive ? 'text-[#ff4600]' : 'text-[#6b7280] hover:text-[#3a3a3a]'
+      }`}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        <span className="text-[9px] leading-none w-2 inline-block text-center">
+          {isActive ? (dir === 'asc' ? '▲' : '▼') : '↕'}
+        </span>
+      </span>
+    </th>
+  );
+};
+
 const Skeleton: React.FC = () => (
   <div className="animate-pulse space-y-3 p-6">
     {Array.from({ length: 6 }).map((_, i) => (
@@ -141,6 +200,19 @@ export const AdminUsuarios: React.FC = () => {
     empresa_pk: null as number | null,
     exibidor_fk: null as number | null,
   });
+
+  /* Ordenação — default: perfil hierárquico + nome */
+  const [sortKey, setSortKey] = useState<SortKey>('perfil_nome');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
 
   useEffect(() => { carregarDados(); }, [searchTerm, filtroPerfil, mostrarInativos]);
 
@@ -256,6 +328,52 @@ export const AdminUsuarios: React.FC = () => {
   const perfilSelecionado = perfis.find(p => p.perfil_pk === formData.perfil_pk);
   const isExibidorPerfil = perfilSelecionado?.perfil_nome?.toLowerCase().includes('exibidor') ?? false;
 
+  /* Ordenação aplicada client-side sobre o array de usuários */
+  const usuariosOrdenados = useMemo(() => {
+    const arr = [...usuarios];
+    const dir = sortDir === 'asc' ? 1 : -1;
+
+    arr.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'usuario_nome':
+          cmp = (a.usuario_nome || '').localeCompare(b.usuario_nome || '', 'pt-BR');
+          break;
+        case 'usuario_email':
+          cmp = (a.usuario_email || '').localeCompare(b.usuario_email || '', 'pt-BR');
+          break;
+        case 'perfil_nome': {
+          const oA = ordemPerfil(a.perfil_nome);
+          const oB = ordemPerfil(b.perfil_nome);
+          cmp = oA - oB;
+          if (cmp === 0) {
+            cmp = (a.usuario_nome || '').localeCompare(b.usuario_nome || '', 'pt-BR');
+          }
+          break;
+        }
+        case 'vinculo': {
+          const labelVinculo = (u: Usuario) =>
+            u.exibidor_fk ? `1-Exibidor #${u.exibidor_fk}` : u.empresa_pk ? `2-Agência #${u.empresa_pk}` : '3-Be';
+          cmp = labelVinculo(a).localeCompare(labelVinculo(b), 'pt-BR');
+          break;
+        }
+        case 'usuario_ativo':
+          cmp = (a.usuario_ativo ? 1 : 0) - (b.usuario_ativo ? 1 : 0);
+          break;
+        case 'ultimoAcesso_dh': {
+          // Nunca acessou (NULL) vai para o final em ASC, início em DESC
+          const tA = a.ultimoAcesso_dh ? new Date(a.ultimoAcesso_dh).getTime() : -Infinity;
+          const tB = b.ultimoAcesso_dh ? new Date(b.ultimoAcesso_dh).getTime() : -Infinity;
+          cmp = tA - tB;
+          break;
+        }
+      }
+      return cmp * dir;
+    });
+
+    return arr;
+  }, [usuarios, sortKey, sortDir]);
+
   const stats = useMemo(() => ({
     total:    usuarios.length,
     ativos:   usuarios.filter(u => u.usuario_ativo).length,
@@ -268,7 +386,7 @@ export const AdminUsuarios: React.FC = () => {
   return (
     <div className="min-h-screen bg-white flex font-sans">
       <Sidebar menuReduzido={menuReduzido} setMenuReduzido={setMenuReduzido} />
-      <div className={`fixed top-0 z-20 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? 'left-20' : 'left-64'}`} />
+      <div className={`fixed top-0 z-40 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? 'left-20' : 'left-64'}`} />
       <div
         className={`flex-1 transition-all duration-300 min-h-screen w-full ${
           menuReduzido ? 'ml-20' : 'ml-64'
@@ -290,179 +408,168 @@ export const AdminUsuarios: React.FC = () => {
           }`}
         />
 
-        <div className="flex-1 pt-24 pb-16 px-8 overflow-auto">
-          <div className="max-w-7xl mx-auto">
+        <div className="flex-1 pt-20 pb-10 px-6 overflow-auto">
 
-            {/* Cabeçalho */}
-            <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
-              <div>
-                <h1 className="text-3xl font-bold text-[#ff4600] mb-2 uppercase tracking-wide">
-                  Gerenciar Usuários
-                </h1>
-                <p className="text-[#3a3a3a] text-base leading-relaxed max-w-2xl">
-                  Adicione, edite ou desative usuários do sistema e controle perfis de acesso.
-                </p>
-              </div>
-              <button
-                onClick={abrirModalCriar}
-                className="bg-[#ff4600] hover:bg-[#e33d00] active:scale-95 text-white font-medium h-[44px] px-6 rounded-lg transition-all"
-              >
-                + Novo Usuário
-              </button>
+          {/* Cabeçalho compacto */}
+          <div className="flex items-center justify-between mb-4 gap-4">
+            <div className="flex items-baseline gap-3">
+              <h1 className="text-xl font-bold text-[#222] tracking-tight">
+                Gerenciar Usuários
+              </h1>
+              <span className="text-sm text-[#9ca3af]">
+                {stats.total} {stats.total === 1 ? 'usuário' : 'usuários'}
+              </span>
             </div>
+            <button
+              onClick={abrirModalCriar}
+              className="bg-[#ff4600] hover:bg-[#e33d00] active:scale-95 text-white font-medium text-sm h-9 px-4 rounded-lg transition-all"
+            >
+              + Novo Usuário
+            </button>
+          </div>
 
-            {/* Métricas */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-              <div className="rounded-xl border border-[#a8c2ef] bg-white p-4">
-                <p className="text-xs uppercase text-[#666] mb-1">Total</p>
-                <p className="text-2xl text-[#0a52e6] font-bold">{stats.total}</p>
-              </div>
-              <div className="rounded-xl border border-[#bbf7d0] bg-white p-4">
-                <p className="text-xs uppercase text-[#666] mb-1">Ativos</p>
-                <p className="text-2xl text-[#15803d] font-bold">{stats.ativos}</p>
-              </div>
-              <div className="rounded-xl border border-[#e5e7eb] bg-white p-4">
-                <p className="text-xs uppercase text-[#666] mb-1">Inativos</p>
-                <p className="text-2xl text-[#6b7280] font-bold">{stats.inativos}</p>
-              </div>
-              <div className="rounded-xl border border-[#f6c69b] bg-white p-4">
-                <p className="text-xs uppercase text-[#666] mb-1">Exibidores</p>
-                <p className="text-2xl text-[#ff4600] font-bold">{stats.exibidores}</p>
-              </div>
-              <div className="rounded-xl border border-[#bbf7d0] bg-white p-4">
-                <p className="text-xs uppercase text-[#666] mb-1">Já acessaram</p>
-                <p className="text-2xl text-[#15803d] font-bold">{stats.jaAcessaram}</p>
-              </div>
-              <div className="rounded-xl border border-[#fde68a] bg-white p-4">
-                <p className="text-xs uppercase text-[#666] mb-1">Nunca acessaram</p>
-                <p className="text-2xl text-[#92400e] font-bold">{stats.nuncaAcessaram}</p>
-              </div>
+          {/* Métricas — strip horizontal lean */}
+          <div className="flex flex-wrap gap-6 mb-4 pb-4 border-b border-[#f0f0f0]">
+            <MetricaInline label="Total" value={stats.total} color="#0a52e6" />
+            <MetricaInline label="Ativos" value={stats.ativos} color="#15803d" />
+            <MetricaInline label="Inativos" value={stats.inativos} color="#6b7280" />
+            <MetricaInline label="Exibidores" value={stats.exibidores} color="#ff4600" />
+            <MetricaInline label="Já acessaram" value={stats.jaAcessaram} color="#15803d" />
+            <MetricaInline label="Nunca acessaram" value={stats.nuncaAcessaram} color="#92400e" />
+          </div>
+
+          {/* Filtros */}
+          <div className="flex items-center gap-3 mb-3 flex-wrap">
+            <div className="relative flex-1 min-w-[260px] max-w-[420px]">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Buscar por nome ou e-mail..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 h-9 text-sm border border-[#d1d5db] rounded-lg focus:ring-2 focus:ring-[#ff4600] focus:border-transparent outline-none"
+              />
             </div>
+            <select
+              value={filtroPerfil}
+              onChange={(e) => setFiltroPerfil(e.target.value)}
+              className="border border-[#d1d5db] rounded-lg px-3 h-9 text-sm focus:ring-2 focus:ring-[#ff4600] outline-none bg-white"
+            >
+              <option value="">Todos os perfis</option>
+              {perfis.map(p => (
+                <option key={p.perfil_pk} value={p.perfil_nome}>{p.perfil_nome}</option>
+              ))}
+            </select>
+            <label className="flex items-center gap-2 text-sm text-[#3a3a3a] cursor-pointer select-none ml-auto">
+              <input
+                type="checkbox"
+                checked={mostrarInativos}
+                onChange={(e) => setMostrarInativos(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 accent-[#ff4600]"
+              />
+              Mostrar inativos
+            </label>
+          </div>
 
-            {/* Filtros */}
-            <div className="flex items-center gap-3 mb-4 flex-wrap">
-              <div className="relative flex-1 min-w-[220px]">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Buscar por nome ou e-mail..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 text-sm border border-[#d1d5db] rounded-lg focus:ring-2 focus:ring-[#ff4600] focus:border-transparent outline-none"
-                />
+          {/* Tabela — largura total */}
+          <div className="rounded-lg border border-[#e5e7eb] overflow-hidden bg-white">
+            {loading ? (
+              <Skeleton />
+            ) : usuariosOrdenados.length === 0 ? (
+              <div className="py-16 text-center text-[#6b7280] text-sm">
+                Nenhum usuário encontrado.
               </div>
-              <select
-                value={filtroPerfil}
-                onChange={(e) => setFiltroPerfil(e.target.value)}
-                className="border border-[#d1d5db] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#ff4600] outline-none"
-              >
-                <option value="">Todos os perfis</option>
-                {perfis.map(p => (
-                  <option key={p.perfil_pk} value={p.perfil_nome}>{p.perfil_nome}</option>
-                ))}
-              </select>
-              <label className="flex items-center gap-2 text-sm text-[#3a3a3a] cursor-pointer select-none ml-auto">
-                <input
-                  type="checkbox"
-                  checked={mostrarInativos}
-                  onChange={(e) => setMostrarInativos(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 accent-[#ff4600]"
-                />
-                Mostrar inativos
-              </label>
-            </div>
-
-            {/* Tabela */}
-            <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-              {loading ? (
-                <Skeleton />
-              ) : usuarios.length === 0 ? (
-                <div className="py-16 text-center text-[#6b7280] text-sm">
-                  Nenhum usuário encontrado.
-                </div>
-              ) : (
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="border-b border-[#e5e7eb] bg-[#f9fafb]">
-                      <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Usuário</th>
-                      <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">E-mail</th>
-                      <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Perfil</th>
-                      <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Vínculo</th>
-                      <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Status</th>
-                      <th className="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Último acesso</th>
-                      <th className="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#f3f4f6]">
-                    {usuarios.map((usuario) => (
-                      <tr key={usuario.usuario_pk} className="hover:bg-[#fafafa] transition-colors">
-                        <td className="px-5 py-3.5">
-                          <span className="text-sm font-medium text-[#111827]">{usuario.usuario_nome}</span>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <span className="text-sm text-[#6b7280]">{usuario.usuario_email || '—'}</span>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <PerfilBadge nome={usuario.perfil_nome} />
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <span className="text-sm text-[#6b7280]">
-                            {usuario.exibidor_fk
-                              ? <span className="text-[#c2410c] font-medium">Exibidor #{usuario.exibidor_fk}</span>
-                              : usuario.empresa_pk
-                                ? agenciasSeguras.find(a => a.id_agencia === usuario.empresa_pk)?.nome_agencia || `Agência #${usuario.empresa_pk}`
-                                : <span className="text-[#9ca3af] italic">Be (interno)</span>
-                            }
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <span
-                            className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
-                            style={usuario.usuario_ativo
-                              ? { backgroundColor: '#dcfce7', color: '#15803d' }
-                              : { backgroundColor: '#f3f4f6', color: '#6b7280' }
-                            }
-                          >
-                            {usuario.usuario_ativo ? 'Ativo' : 'Inativo'}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <AcessoBadge dh={usuario.ultimoAcesso_dh} />
-                        </td>
-                        <td className="px-5 py-3.5 text-right">
-                          {usuario.usuario_ativo ? (
-                            <span className="inline-flex gap-4">
-                              <button
-                                onClick={() => abrirModalEditar(usuario)}
-                                className="text-sm text-[#ff4600] hover:text-[#c2410c] font-medium"
-                              >
-                                Editar
-                              </button>
-                              <button
-                                onClick={() => desativarUsuario(usuario.usuario_pk)}
-                                className="text-sm text-red-500 hover:text-red-700 font-medium"
-                              >
-                                Desativar
-                              </button>
-                            </span>
-                          ) : (
+            ) : (
+              <table className="w-full table-fixed text-sm">
+                <colgroup>
+                  <col className="w-[18%]" />
+                  <col className="w-[22%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[12%]" />
+                </colgroup>
+                <thead>
+                  <tr className="border-b border-[#e5e7eb] bg-[#f9fafb]">
+                    <SortableTh col="usuario_nome" current={sortKey} dir={sortDir} onSort={handleSort}>Usuário</SortableTh>
+                    <SortableTh col="usuario_email" current={sortKey} dir={sortDir} onSort={handleSort}>E-mail</SortableTh>
+                    <SortableTh col="perfil_nome" current={sortKey} dir={sortDir} onSort={handleSort}>Perfil</SortableTh>
+                    <SortableTh col="vinculo" current={sortKey} dir={sortDir} onSort={handleSort}>Vínculo</SortableTh>
+                    <SortableTh col="usuario_ativo" current={sortKey} dir={sortDir} onSort={handleSort}>Status</SortableTh>
+                    <SortableTh col="ultimoAcesso_dh" current={sortKey} dir={sortDir} onSort={handleSort}>Último acesso</SortableTh>
+                    <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-[#6b7280]">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#f3f4f6]">
+                  {usuariosOrdenados.map((usuario) => (
+                    <tr key={usuario.usuario_pk} className="hover:bg-[#fafafa] transition-colors">
+                      <td className="px-4 py-2.5 truncate">
+                        <span className="text-sm font-medium text-[#111827]">{usuario.usuario_nome}</span>
+                      </td>
+                      <td className="px-4 py-2.5 truncate">
+                        <span className="text-sm text-[#6b7280]">{usuario.usuario_email || '—'}</span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <PerfilBadge nome={usuario.perfil_nome} />
+                      </td>
+                      <td className="px-4 py-2.5 truncate">
+                        <span className="text-sm text-[#6b7280]">
+                          {usuario.exibidor_fk
+                            ? <span className="text-[#c2410c] font-medium">Exibidor #{usuario.exibidor_fk}</span>
+                            : usuario.empresa_pk
+                              ? agenciasSeguras.find(a => a.id_agencia === usuario.empresa_pk)?.nome_agencia || `Agência #${usuario.empresa_pk}`
+                              : <span className="text-[#9ca3af] italic">Be (interno)</span>
+                          }
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span
+                          className="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold"
+                          style={usuario.usuario_ativo
+                            ? { backgroundColor: '#dcfce7', color: '#15803d' }
+                            : { backgroundColor: '#f3f4f6', color: '#6b7280' }
+                          }
+                        >
+                          {usuario.usuario_ativo ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <AcessoBadge dh={usuario.ultimoAcesso_dh} />
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {usuario.usuario_ativo ? (
+                          <span className="inline-flex gap-3">
                             <button
-                              onClick={() => reativarUsuario(usuario.usuario_pk)}
-                              className="text-sm text-green-600 hover:text-green-800 font-medium"
+                              onClick={() => abrirModalEditar(usuario)}
+                              className="text-sm text-[#ff4600] hover:text-[#c2410c] font-medium"
                             >
-                              Reativar
+                              Editar
                             </button>
-                          )}
-                        </td>
-                      </tr>
+                            <button
+                              onClick={() => desativarUsuario(usuario.usuario_pk)}
+                              className="text-sm text-red-500 hover:text-red-700 font-medium"
+                            >
+                              Desativar
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => reativarUsuario(usuario.usuario_pk)}
+                            className="text-sm text-green-600 hover:text-green-800 font-medium"
+                          >
+                            Reativar
+                          </button>
+                        )}
+                      </td>
+                    </tr>
                     ))}
                   </tbody>
                 </table>
               )}
             </div>
-          </div>
         </div>
 
         {/* Footer */}

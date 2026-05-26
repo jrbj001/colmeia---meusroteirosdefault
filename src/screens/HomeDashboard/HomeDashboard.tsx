@@ -376,7 +376,7 @@ export const HomeDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-white flex font-sans">
       <Sidebar menuReduzido={menuReduzido} setMenuReduzido={setMenuReduzido} />
-      <div className={`fixed top-0 z-20 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? "left-20" : "left-64"}`} />
+      <div className={`fixed top-0 z-40 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? "left-20" : "left-64"}`} />
       <div
         className={`flex-1 transition-all duration-300 min-h-screen w-full ${menuReduzido ? "ml-20" : "ml-64"} flex flex-col`}
       >
@@ -840,6 +840,19 @@ export const HomeDashboard: React.FC = () => {
               </div>
             </div>
           )}
+        </div>
+
+        {/* Footer */}
+        <div
+          className={`fixed bottom-0 z-30 flex flex-col items-center pointer-events-none transition-all duration-300 ${
+            menuReduzido ? "left-20 w-[calc(100%-5rem)]" : "left-64 w-[calc(100%-16rem)]"
+          }`}
+        >
+          <div className="absolute left-0 top-0 h-full w-px bg-[#c1c1c1]" />
+          <footer className="w-full border-t border-[#c1c1c1] p-4 text-center text-[10px] italic text-[#b0b0b0] tracking-wide bg-white z-10 font-sans pointer-events-auto relative">
+            <div className="w-full h-[1px] bg-[#c1c1c1] absolute top-0 left-0" />
+            © 2025 Colmeia. All rights are reserved to Be Mediatech OOH.
+          </footer>
         </div>
       </div>
     </div>

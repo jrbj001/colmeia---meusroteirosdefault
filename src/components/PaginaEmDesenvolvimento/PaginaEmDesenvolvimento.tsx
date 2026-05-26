@@ -16,7 +16,7 @@ export const PaginaEmDesenvolvimento: React.FC<PaginaEmDesenvolvimentoProps> = (
   return (
     <div className="min-h-screen bg-white flex font-sans">
       <Sidebar menuReduzido={menuReduzido} setMenuReduzido={setMenuReduzido} />
-      <div className={`fixed top-0 z-20 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? "left-20" : "left-64"}`} />
+      <div className={`fixed top-0 z-40 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? "left-20" : "left-64"}`} />
       <div className={`flex-1 transition-all duration-300 min-h-screen w-full ${menuReduzido ? "ml-20" : "ml-64"} flex flex-col`}>
         <Topbar 
           menuReduzido={menuReduzido} 
