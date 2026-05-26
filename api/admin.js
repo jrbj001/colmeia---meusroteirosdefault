@@ -1,6 +1,7 @@
 const handlers = {
   'usuarios': require('../handlers/usuarios'),
   'usuarios-permissoes': require('../handlers/usuarios-permissoes'),
+  'usuarios-registrar-acesso': require('../handlers/usuarios-registrar-acesso'),
   'perfis': require('../handlers/perfis'),
   'perfis-permissoes': require('../handlers/perfis-permissoes'),
   'areas': require('../handlers/areas'),
