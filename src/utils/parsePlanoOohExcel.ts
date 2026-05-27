@@ -68,33 +68,53 @@ const normalizeHeader = (h: unknown): string => {
 /**
  * Definição dos campos fixos: quais cabeçalhos do Excel mapeiam para qual chave JSON.
  * `headers` é uma lista de aliases normalizados (o primeiro que bater vence).
- * `occurrence: 'last'` usa a ÚLTIMA coluna com aquele nome (ex: DESCRICAO aparece duas vezes).
+ * `occurrence: 'last'` usa a ÚLTIMA coluna não-usada com aquele nome.
+ * `occurrence: 'first'` usa a PRIMEIRA coluna não-usada com aquele nome.
+ * `requireMultiple: true` só atribui se houver MAIS DE UMA coluna com o mesmo header
+ *   (evita colidir com `occurrence: 'last'` para o mesmo header quando há só uma coluna).
  */
 const FIXED_FIELD_HEADERS: Array<{
   headers: string[];
   key: string;
   type: 'st' | 'vl' | 'dt';
   occurrence?: 'first' | 'last';
+  requireMultiple?: boolean;
 }> = [
   { headers: ['STATUS DO JOB'], key: 'statusJob_st', type: 'st' },
   { headers: ['JOB'], key: 'job_st', type: 'st' },
   { headers: ['CAMPANHA'], key: 'campanha_st', type: 'st' },
   { headers: ['PRODUTO'], key: 'produto_st', type: 'st' },
   { headers: ['TIPO DE NEGOCIACAO'], key: 'tipoNegociacao_st', type: 'st' },
-  /* Coluna F — Pacote: prioriza coluna explícita OUTRAS ESPECIFICAÇÕES; senão 1ª DESCRICAO */
-  { headers: ['OUTRAS ESPECIFICACOES DIGITAR', 'OUTRAS ESPECIFICACOES'], key: 'outrasEspecificacoesDigitar_st', type: 'st' },
+  /* Coluna F — Pacote (Outras Especificações). Aliases comuns nos planos OOH dos anunciantes. */
+  {
+    headers: [
+      'OUTRAS ESPECIFICACOES DIGITAR',
+      'OUTRAS ESPECIFICACOES',
+      'PACOTE',
+      'NOME DO PACOTE',
+      'DESCRICAO DA NEGOCIACAO',
+      'DESCRICAO NEGOCIACAO',
+      'DESCRICAO DO PACOTE',
+    ],
+    key: 'outrasEspecificacoesDigitar_st',
+    type: 'st',
+  },
+  /* Coluna F — Fallback: 1ª coluna "DESCRICAO" SÓ se houver DUAS (template empilhado oficial).
+     Se houver apenas uma "DESCRICAO" no arquivo, ela vai para a coluna M (descricao_st) abaixo. */
   {
     headers: ['DESCRICAO'],
     key: 'outrasEspecificacoesDigitar_st',
     type: 'st',
     occurrence: 'first',
+    requireMultiple: true,
   },
   { headers: ['UF'], key: 'uf_st', type: 'st' },
   { headers: ['PRACA'], key: 'praca_st', type: 'st' },
   { headers: ['EXIBIDOR'], key: 'exibidor_st', type: 'st' },
   { headers: ['AMBIENTE'], key: 'ambiente_st', type: 'st' },
   { headers: ['FORMATO'], key: 'formato_st', type: 'st' },
-  /* Coluna M — DESCRIÇÃO (2ª coluna DESCRICAO no modelo empilhado) */
+  /* Coluna M — DESCRIÇÃO (descrição do ponto/face). Quando há 2 colunas DESCRICAO, usa a última;
+     quando há só uma, usa essa mesma (a primeira regra acima foi pulada por requireMultiple). */
   { headers: ['DESCRICAO'], key: 'descricao_st', type: 'st', occurrence: 'last' },
   { headers: ['GRUPO'], key: 'grupo_st', type: 'st' },
   { headers: ['TIPO'], key: 'tipo_st', type: 'st' },
@@ -199,13 +219,20 @@ function buildColMapping(
     for (const headerAlias of fieldDef.headers) {
       const indices = hMapAll.get(headerAlias) ?? [];
       if (indices.length === 0) continue;
+      if (fieldDef.requireMultiple && indices.length < 2) continue;
+
       if (fieldDef.occurrence === 'last') {
-        colIdx = indices[indices.length - 1];
+        // Último índice ainda não usado por outra regra
+        const reverse = [...indices].reverse();
+        colIdx = reverse.find((i) => !usedIndices.has(i)) ?? -1;
+      } else if (fieldDef.occurrence === 'first') {
+        // Primeiro índice ainda não usado
+        colIdx = indices.find((i) => !usedIndices.has(i)) ?? -1;
       } else {
-        // Pegar a primeira ocorrência ainda não usada
+        // Sem qualificador: primeira ocorrência (com fallback para a primeira em caso de tudo usado)
         colIdx = indices.find((i) => !usedIndices.has(i)) ?? indices[0];
       }
-      break;
+      if (colIdx !== -1) break;
     }
     if (colIdx !== -1) {
       mapping[colIdx] = { key: fieldDef.key, type: fieldDef.type };
