@@ -380,7 +380,7 @@ export const ModalCadastroExibidor: React.FC<Props> = ({ mode, onClose, onSucces
                 <button
                   type="button"
                   onClick={adicionarDominio}
-                  className="h-[42px] px-4 bg-[#0a52e6] hover:bg-[#0843b8] text-white rounded-lg font-medium text-sm whitespace-nowrap"
+                  className="h-[42px] px-4 bg-[#111827] hover:bg-[#000] text-white rounded-lg font-medium text-sm whitespace-nowrap"
                 >
                   + Adicionar
                 </button>
@@ -403,7 +403,7 @@ export const ModalCadastroExibidor: React.FC<Props> = ({ mode, onClose, onSucces
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-sm">{d}</span>
                         {idx === 0 ? (
-                          <span className="px-1.5 py-0.5 rounded bg-[#0a52e6] text-white text-[10px] font-bold uppercase">
+                          <span className="px-1.5 py-0.5 rounded bg-[#111827] text-white text-[10px] font-bold uppercase">
                             primário
                           </span>
                         ) : null}
