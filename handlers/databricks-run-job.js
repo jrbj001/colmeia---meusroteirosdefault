@@ -18,20 +18,7 @@ async function databricksRunJob(req, res) {
             });
         }
 
-        const databricksUrl = process.env.DATABRICKS_URL;
-        const jobId = parseInt(process.env.DATABRICKS_JOB_ID);
-        const authToken = process.env.DATABRICKS_AUTH_TOKEN;
-
-        // Validar se as variáveis de ambiente estão configuradas
-        if (!databricksUrl || !jobId || !authToken) {
-            return res.status(500).json({
-                success: false,
-                error: 'Configurações do Databricks não encontradas',
-                message: 'Configure as variáveis de ambiente DATABRICKS_URL, DATABRICKS_JOB_ID e DATABRICKS_AUTH_TOKEN'
-            });
-        }
-
-        console.log(`✅ [databricksRunJob] Executando job do Databricks para grupo ${planoMidiaGrupo_pk}`);
+        const engine = (process.env.EXECUTION_ENGINE || 'logic_app').toLowerCase();
 
         // Converter date_dh para o formato solicitado
         const dateDh = new Date(date_dh);
@@ -40,25 +27,83 @@ async function databricksRunJob(req, res) {
 
         console.log(`📅 [databricksRunJob] Parâmetros formatados - date_dh: ${formattedDateDh}, date_dt: ${formattedDateDt}`);
 
-        const jobPayload = {
-            job_id: jobId,
-            notebook_params: {
-                planoMidiaGrupo_pk: planoMidiaGrupo_pk.toString(),
-                date_dh: formattedDateDh,
-                date_dt: formattedDateDt
-            }
-        };
-
         try {
-            const response = await axios.post(databricksUrl, jobPayload, {
-                headers: {
-                    'Authorization': `Bearer ${authToken}`,
-                    'Content-Type': 'application/json'
-                },
-                timeout: 30000 // 30 segundos timeout
-            });
+            let runId;
+            let statusOk;
+            let downstreamStatus;
+            let rawResponse;
 
-            console.log(`✅ [databricksRunJob] Job iniciado para grupo ${planoMidiaGrupo_pk} - Run ID: ${response.data.run_id}`);
+            if (engine === 'logic_app') {
+                const logicAppUrl = process.env.LOGIC_APP_URL_COMPLETO;
+                if (!logicAppUrl) {
+                    return res.status(500).json({
+                        success: false,
+                        message: 'LOGIC_APP_URL_COMPLETO não configurado'
+                    });
+                }
+
+                const payload = {
+                    planoMidiaGrupo_pk: planoMidiaGrupo_pk.toString(),
+                    date_dh: formattedDateDh,
+                    date_dt: formattedDateDt
+                };
+
+                console.log(`🚀 [databricksRunJob] Executando Logic App (Completo) para grupo ${planoMidiaGrupo_pk}`);
+
+                const response = await axios.post(logicAppUrl, payload, {
+                    headers: { 'Content-Type': 'application/json' },
+                    timeout: 60000,
+                    validateStatus: s => s === 200 || s === 202
+                });
+
+                downstreamStatus = response.status;
+                runId = response.headers['x-ms-workflow-run-id'] || 'unknown';
+                statusOk = (response.status === 200 || response.status === 202);
+                rawResponse = response.data;
+            } else {
+                // legacy databricks (manter pra rollback rápido — remover após sign-off)
+                const databricksUrl = process.env.DATABRICKS_URL;
+                const jobId = parseInt(process.env.DATABRICKS_JOB_ID);
+                const authToken = process.env.DATABRICKS_AUTH_TOKEN;
+
+                if (!databricksUrl || !jobId || !authToken) {
+                    return res.status(500).json({
+                        success: false,
+                        error: 'Configurações do Databricks não encontradas',
+                        message: 'Configure as variáveis de ambiente DATABRICKS_URL, DATABRICKS_JOB_ID e DATABRICKS_AUTH_TOKEN'
+                    });
+                }
+
+                const jobPayload = {
+                    job_id: jobId,
+                    notebook_params: {
+                        planoMidiaGrupo_pk: planoMidiaGrupo_pk.toString(),
+                        date_dh: formattedDateDh,
+                        date_dt: formattedDateDt
+                    }
+                };
+
+                console.log(`🚀 [databricksRunJob] Executando Databricks Job (Completo) para grupo ${planoMidiaGrupo_pk}`);
+
+                const response = await axios.post(databricksUrl, jobPayload, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 30000 // 30 segundos timeout
+                });
+
+                downstreamStatus = response.status;
+                runId = response.data?.run_id;
+                statusOk = (response.status === 200);
+                rawResponse = response.data;
+            }
+
+            if (!statusOk) {
+                throw new Error(`Engine ${engine} retornou status ${downstreamStatus}`);
+            }
+
+            console.log(`✅ [databricksRunJob] Job (${engine}) iniciado para grupo ${planoMidiaGrupo_pk} - Run ID: ${runId}`);
 
             // Retornar resultado de sucesso
             res.json({
@@ -71,14 +116,15 @@ async function databricksRunJob(req, res) {
                 result: {
                     planoMidiaGrupo_pk: planoMidiaGrupo_pk,
                     success: true,
-                    run_id: response.data.run_id,
-                    databricks_response: response.data
+                    run_id: runId,
+                    engine,
+                    databricks_response: rawResponse
                 },
-                message: `Job do Databricks executado com sucesso para grupo ${planoMidiaGrupo_pk}`
+                message: `Processamento (${engine}) executado com sucesso para grupo ${planoMidiaGrupo_pk}`
             });
 
         } catch (error) {
-            console.error(`❌ [databricksRunJob] Erro no job para grupo ${planoMidiaGrupo_pk}:`, error.message);
+            console.error(`❌ [databricksRunJob] Erro no job (${engine}) para grupo ${planoMidiaGrupo_pk}:`, error.message);
             
             res.json({
                 success: false,
@@ -93,7 +139,7 @@ async function databricksRunJob(req, res) {
                     error: error.message,
                     response: error.response?.data || null
                 },
-                message: `Erro ao executar job do Databricks para grupo ${planoMidiaGrupo_pk}`
+                message: `Erro ao executar processamento (${engine}) para grupo ${planoMidiaGrupo_pk}`
             });
         }
 

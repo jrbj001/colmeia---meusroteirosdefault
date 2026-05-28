@@ -39,88 +39,109 @@ async function databricksRoteiroSimulado(req, res) {
       });
     }
 
-    // Configurações do Databricks
-    const databricksUrl = process.env.DATABRICKS_URL;
-    const databricksJobId = process.env.DATABRICKS_JOB_ID_ROTEIRO_SIMULADO;
-    const authToken = process.env.DATABRICKS_AUTH_TOKEN;
+    // Seleção do motor de execução (rollback fácil via env, sem deploy)
+    const engine = (process.env.EXECUTION_ENGINE || 'logic_app').toLowerCase();
 
-    if (!databricksUrl || !authToken) {
-      console.error('❌ [databricksRoteiroSimulado] DATABRICKS_URL ou DATABRICKS_AUTH_TOKEN não encontrado no .env');
-      return res.status(500).json({
-        success: false,
-        message: 'Configuração do Databricks não encontrada'
-      });
-    }
+    let runId;
+    let statusOk;
+    let downstreamStatus;
 
-    if (!databricksJobId) {
-      console.error('❌ [databricksRoteiroSimulado] DATABRICKS_JOB_ID_ROTEIRO_SIMULADO não encontrado no .env');
-      return res.status(500).json({
-        success: false,
-        message: 'Job ID do roteiro simulado não configurado'
-      });
-    }
-
-    // Corpo da requisição específico para roteiro simulado
-    const requestBody = {
-      job_id: parseInt(databricksJobId),
-      notebook_params: {
-        planoMidiaGrupo_pk: planoMidiaGrupo_pk.toString(),
-        date_dh: date_dh,
-        date_dt: date_dt
+    if (engine === 'logic_app') {
+      const logicAppUrl = process.env.LOGIC_APP_URL_SIMULADO;
+      if (!logicAppUrl) {
+        console.error('❌ [databricksRoteiroSimulado] LOGIC_APP_URL_SIMULADO não encontrado no .env');
+        return res.status(500).json({
+          success: false,
+          message: 'LOGIC_APP_URL_SIMULADO não configurado'
+        });
       }
-    };
 
-    console.log('\n');
-    console.log('═══════════════════════════════════════════════════════════════');
-    console.log('🚀 EXECUTANDO: Databricks Job');
-    console.log('═══════════════════════════════════════════════════════════════');
-    console.log('📊 URL:', databricksUrl);
-    console.log('───────────────────────────────────────────────────────────────');
-    console.log('📊 Job ID:', databricksJobId);
-    console.log('📊 Tipo:', typeof databricksJobId);
-    console.log('───────────────────────────────────────────────────────────────');
-    console.log('📊 REQUEST BODY COMPLETO (que será enviado ao Databricks):');
-    console.log(JSON.stringify(requestBody, null, 2));
-    console.log('───────────────────────────────────────────────────────────────');
-    console.log('📊 notebook_params.planoMidiaGrupo_pk:', requestBody.notebook_params.planoMidiaGrupo_pk);
-    console.log('📊 Tipo:', typeof requestBody.notebook_params.planoMidiaGrupo_pk);
-    console.log('───────────────────────────────────────────────────────────────');
-    console.log('📊 notebook_params.date_dh:', requestBody.notebook_params.date_dh);
-    console.log('📊 Tipo:', typeof requestBody.notebook_params.date_dh);
-    console.log('───────────────────────────────────────────────────────────────');
-    console.log('📊 notebook_params.date_dt:', requestBody.notebook_params.date_dt);
-    console.log('📊 Tipo:', typeof requestBody.notebook_params.date_dt);
-    console.log('═══════════════════════════════════════════════════════════════');
+      const payload = {
+        planoMidiaGrupo_pk: planoMidiaGrupo_pk.toString(),
+        date_dh,
+        date_dt
+      };
 
-    // Executar job no Databricks
-    const databricksResponse = await axios.post(databricksUrl, requestBody, {
-      headers: {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json'
-      },
-      timeout: 30000 // 30 segundos timeout
-    });
+      console.log('\n');
+      console.log('═══════════════════════════════════════════════════════════════');
+      console.log('🚀 EXECUTANDO: Logic App (Simulado)');
+      console.log('═══════════════════════════════════════════════════════════════');
+      console.log('📊 URL:', logicAppUrl.slice(0, 80) + '…');
+      console.log('📦 PAYLOAD:', JSON.stringify(payload));
+      console.log('═══════════════════════════════════════════════════════════════');
 
-    if (databricksResponse.status === 200) {
-      const runId = databricksResponse.data.run_id;
-      
-      console.log('✅ [databricksRoteiroSimulado] Job executado com sucesso!');
-      console.log(`📋 Run ID: ${runId}`);
-      
-      res.json({
-        success: true,
-        message: 'Processamento Databricks iniciado com sucesso para roteiro simulado',
-        data: {
-          run_id: runId,
-          job_id: databricksJobId,
-          planoMidiaGrupo_pk: planoMidiaGrupo_pk, // PK do grupo processado
-          parameters: requestBody.notebook_params,
-          status: 'RUNNING'
-        }
+      const logicAppResponse = await axios.post(logicAppUrl, payload, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 60000,
+        validateStatus: s => s === 200 || s === 202 // Logic App responde 202 (assíncrono)
       });
+
+      downstreamStatus = logicAppResponse.status;
+      runId = logicAppResponse.headers['x-ms-workflow-run-id'] || 'unknown';
+      statusOk = (logicAppResponse.status === 200 || logicAppResponse.status === 202);
     } else {
-      throw new Error(`Databricks retornou status ${databricksResponse.status}`);
+      // legacy databricks (manter pra rollback rápido — remover após sign-off)
+      const databricksUrl = process.env.DATABRICKS_URL;
+      const databricksJobId = process.env.DATABRICKS_JOB_ID_ROTEIRO_SIMULADO;
+      const authToken = process.env.DATABRICKS_AUTH_TOKEN;
+
+      if (!databricksUrl || !authToken || !databricksJobId) {
+        console.error('❌ [databricksRoteiroSimulado] Configuração do Databricks ausente no .env');
+        return res.status(500).json({
+          success: false,
+          message: 'Configuração do Databricks não encontrada'
+        });
+      }
+
+      const requestBody = {
+        job_id: parseInt(databricksJobId),
+        notebook_params: {
+          planoMidiaGrupo_pk: planoMidiaGrupo_pk.toString(),
+          date_dh,
+          date_dt
+        }
+      };
+
+      console.log('\n');
+      console.log('═══════════════════════════════════════════════════════════════');
+      console.log('🚀 EXECUTANDO: Databricks Job (Simulado)');
+      console.log('═══════════════════════════════════════════════════════════════');
+      console.log('📊 URL:', databricksUrl);
+      console.log('📊 Job ID:', databricksJobId);
+      console.log('📊 REQUEST BODY:', JSON.stringify(requestBody, null, 2));
+      console.log('═══════════════════════════════════════════════════════════════');
+
+      const databricksResponse = await axios.post(databricksUrl, requestBody, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000 // 30 segundos timeout
+      });
+
+      downstreamStatus = databricksResponse.status;
+      runId = databricksResponse.data?.run_id;
+      statusOk = (databricksResponse.status === 200);
     }
+
+    if (!statusOk) {
+      throw new Error(`Engine ${engine} retornou status ${downstreamStatus}`);
+    }
+
+    console.log(`✅ [databricksRoteiroSimulado] Processamento (${engine}) iniciado!`);
+    console.log(`📋 Run ID: ${runId}`);
+
+    res.json({
+      success: true,
+      message: `Processamento (${engine}) iniciado com sucesso para roteiro simulado`,
+      data: {
+        run_id: runId,
+        engine,
+        planoMidiaGrupo_pk: planoMidiaGrupo_pk, // PK do grupo processado
+        parameters: { planoMidiaGrupo_pk, date_dh, date_dt },
+        status: 'RUNNING'
+      }
+    });
 
   } catch (error) {
     console.error('❌ [databricksRoteiroSimulado] Erro:', error);
