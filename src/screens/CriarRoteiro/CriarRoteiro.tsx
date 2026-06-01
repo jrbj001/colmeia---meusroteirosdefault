@@ -696,8 +696,18 @@ export const CriarRoteiro: React.FC = () => {
         throw new Error(databricksResponse?.data?.message || 'Falha ao iniciar o processamento Databricks.');
       }
 
+      // Marcar roteiro simulado como salvo e habilitar/navegar para a Aba 6
+      // (mesmo padrão do fluxo manual salvarRoteiroSimulado)
+      setRoteiroSimuladoSalvo(true);
+      setAba4Preenchida(true);
       setAba6Habilitada(true);
       setAbaAtiva(6);
+
+      // O processamento agora roda via Logic App de forma assíncrona (HTTP 202).
+      // Ativar o polling explicitamente para aguardar a conclusão e então
+      // carregar os resultados — sem isso a Aba 6 abre vazia e não atualiza.
+      console.log('⏳ Importação disparada. Ativando polling para aguardar processamento...');
+      setAguardandoProcessamento(true);
 
       const summary = fromImportResponse.data?.summary || {};
       const runId = databricksResponse.data?.data?.run_id;
@@ -707,7 +717,7 @@ export const CriarRoteiro: React.FC = () => {
       if (planoMidiaImportFile_pk) mensagem += `• Arquivo importado: #${planoMidiaImportFile_pk}\n`;
       mensagem += `• Cidades processadas: ${summary.totalCidades ?? linhas.length}\n`;
       mensagem += `• Registros planoMidia: ${summary.totalPlanoMidia ?? 0}\n`;
-      mensagem += `• Databricks run_id: ${runId || 'N/A'}\n`;
+      mensagem += `• run_id: ${runId || 'N/A'}\n`;
 
       if (cidadesSemIbge.length > 0) {
         mensagem += `\n⚠️ ${cidadesSemIbge.length} cidade(s) sem ibgeCode no retorno da SP.`;
