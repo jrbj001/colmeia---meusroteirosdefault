@@ -312,11 +312,15 @@ export async function parsePlanoOohExcel(file: File): Promise<ParsePlanoOohResul
       }
     }
 
-    // Soma apenas uma vez por linha (valorLiquido ou totalFinal)
-    const v = record.valorLiquido_vl ?? record.totalFinal_vl;
-    if (typeof v === 'number') valorTotalSuggestion += v;
+    const willInsert = rowPassesSPFilter(record);
 
-    rows.push({ ...record, _index: rowIdx + 1, _willInsert: rowPassesSPFilter(record) });
+    // Soma apenas linhas de praça individuais (exclui subtotais e totais gerais)
+    if (willInsert) {
+      const v = record.valorLiquido_vl ?? record.totalFinal_vl;
+      if (typeof v === 'number') valorTotalSuggestion += v;
+    }
+
+    rows.push({ ...record, _index: rowIdx + 1, _willInsert: willInsert });
   }
 
   if (rows.length === 0) throw new Error('Nenhuma linha de dados encontrada na aba OOH.');
