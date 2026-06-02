@@ -12,6 +12,7 @@ import { Modal } from "../../components/Modal/Modal";
 import { ModalAdicionarMarca } from "../../components/ModalAdicionarMarca/ModalAdicionarMarca";
 import { ImportarPlanoMidia } from "../../components/ImportarPlanoMidia";
 import { ImportarPlanoAba1 } from "../../components/ImportarPlanoAba1";
+import { ConfigurarIndoor } from "../../components/ConfigurarIndoor";
 import type { ParsedPlanoRow } from "../../utils/parsePlanoOohExcel";
 
 interface Agencia {
@@ -90,6 +91,7 @@ export const CriarRoteiro: React.FC = () => {
   const [aba2Preenchida, setAba2Preenchida] = useState(false);
   const [aba3Preenchida, setAba3Preenchida] = useState(false);
   const [aba4Preenchida, setAba4Preenchida] = useState(false);
+  const [aba5Preenchida, setAba5Preenchida] = useState(false);
   
   // Estados para aba 6 - Resultados
   const [dadosResultados, setDadosResultados] = useState<any[]>([]);
@@ -2815,11 +2817,14 @@ export const CriarRoteiro: React.FC = () => {
         }
         break;
       case 5:
-        // Aba 5 sempre pode ser acessada (em desenvolvimento)
-        setAbaAtiva(5);
+        if (aba4Preenchida) {
+          setAbaAtiva(5);
+        } else {
+          mostrarModal('Complete as vias públicas (Aba 4) antes de configurar a mídia indoor.', 'info', 'Etapa 4 pendente');
+        }
         break;
       case 6:
-        if (aba4Preenchida) {
+        if (aba4Preenchida || aba5Preenchida) {
           setAbaAtiva(6);
         } else {
           mostrarModal('Faça o upload dos roteiros antes de ver os resultados.', 'info', 'Etapa 4 pendente');
@@ -2956,12 +2961,17 @@ export const CriarRoteiro: React.FC = () => {
                 </div>
                 
                 <div 
-                  className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
+                  className={`flex items-center px-4 py-2 mr-8 relative ${
+                    !aba4Preenchida
+                      ? 'cursor-not-allowed opacity-40'
+                      : 'cursor-pointer'
+                  } ${
                     abaAtiva === 5 
                       ? 'bg-white border-2 border-blue-500 rounded-lg' 
-                      : 'hover:bg-gray-50 rounded-lg'
+                      : aba4Preenchida ? 'hover:bg-gray-50 rounded-lg' : ''
                   }`}
                   onClick={() => navegarParaAba(5)}
+                  title={!aba4Preenchida ? 'Complete as vias públicas antes de configurar indoor' : ''}
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 5 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>05</span>
                   <span className={`font-medium ${abaAtiva === 5 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Definir indoor</span>
@@ -4588,54 +4598,35 @@ export const CriarRoteiro: React.FC = () => {
               {/* Aba 5 - Definir indoor */}
               {abaAtiva === 5 && (
                 <>
-                  <div className="mb-8">
+                  <div className="mb-6">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
                       Definir indoor
                     </h3>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Etapa opcional. Configure os ambientes indoor do seu roteiro. Você pode finalizar aqui ou voltar para a Aba 4.
+                    </p>
                   </div>
 
-                  {/* Mensagem de funcionalidade em desenvolvimento */}
-                  <div className="flex items-center justify-center py-20">
-                    <div className="max-w-2xl w-full bg-gradient-to-br from-orange-50 to-amber-50 border-2 border-[#ff4600] rounded-2xl p-12 text-center shadow-lg">
-                      <div className="mb-6">
-                        <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-[#ff4600] to-[#e03700] rounded-full shadow-lg mb-4">
-                          <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                          </svg>
-                        </div>
-                        <h4 className="text-2xl font-bold text-gray-900 mb-3 uppercase tracking-wide">
-                          Funcionalidade em Desenvolvimento
-                        </h4>
-                        <p className="text-lg text-gray-700 mb-6 leading-relaxed">
-                          A funcionalidade de <span className="font-bold text-[#ff4600]">configuração de mídia indoor</span> está sendo desenvolvida 
-                          e estará disponível em breve.
-                        </p>
-                        <div className="bg-white rounded-lg p-4 border border-gray-200 inline-block">
-                          <p className="text-sm text-gray-600 mb-2 font-medium">
-                            Esta aba permitirá:
-                          </p>
-                          <ul className="text-sm text-gray-700 text-left space-y-2">
-                            <li className="flex items-center gap-2">
-                              <span className="text-[#ff4600]">▸</span>
-                              Configurar pontos de mídia indoor
-                            </li>
-                            <li className="flex items-center gap-2">
-                              <span className="text-[#ff4600]">▸</span>
-                              Definir estratégias para shoppings e estabelecimentos
-                            </li>
-                            <li className="flex items-center gap-2">
-                              <span className="text-[#ff4600]">▸</span>
-                              Upload e gerenciamento de planos indoor
-                            </li>
-                          </ul>
-                        </div>
-                      </div>
-                      <div className="pt-6 border-t border-gray-300">
-                        <p className="text-sm text-gray-600 font-medium">
-                          Continue seu roteiro configurando as <span className="font-bold">vias públicas na Aba 4</span>
-                        </p>
-                      </div>
-                    </div>
+                  <ConfigurarIndoor
+                    planoMidiaGrupo_pk={planoMidiaGrupo_pk}
+                    cidadesSalvas={cidadesSalvas}
+                    quantidadeSemanas={quantidadeSemanas}
+                    onFinalizar={() => {
+                      setAba5Preenchida(true);
+                      setAba6Habilitada(true);
+                      setAbaAtiva(6);
+                    }}
+                  />
+
+                  {/* Botão voltar para Aba 4 */}
+                  <div className="mt-6 pt-4 border-t border-gray-200">
+                    <button
+                      type="button"
+                      onClick={() => setAbaAtiva(4)}
+                      className="text-sm text-gray-500 hover:text-[#ff4600] underline"
+                    >
+                      ← Voltar para Vias Públicas
+                    </button>
                   </div>
                 </>
               )}
