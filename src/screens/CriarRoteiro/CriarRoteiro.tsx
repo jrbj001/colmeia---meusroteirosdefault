@@ -2817,10 +2817,10 @@ export const CriarRoteiro: React.FC = () => {
         }
         break;
       case 5:
-        if (aba4Preenchida) {
+        if (aba3Preenchida) {
           setAbaAtiva(5);
         } else {
-          mostrarModal('Complete as vias públicas (Aba 4) antes de configurar a mídia indoor.', 'info', 'Etapa 4 pendente');
+          mostrarModal('Configure as praças (Aba 3) antes de configurar a mídia indoor.', 'info', 'Etapa 3 pendente');
         }
         break;
       case 6:
@@ -2962,23 +2962,23 @@ export const CriarRoteiro: React.FC = () => {
                 
                 <div 
                   className={`flex items-center px-4 py-2 mr-8 relative ${
-                    !aba4Preenchida
+                    !aba3Preenchida
                       ? 'cursor-not-allowed opacity-40'
                       : 'cursor-pointer'
                   } ${
                     abaAtiva === 5 
                       ? 'bg-white border-2 border-blue-500 rounded-lg' 
-                      : aba4Preenchida ? 'hover:bg-gray-50 rounded-lg' : ''
+                      : aba3Preenchida ? 'hover:bg-gray-50 rounded-lg' : ''
                   }`}
                   onClick={() => navegarParaAba(5)}
-                  title={!aba4Preenchida ? 'Complete as vias públicas antes de configurar indoor' : ''}
+                  title={!aba3Preenchida ? 'Configure as praças (Aba 3) antes de configurar indoor' : ''}
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 5 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>05</span>
                   <span className={`font-medium ${abaAtiva === 5 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Definir indoor</span>
                   {abaAtiva === 5 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>}
                 </div>
                 
-                {(aba6Habilitada || modoVisualizacao) && (
+                {(aba6Habilitada || aba5Preenchida || modoVisualizacao) && (
                   <div 
                     className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
                       abaAtiva === 6 
@@ -4632,7 +4632,7 @@ export const CriarRoteiro: React.FC = () => {
               )}
 
               {/* Aba 6 - Resultados */}
-              {abaAtiva === 6 && (aba6Habilitada || modoVisualizacao) && (
+              {abaAtiva === 6 && (aba6Habilitada || aba5Preenchida || modoVisualizacao) && (
                 <>
                   <div className="mb-8">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
