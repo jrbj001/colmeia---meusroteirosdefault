@@ -18,6 +18,21 @@ module.exports = async (req, res) => {
     console.log(`💾 [indoor-salvar] planoMidiaGrupo_pk=${planoMidiaGrupo_pk} praça="${praca}" ${linhas.length} linha(s)`);
 
     const pool = await getPool();
+
+    // Verifica se as tabelas já existem no banco antes de tentar escrever
+    const tablesCheck = await pool.request().query(`
+      SELECT COUNT(*) AS cnt
+      FROM INFORMATION_SCHEMA.TABLES
+      WHERE TABLE_SCHEMA = 'serv_product_be180'
+        AND TABLE_NAME IN ('planoIndoorLinha_ft', 'planoIndoorLocalidadeSemana_ft')
+    `);
+    if (tablesCheck.recordset[0].cnt < 2) {
+      return res.status(503).json({
+        success: false,
+        message: 'As tabelas de Indoor ainda não estão disponíveis no banco. Aguarde a criação das estruturas.',
+      });
+    }
+
     const t = pool.transaction();
     await t.begin();
 
