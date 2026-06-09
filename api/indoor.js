@@ -1,6 +1,7 @@
 const handlers = {
-  'dims':   require('../handlers/indoor-dims'),
-  'salvar': require('../handlers/indoor-salvar'),
+  'dims':      require('../handlers/indoor-dims'),
+  'salvar':    require('../handlers/indoor-salvar'),
+  'processar': require('../handlers/indoor-processar'),
 };
 
 module.exports = async (req, res) => {

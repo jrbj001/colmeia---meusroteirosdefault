@@ -15,120 +15,76 @@ module.exports = async (req, res) => {
 
     const numSemanas = Math.max(1, Math.min(12, Number(semanas) || 12));
 
-    console.log(`💾 [indoor-salvar] planoMidiaGrupo_pk=${planoMidiaGrupo_pk} praça="${praca}" ${linhas.length} linha(s)`);
+    const linhasValidas = linhas.filter((l) => l.ambiente && l.ambiente.trim());
+    if (linhasValidas.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nenhum ambiente válido encontrado nas linhas enviadas.',
+      });
+    }
+
+    console.log(
+      `💾 [indoor-salvar] planoMidiaGrupo_pk=${planoMidiaGrupo_pk} praça="${praca}" ${linhasValidas.length} linha(s) semanas=${numSemanas}`
+    );
 
     const pool = await getPool();
 
-    // Verifica se as tabelas já existem no banco antes de tentar escrever
-    const tablesCheck = await pool.request().query(`
+    // Verifica se a SP já foi criada no banco
+    const spCheck = await pool.request().query(`
       SELECT COUNT(*) AS cnt
-      FROM INFORMATION_SCHEMA.TABLES
-      WHERE TABLE_SCHEMA = 'serv_product_be180'
-        AND TABLE_NAME IN ('planoIndoorLinha_ft', 'planoIndoorLocalidadeSemana_ft')
+      FROM sys.objects
+      WHERE object_id = OBJECT_ID(N'[${S}].[sp_planoMidiaIndoorInsert]')
+        AND type = 'P'
     `);
-    if (tablesCheck.recordset[0].cnt < 2) {
+    if (spCheck.recordset[0].cnt === 0) {
       return res.status(503).json({
         success: false,
-        message: 'As tabelas de Indoor ainda não estão disponíveis no banco. Aguarde a criação das estruturas.',
+        message:
+          'A SP sp_planoMidiaIndoorInsert ainda não foi criada no banco. Execute ongoing/15_SP_planoMidiaIndoorInsert.sql primeiro.',
       });
     }
 
-    const t = pool.transaction();
-    await t.begin();
+    // Monta o JSON de linhas no formato esperado pela SP
+    const records = linhasValidas.map((l) => ({
+      praca_st:            praca,
+      ambiente_st:         l.ambiente.trim(),
+      indoorEspecifico_st: l.shopping ? l.shopping.trim() : '',
+      tamanhoFormato_st:   l.tamanho  ? l.tamanho.trim()  : '',
+      circulacao_st:       l.circulacao ? l.circulacao.trim() : '',
+      tipo_st:             l.tipo || 'Estático',
+      passantesManual_vl:  l.passantes != null && l.passantes !== '' ? Number(l.passantes) : null,
+      insercoesPorSlot_vl: l.insercoesPorSlot != null && l.insercoesPorSlot !== '' ? Number(l.insercoesPorSlot) : null,
+      slots_vl:            l.slots != null && l.slots !== '' ? Number(l.slots) : null,
+      localidades:         Array.isArray(l.localidades)
+        ? l.localidades.map((v) => Number(v) || 0)
+        : Array(12).fill(0),
+    }));
 
-    try {
-      // Apagar linhas anteriores desta praça + plano (permite re-salvar)
-      const linhasAnteriores = await t.request()
-        .input('pk', sql.Int, planoMidiaGrupo_pk)
-        .input('praca', sql.NVarChar, praca)
-        .query(
-          `SELECT pk FROM ${S}.planoIndoorLinha_ft WHERE planoMidiaGrupo_pk = @pk AND praca_st = @praca`
-        );
+    const result = await pool
+      .request()
+      .input('recordsJson',        sql.NVarChar(sql.MAX), JSON.stringify(records))
+      .input('planoMidiaGrupo_pk', sql.Int,               planoMidiaGrupo_pk)
+      .input('report_pk',          sql.Int,               planoMidiaGrupo_pk)
+      .input('semanas',            sql.Int,               numSemanas)
+      .execute(`[${S}].[sp_planoMidiaIndoorInsert]`);
 
-      const pksAnteriores = linhasAnteriores.recordset.map((r) => r.pk);
+    const row = result.recordset?.[0];
 
-      if (pksAnteriores.length > 0) {
-        await t.request()
-          .input('pk', sql.Int, planoMidiaGrupo_pk)
-          .input('praca', sql.NVarChar, praca)
-          .query(
-            `DELETE w FROM ${S}.planoIndoorLocalidadeSemana_ft w
-             JOIN ${S}.planoIndoorLinha_ft l ON w.linha_pk = l.pk
-             WHERE l.planoMidiaGrupo_pk = @pk AND l.praca_st = @praca`
-          );
-
-        await t.request()
-          .input('pk', sql.Int, planoMidiaGrupo_pk)
-          .input('praca', sql.NVarChar, praca)
-          .query(
-            `DELETE FROM ${S}.planoIndoorLinha_ft WHERE planoMidiaGrupo_pk = @pk AND praca_st = @praca`
-          );
-
-        console.log(`🗑️ [indoor-salvar] ${pksAnteriores.length} linha(s) anterior(es) removida(s)`);
-      }
-
-      // Inserir novas linhas
-      let totalLinhasInseridas = 0;
-      for (const l of linhas) {
-        if (!l.ambiente || !l.ambiente.trim()) continue;
-
-        const insertResult = await t.request()
-          .input('planoMidiaGrupo_pk', sql.Int, planoMidiaGrupo_pk)
-          .input('report_pk', sql.Int, planoMidiaGrupo_pk)
-          .input('praca_st', sql.NVarChar, praca)
-          .input('ambiente_st', sql.NVarChar, l.ambiente.trim())
-          .input('shopping_st', sql.NVarChar, l.shopping || null)
-          .input('tamanhoFormato_st', sql.NVarChar, l.tamanho || null)
-          .input('circulacao_st', sql.NVarChar, l.circulacao || null)
-          .input('tipo_st', sql.NVarChar, l.tipo || 'Estático')
-          .input('passantesManual_vl', sql.Decimal(18, 2), l.passantes != null ? Number(l.passantes) : null)
-          .input('insercoesPorSlot_vl', sql.Decimal(18, 2), l.insercoesPorSlot != null ? Number(l.insercoesPorSlot) : null)
-          .input('slots_vl', sql.Decimal(18, 2), l.slots != null ? Number(l.slots) : null)
-          .query(
-            `INSERT INTO ${S}.planoIndoorLinha_ft
-               (planoMidiaGrupo_pk, report_pk, praca_st, ambiente_st, shopping_st,
-                tamanhoFormato_st, circulacao_st, tipo_st, passantesManual_vl,
-                insercoesPorSlot_vl, slots_vl)
-             OUTPUT INSERTED.pk
-             VALUES
-               (@planoMidiaGrupo_pk, @report_pk, @praca_st, @ambiente_st, @shopping_st,
-                @tamanhoFormato_st, @circulacao_st, @tipo_st, @passantesManual_vl,
-                @insercoesPorSlot_vl, @slots_vl)`
-          );
-
-        const linhaPk = insertResult.recordset[0].pk;
-        totalLinhasInseridas++;
-
-        // Inserir localidades por semana (W1..W12)
-        const locs = Array.isArray(l.localidades) ? l.localidades : [];
-        for (let w = 1; w <= 12; w++) {
-          const val = w <= numSemanas ? (Number(locs[w - 1]) || 0) : 0;
-          await t.request()
-            .input('linha_pk', sql.Int, linhaPk)
-            .input('semana_vl', sql.Int, w)
-            .input('localidades_vl', sql.Int, val)
-            .query(
-              `INSERT INTO ${S}.planoIndoorLocalidadeSemana_ft (linha_pk, semana_vl, localidades_vl)
-               VALUES (@linha_pk, @semana_vl, @localidades_vl)`
-            );
-        }
-
-        console.log(`  ✅ Linha ${totalLinhasInseridas}: ${l.ambiente} pk=${linhaPk}`);
-      }
-
-      await t.commit();
-
-      console.log(`✅ [indoor-salvar] ${totalLinhasInseridas} linha(s) salva(s) com sucesso`);
-
-      res.json({
-        success: true,
-        message: `${totalLinhasInseridas} ambiente(s) indoor salvo(s) para "${praca}"`,
-        linhasInseridas: totalLinhasInseridas,
-      });
-    } catch (innerError) {
-      await t.rollback();
-      throw innerError;
+    if (!row || row.status_st !== 'SUCCESS') {
+      throw new Error('SP retornou status inesperado: ' + JSON.stringify(row));
     }
+
+    console.log(
+      `✅ [indoor-salvar] SP OK — ${row.insertedCount_vl} ambiente(s) salvos para "${praca}"`
+    );
+
+    res.json({
+      success: true,
+      message: `${row.insertedCount_vl} ambiente(s) indoor salvo(s) para "${praca}"`,
+      linhasInseridas: row.insertedCount_vl,
+      report_pk:       row.report_pk,
+      date_dh:         row.date_dh,
+    });
   } catch (error) {
     console.error('❌ [indoor-salvar] Erro:', error);
     res.status(500).json({

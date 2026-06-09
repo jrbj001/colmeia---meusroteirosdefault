@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import { AppleSaveLoader } from '../AppleSaveLoader/AppleSaveLoader';
 import AmbienteRowIndoor, {
   IndoorDims,
   IndoorLinha,
@@ -16,7 +17,7 @@ interface Props {
   planoMidiaGrupo_pk: number | null;
   cidadesSalvas: Cidade[];
   quantidadeSemanas: number;
-  onFinalizar: () => void;
+  onVoltarAba4: () => void;
 }
 
 interface PracaSalva {
@@ -24,11 +25,20 @@ interface PracaSalva {
   linhasCount: number;
 }
 
+type StepStatus = 'pending' | 'processing' | 'completed' | 'error';
+interface Step { id: string; label: string; status: StepStatus; detail?: string }
+
+const mkSteps = (praca: string, count: number): Step[] => [
+  { id: 'validar', label: 'Validando configuração',      status: 'pending', detail: `${count} ambiente(s) · ${praca}` },
+  { id: 'gravar',  label: 'Gravando no banco de dados',  status: 'pending', detail: 'planoMidiaIndoor_ft' },
+  { id: 'ok',      label: 'Configuração salva',          status: 'pending', detail: '' },
+];
+
 export default function ConfigurarIndoor({
   planoMidiaGrupo_pk,
   cidadesSalvas,
   quantidadeSemanas,
-  onFinalizar,
+  onVoltarAba4,
 }: Props) {
   const [dims, setDims] = useState<IndoorDims | null>(null);
   const [loadingDims, setLoadingDims] = useState(true);
@@ -37,14 +47,25 @@ export default function ConfigurarIndoor({
   const semanas = Math.max(1, Math.min(12, quantidadeSemanas));
   const pracasDisponiveis = cidadesSalvas.map((c) => c.nome_cidade);
 
-  const [pracaSelecionada, setPracaSelecionada] = useState<string>(
-    pracasDisponiveis[0] ?? ''
-  );
-  const [linhas, setLinhas] = useState<IndoorLinha[]>([emptyIndoorLinha()]);
+  const [pracaSelecionada, setPracaSelecionada] = useState<string>(pracasDisponiveis[0] ?? '');
 
-  const [salvando, setSalvando] = useState(false);
+  const [linhasPorPraca, setLinhasPorPraca] = useState<Record<string, IndoorLinha[]>>({});
+  const linhas: IndoorLinha[] = linhasPorPraca[pracaSelecionada] ?? [emptyIndoorLinha()];
+  const setLinhas = (fn: IndoorLinha[] | ((prev: IndoorLinha[]) => IndoorLinha[])) => {
+    setLinhasPorPraca((prev) => {
+      const current = prev[pracaSelecionada] ?? [emptyIndoorLinha()];
+      const next = typeof fn === 'function' ? fn(current) : fn;
+      return { ...prev, [pracaSelecionada]: next };
+    });
+  };
+
   const [pracasSalvas, setPracasSalvas] = useState<PracaSalva[]>([]);
   const [erro, setErro] = useState('');
+
+  // Apple loader state
+  const [showLoader, setShowLoader] = useState(false);
+  const [loaderSteps, setLoaderSteps] = useState<Step[]>([]);
+  const [loaderProgress, setLoaderProgress] = useState(0);
 
   useEffect(() => {
     axios
@@ -57,23 +78,33 @@ export default function ConfigurarIndoor({
       .finally(() => setLoadingDims(false));
   }, []);
 
-  const handleSalvar = async () => {
-    if (!planoMidiaGrupo_pk) {
-      setErro('Roteiro ainda não foi salvo. Finalize a Aba 4 primeiro.');
-      return;
-    }
-    if (!pracaSelecionada) {
-      setErro('Selecione uma praça.');
-      return;
-    }
-    const linhasValidas = linhas.filter((l) => l.ambiente.trim());
-    if (linhasValidas.length === 0) {
-      setErro('Adicione ao menos um ambiente antes de salvar.');
-      return;
-    }
+  const setStep = (id: string, status: StepStatus) =>
+    setLoaderSteps((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
 
-    setSalvando(true);
+  const handleSalvar = async () => {
+    if (!planoMidiaGrupo_pk) { setErro('Roteiro ainda não foi salvo. Finalize as etapas anteriores primeiro.'); return; }
+    if (!pracaSelecionada) { setErro('Selecione uma praça.'); return; }
+
+    const linhasValidas = linhas.filter((l) => l.ambiente.trim());
+    if (linhasValidas.length === 0) { setErro('Adicione ao menos um ambiente antes de salvar.'); return; }
+
+    // ── Inicia Apple loader ──
+    const steps = mkSteps(pracaSelecionada, linhasValidas.length);
+    setLoaderSteps(steps);
+    setLoaderProgress(0);
+    setShowLoader(true);
     setErro('');
+
+    // Etapa 1 — validação (instantânea, só visual)
+    setStep('validar', 'processing');
+    setLoaderProgress(10);
+    await new Promise((r) => setTimeout(r, 400));
+    setStep('validar', 'completed');
+    setLoaderProgress(35);
+
+    // Etapa 2 — gravar
+    setStep('gravar', 'processing');
+    setLoaderProgress(50);
 
     try {
       const payload = {
@@ -95,39 +126,57 @@ export default function ConfigurarIndoor({
 
       const response = await axios.post('/api/indoor-salvar', payload);
 
-      if (response.data?.success) {
-        setPracasSalvas((prev) => {
-          const sem = prev.filter((p) => p.praca !== pracaSelecionada);
-          return [...sem, { praca: pracaSelecionada, linhasCount: linhasValidas.length }];
-        });
-        setLinhas([emptyIndoorLinha()]);
-
-        // Sugerir próxima praça não salva
-        const proxima = pracasDisponiveis.find(
-          (p) =>
-            p !== pracaSelecionada &&
-            !pracasSalvas.some((ps) => ps.praca === p) &&
-            p !== pracaSelecionada
-        );
-        if (proxima) setPracaSelecionada(proxima);
-      } else {
+      if (!response.data?.success) {
+        setStep('gravar', 'error');
+        setLoaderProgress(50);
+        await new Promise((r) => setTimeout(r, 800));
+        setShowLoader(false);
         setErro(response.data?.message || 'Erro ao salvar');
+        return;
       }
-    } catch (e: any) {
-      setErro(
-        e?.response?.data?.message || e?.message || 'Erro ao salvar configuração indoor'
+
+      // Etapa 3 — concluído
+      setStep('gravar', 'completed');
+      setLoaderProgress(80);
+      setStep('ok', 'processing');
+      await new Promise((r) => setTimeout(r, 350));
+      setStep('ok', 'completed');
+      setLoaderProgress(100);
+      await new Promise((r) => setTimeout(r, 600));
+
+      setShowLoader(false);
+
+      const novasSalvas = [
+        ...pracasSalvas.filter((p) => p.praca !== pracaSelecionada),
+        { praca: pracaSelecionada, linhasCount: linhasValidas.length },
+      ];
+      setPracasSalvas(novasSalvas);
+
+      const proxima = pracasDisponiveis.find(
+        (p) => p !== pracaSelecionada && !novasSalvas.some((ps) => ps.praca === p)
       );
-    } finally {
-      setSalvando(false);
+      if (proxima) setPracaSelecionada(proxima);
+
+    } catch (e: any) {
+      setStep('gravar', 'error');
+      setLoaderProgress(50);
+      await new Promise((r) => setTimeout(r, 800));
+      setShowLoader(false);
+      setErro(e?.response?.data?.message || e?.message || 'Erro ao salvar configuração indoor');
     }
   };
 
+  // ── Loading inicial de dimensões (estilo Apple — sem overlay, inline elegante) ──
   if (loadingDims) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="flex items-center gap-3 text-gray-500">
-          <div className="animate-spin h-5 w-5 border-2 border-[#ff4600] border-t-transparent rounded-full" />
-          Carregando configurações indoor...
+      <div className="flex flex-col items-center justify-center py-24 gap-6">
+        <div className="relative w-14 h-14">
+          <div className="absolute inset-0 rounded-full border-[3px] border-gray-100" />
+          <div className="absolute inset-0 rounded-full border-[3px] border-t-[#ff4600] animate-spin" />
+        </div>
+        <div className="text-center">
+          <p className="text-sm font-medium text-[#3a3a3a]">Carregando configurações</p>
+          <p className="text-xs text-gray-400 mt-1">Buscando ambientes, tamanhos e parâmetros indoor…</p>
         </div>
       </div>
     );
@@ -135,8 +184,8 @@ export default function ConfigurarIndoor({
 
   if (erroDims) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 text-red-700 p-4 text-sm">
-        Erro ao carregar dimensões indoor: {erroDims}
+      <div className="rounded border border-red-100 bg-red-50 text-red-600 text-sm p-3">
+        Erro ao carregar dimensões: {erroDims}
       </div>
     );
   }
@@ -147,146 +196,138 @@ export default function ConfigurarIndoor({
     pracasDisponiveis.length > 0 &&
     pracasDisponiveis.every((p) => pracasSalvas.some((ps) => ps.praca === p));
 
+  const estaSalva = pracasSalvas.some((ps) => ps.praca === pracaSelecionada);
+
   return (
-    <div className="space-y-6">
-      {/* Card de status das praças */}
-      {pracasSalvas.length > 0 && (
-        <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-          <p className="text-sm font-semibold text-green-800 mb-2">
-            Configuração indoor salva em {pracasSalvas.length}{' '}
-            {pracasSalvas.length === 1 ? 'praça' : 'praças'}:
-          </p>
-          <div className="flex flex-wrap gap-2">
+    <>
+      {/* ── Apple Save Loader (overlay) ── */}
+      <AppleSaveLoader
+        isOpen={showLoader}
+        steps={loaderSteps}
+        currentProgress={loaderProgress}
+        title="Salvando configuração indoor"
+      />
+
+      <div className="space-y-5">
+
+        {/* ── Barra de status das praças ── */}
+        {pracasSalvas.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 px-1">
+            <span className="text-xs text-gray-400">Praças salvas:</span>
             {pracasSalvas.map((ps) => (
-              <span
+              <button
                 key={ps.praca}
-                className="inline-flex items-center gap-1 text-xs bg-white border border-green-300 text-green-700 rounded-full px-3 py-1"
+                type="button"
+                onClick={() => { setPracaSelecionada(ps.praca); setErro(''); }}
+                className={`inline-flex items-center gap-1 text-xs rounded-full px-3 py-0.5 border transition-colors ${
+                  ps.praca === pracaSelecionada
+                    ? 'bg-green-500 text-white border-green-500'
+                    : 'bg-white text-green-700 border-green-300 hover:border-green-500'
+                }`}
               >
-                <span className="text-green-500">✓</span>
-                {ps.praca} · {ps.linhasCount} ambiente{ps.linhasCount !== 1 ? 's' : ''}
-              </span>
+                ✓ {ps.praca} · {ps.linhasCount} amb.
+              </button>
             ))}
-          </div>
-          <p className="text-[11px] text-green-600 mt-2">
-            Os resultados indoor estarão disponíveis após o processamento ser concluído.
-          </p>
-        </div>
-      )}
-
-      {/* Formulário de configuração */}
-      <div className="rounded-lg border border-gray-200 bg-white shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h4 className="text-sm font-bold text-[#3a3a3a]">Configurar mídia indoor</h4>
-          <span className="text-[11px] text-gray-400">
-            Semanas ativas: W1–W{semanas}
-          </span>
-        </div>
-
-        {/* Seletor de praça */}
-        <div className="flex flex-wrap gap-4 mb-5">
-          <div className="flex-1 min-w-[220px] max-w-xs">
-            <label className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1">
-              Praça
-            </label>
-            {pracasDisponiveis.length > 1 ? (
-              <select
-                className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-[#ff4600] focus:outline-none focus:ring-1 focus:ring-[#ff4600]"
-                value={pracaSelecionada}
-                onChange={(e) => {
-                  setPracaSelecionada(e.target.value);
-                  setLinhas([emptyIndoorLinha()]);
-                  setErro('');
-                }}
-              >
-                {pracasDisponiveis.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                    {pracasSalvas.some((ps) => ps.praca === p) ? ' ✓' : ''}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm text-gray-700">
-                {pracaSelecionada || '—'}
-              </div>
+            {!todasSalvas && (
+              <span className="text-xs text-gray-400">
+                {pracasDisponiveis.length - pracasSalvas.length} praça(s) pendente(s)
+              </span>
             )}
-          </div>
-        </div>
-
-        {/* Lista de ambientes */}
-        <div className="space-y-4">
-          {linhas.map((l, i) => (
-            <AmbienteRowIndoor
-              key={i}
-              idx={i}
-              dims={dims}
-              linha={l}
-              semanas={semanas}
-              onChange={(nl) =>
-                setLinhas((ls) => ls.map((x, j) => (j === i ? nl : x)))
-              }
-              onRemove={() =>
-                setLinhas((ls) => (ls.length > 1 ? ls.filter((_, j) => j !== i) : ls))
-              }
-            />
-          ))}
-        </div>
-
-        {/* Ações do formulário */}
-        <div className="flex items-center gap-3 mt-5 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setLinhas((ls) => [...ls, emptyIndoorLinha()])}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-          >
-            + Ambiente
-          </button>
-          <button
-            type="button"
-            onClick={handleSalvar}
-            disabled={salvando || !pracaSelecionada}
-            className="rounded-md bg-[#ff4600] px-5 py-2 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {salvando && (
-              <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-            )}
-            {salvando ? 'Salvando...' : 'Salvar configuração indoor'}
-          </button>
-        </div>
-
-        {erro && (
-          <div className="mt-3 rounded-md border border-red-200 bg-red-50 text-red-700 text-sm px-3 py-2">
-            {erro}
           </div>
         )}
-      </div>
 
-      {/* Botão Finalizar — só aparece após salvar ao menos uma praça */}
-      {pracasSalvas.length > 0 && (
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-5">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <p className="text-sm font-semibold text-[#3a3a3a]">
-                {todasSalvas
-                  ? 'Todas as praças configuradas!'
-                  : `${pracasSalvas.length} de ${pracasDisponiveis.length} praça(s) configurada(s)`}
-              </p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {todasSalvas
-                  ? 'Você pode finalizar o roteiro agora.'
-                  : 'Configure as demais praças ou finalize com as já salvas.'}
-              </p>
+        {/* ── Área de edição ── */}
+        <div className="border border-gray-200 rounded-lg bg-white">
+
+          {/* Cabeçalho */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+              {pracasDisponiveis.length > 1 ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Praça</span>
+                  <select
+                    className="rounded border border-gray-200 px-2 py-1 text-sm text-[#3a3a3a] focus:border-[#ff4600] focus:outline-none"
+                    value={pracaSelecionada}
+                    onChange={(e) => { setPracaSelecionada(e.target.value); setErro(''); }}
+                  >
+                    {pracasDisponiveis.map((p) => (
+                      <option key={p} value={p}>
+                        {p}{pracasSalvas.some((ps) => ps.praca === p) ? ' ✓' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Praça</span>
+                  <span className="text-sm font-medium text-[#3a3a3a]">{pracaSelecionada || '—'}</span>
+                </div>
+              )}
+              {estaSalva && (
+                <span className="text-[11px] text-green-600 font-medium">✓ salvo</span>
+              )}
             </div>
+            <span className="text-[11px] text-gray-400">W1–W{semanas}</span>
+          </div>
+
+          {/* Lista de ambientes */}
+          <div className="divide-y divide-gray-100">
+            {linhas.map((l, i) => (
+              <AmbienteRowIndoor
+                key={i}
+                idx={i}
+                dims={dims}
+                linha={l}
+                semanas={semanas}
+                onChange={(nl) => setLinhas((ls) => ls.map((x, j) => (j === i ? nl : x)))}
+                onRemove={() => setLinhas((ls) => ls.length > 1 ? ls.filter((_, j) => j !== i) : ls)}
+              />
+            ))}
+          </div>
+
+          {/* Rodapé com ações */}
+          <div className="flex items-center gap-3 px-4 py-3 border-t border-gray-100 bg-gray-50/50 flex-wrap">
             <button
               type="button"
-              onClick={onFinalizar}
-              className="rounded-lg bg-[#ff4600] text-white px-6 py-2.5 text-sm font-semibold hover:brightness-95"
+              onClick={() => setLinhas((ls) => [...ls, emptyIndoorLinha()])}
+              className="text-sm text-gray-500 hover:text-[#ff4600] flex items-center gap-1"
             >
-              Finalizar roteiro
+              <span className="text-base leading-none">+</span> Ambiente
+            </button>
+
+            <div className="flex-1" />
+
+            {erro && <p className="text-xs text-red-500">{erro}</p>}
+
+            <button
+              type="button"
+              onClick={handleSalvar}
+              disabled={!pracaSelecionada}
+              className="rounded bg-[#ff4600] px-4 py-1.5 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {estaSalva ? 'Salvar alterações' : 'Salvar'}
             </button>
           </div>
         </div>
-      )}
-    </div>
+
+        {/* ── Rodapé de conclusão ── */}
+        {pracasSalvas.length > 0 && (
+          <div className="flex items-center justify-between gap-4 px-1 flex-wrap">
+            <p className="text-xs text-gray-500">
+              {todasSalvas
+                ? 'Todas as praças configuradas. Volte para a Aba 4 para rodar o modelo.'
+                : `${pracasSalvas.length}/${pracasDisponiveis.length} praça(s) salva(s). Configure as demais ou finalize na Aba 4.`}
+            </p>
+            <button
+              type="button"
+              onClick={onVoltarAba4}
+              className="rounded bg-[#ff4600] text-white px-5 py-2 text-sm font-semibold hover:brightness-95 whitespace-nowrap"
+            >
+              Concluir e voltar para Aba 4
+            </button>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
