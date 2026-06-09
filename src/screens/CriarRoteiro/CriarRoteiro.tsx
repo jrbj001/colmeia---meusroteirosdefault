@@ -12,6 +12,7 @@ import { Modal } from "../../components/Modal/Modal";
 import { ModalAdicionarMarca } from "../../components/ModalAdicionarMarca/ModalAdicionarMarca";
 import { ImportarPlanoMidia } from "../../components/ImportarPlanoMidia";
 import { ImportarPlanoAba1 } from "../../components/ImportarPlanoAba1";
+import { ConfigurarIndoor } from "../../components/ConfigurarIndoor";
 import type { ParsedPlanoRow } from "../../utils/parsePlanoOohExcel";
 
 interface Agencia {
@@ -90,6 +91,7 @@ export const CriarRoteiro: React.FC = () => {
   const [aba2Preenchida, setAba2Preenchida] = useState(false);
   const [aba3Preenchida, setAba3Preenchida] = useState(false);
   const [aba4Preenchida, setAba4Preenchida] = useState(false);
+  const [aba5Preenchida, setAba5Preenchida] = useState(false);
   
   // Estados para aba 6 - Resultados
   const [dadosResultados, setDadosResultados] = useState<any[]>([]);
@@ -2815,14 +2817,17 @@ export const CriarRoteiro: React.FC = () => {
         }
         break;
       case 5:
-        // Aba 5 sempre pode ser acessada (em desenvolvimento)
-        setAbaAtiva(5);
+        if (aba3Preenchida) {
+          setAbaAtiva(5);
+        } else {
+          mostrarModal('Configure as praças (Aba 3) antes de configurar a mídia indoor.', 'info', 'Etapa 3 pendente');
+        }
         break;
       case 6:
         if (aba4Preenchida) {
           setAbaAtiva(6);
         } else {
-          mostrarModal('Faça o upload dos roteiros antes de ver os resultados.', 'info', 'Etapa 4 pendente');
+          mostrarModal('Finalize o roteiro na Aba 4 (Vias Públicas) antes de ver os resultados.', 'info', 'Etapa 4 pendente');
         }
         break;
       default:
@@ -2904,82 +2909,88 @@ export const CriarRoteiro: React.FC = () => {
                 <div 
                   className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
                     abaAtiva === 1 
-                      ? 'bg-white border-2 border-blue-500 rounded-lg' 
+                      ? 'bg-white border-2 border-[#ff4600] rounded-lg' 
                       : 'hover:bg-gray-50 rounded-lg'
                   }`}
                   onClick={() => navegarParaAba(1)}
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 1 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>01</span>
                   <span className={`font-medium ${abaAtiva === 1 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Nomear roteiro</span>
-                  {abaAtiva === 1 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>}
+                  {abaAtiva === 1 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
                 
                 {/* Aba 02 - Configurar target */}
                 <div 
                   className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
                     abaAtiva === 2 
-                      ? 'bg-white border-2 border-blue-500 rounded-lg' 
+                      ? 'bg-white border-2 border-[#ff4600] rounded-lg' 
                       : 'hover:bg-gray-50 rounded-lg'
                   }`}
                   onClick={() => navegarParaAba(2)}
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 2 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>02</span>
                   <span className={`font-medium ${abaAtiva === 2 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Configurar target</span>
-                  {abaAtiva === 2 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>}
+                  {abaAtiva === 2 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
                 
                 {/* Aba 03 - Configurar praça */}
                 <div 
                   className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
                     abaAtiva === 3 
-                      ? 'bg-white border-2 border-blue-500 rounded-lg' 
+                      ? 'bg-white border-2 border-[#ff4600] rounded-lg' 
                       : 'hover:bg-gray-50 rounded-lg'
                   }`}
                   onClick={() => navegarParaAba(3)}
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 3 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>03</span>
                   <span className={`font-medium ${abaAtiva === 3 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Configurar praça</span>
-                  {abaAtiva === 3 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>}
+                  {abaAtiva === 3 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
                 
                 <div 
                   className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
                     abaAtiva === 4 
-                      ? 'bg-white border-2 border-blue-500 rounded-lg' 
+                      ? 'bg-white border-2 border-[#ff4600] rounded-lg' 
                       : 'hover:bg-gray-50 rounded-lg'
                   }`}
                   onClick={() => navegarParaAba(4)}
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 4 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>04</span>
                   <span className={`font-medium ${abaAtiva === 4 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Definir vias públicas</span>
-                  {abaAtiva === 4 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>}
+                  {abaAtiva === 4 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
                 
                 <div 
-                  className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
+                  className={`flex items-center px-4 py-2 mr-8 relative ${
+                    !aba3Preenchida
+                      ? 'cursor-not-allowed opacity-40'
+                      : 'cursor-pointer'
+                  } ${
                     abaAtiva === 5 
-                      ? 'bg-white border-2 border-blue-500 rounded-lg' 
-                      : 'hover:bg-gray-50 rounded-lg'
+                      ? 'bg-white border-2 border-[#ff4600] rounded-lg' 
+                      : aba3Preenchida ? 'hover:bg-gray-50 rounded-lg' : ''
                   }`}
                   onClick={() => navegarParaAba(5)}
+                  title={!aba3Preenchida ? 'Configure as praças (Aba 3) antes de configurar indoor' : ''}
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 5 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>05</span>
                   <span className={`font-medium ${abaAtiva === 5 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Definir indoor</span>
-                  {abaAtiva === 5 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>}
+                  {aba5Preenchida && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
+                  {abaAtiva === 5 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
                 
                 {(aba6Habilitada || modoVisualizacao) && (
                   <div 
                     className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
                       abaAtiva === 6 
-                        ? 'bg-white border-2 border-blue-500 rounded-lg' 
+                        ? 'bg-white border-2 border-[#ff4600] rounded-lg' 
                         : 'hover:bg-gray-50 rounded-lg'
                     }`}
                     onClick={() => navegarParaAba(6)}
                   >
                     <span className={`font-bold text-sm mr-2 ${abaAtiva === 6 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>06</span>
                     <span className={`font-medium ${abaAtiva === 6 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Resultados</span>
-                    {abaAtiva === 6 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>}
+                    {abaAtiva === 6 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                   </div>
                 )}
               </div>
@@ -3445,8 +3456,8 @@ export const CriarRoteiro: React.FC = () => {
                     {/* Inventário das cidades selecionadas */}
                     {cidadesSelecionadas.length > 0 && (
                       <div className="mt-12">
-                        <h4 className="text-base font-bold text-blue-600 mb-6 uppercase">
-                          INVENTÁRIO CADASTRADO DA PRAÇA
+                        <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-4">
+                          Inventário cadastrado da praça
                         </h4>
                         
                         <div className="grid grid-cols-2 gap-8">
@@ -3456,13 +3467,10 @@ export const CriarRoteiro: React.FC = () => {
                             
                             return (
                               <div key={cidade.id_cidade} className="mb-8">
-                                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 rounded-t-lg border-b border-blue-200">
-                                  <h5 className="text-sm font-bold text-gray-800 flex items-center">
-                                    <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                                    </svg>
+                                <div className="bg-gray-50 px-4 py-3 rounded-t-lg border border-b-0 border-gray-200">
+                                  <h5 className="text-sm font-semibold text-[#3a3a3a]">
                                     {cidade.nome_cidade}, {cidade.nome_estado}
-                                </h5>
+                                  </h5>
                                 </div>
                                 
                                 <div className="bg-white border-l border-r border-t border-gray-300 rounded-b-lg overflow-hidden shadow-sm">
@@ -3559,163 +3567,115 @@ export const CriarRoteiro: React.FC = () => {
                     </h3>
                   </div>
 
-                  {/* 📊 LOADING EM TEMPO REAL - ABA 4 */}
+                  {/* Loading Aba 4 */}
                   {loadingAba4.ativo && (
-                    <div className="mb-8 p-8 bg-gradient-to-br from-orange-50 via-orange-50 to-amber-50 border-2 border-orange-200 rounded-2xl shadow-xl">
-                      {/* Header com Progresso */}
-                      <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center gap-4">
-                          <div className="relative w-14 h-14">
-                            <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-[#ff4600] to-orange-400 rounded-full opacity-20"></div>
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#ff4600] border-t-transparent"></div>
-                            </div>
+                    <div className="mb-8 border border-gray-200 rounded-lg bg-white p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="relative w-8 h-8 shrink-0">
+                            <div className="absolute inset-0 rounded-full border-2 border-gray-100" />
+                            <div className="absolute inset-0 rounded-full border-2 border-t-[#ff4600] animate-spin" />
                           </div>
                           <div>
-                            <h4 className="text-xl font-bold text-[#3a3a3a]">{loadingAba4.etapa}</h4>
-                            <p className="text-sm text-gray-600 mt-1">{loadingAba4.detalhes}</p>
+                            <p className="text-sm font-semibold text-[#3a3a3a]">{loadingAba4.etapa}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{loadingAba4.detalhes}</p>
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-4xl font-bold bg-gradient-to-r from-[#ff4600] to-orange-500 bg-clip-text text-transparent">
-                            {loadingAba4.progresso}%
-                          </div>
+                          <span className="text-xl font-bold text-[#3a3a3a]">{loadingAba4.progresso}%</span>
                           {loadingAba4.tempoInicio && (
-                            <div className="text-xs text-gray-500 mt-1 font-medium">
-                              ⏱️ {Math.floor((new Date().getTime() - loadingAba4.tempoInicio.getTime()) / 1000)}s
-                            </div>
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                              {Math.floor((new Date().getTime() - loadingAba4.tempoInicio.getTime()) / 1000)}s
+                            </p>
                           )}
                         </div>
                       </div>
-                      
-                      {/* Barra de progresso moderna */}
-                      <div className="w-full bg-gray-200 rounded-full h-4 mb-6 shadow-inner">
-                        <div 
-                          className="bg-gradient-to-r from-[#ff4600] via-orange-400 to-amber-400 h-4 rounded-full transition-all duration-500 ease-out shadow-lg"
+
+                      {/* Barra de progresso */}
+                      <div className="w-full bg-gray-100 rounded-full h-1.5 mb-4">
+                        <div
+                          className="bg-[#ff4600] h-1.5 rounded-full transition-all duration-500 ease-out"
                           style={{ width: `${loadingAba4.progresso}%` }}
-                        >
-                          <div className="w-full h-full bg-gradient-to-r from-transparent via-white to-transparent opacity-30 rounded-full animate-pulse"></div>
-                        </div>
+                        />
                       </div>
-                      
-                      {/* Etapas do processo */}
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                        <div className={`p-3 rounded-xl text-center transition-all duration-300 ${
-                          loadingAba4.progresso >= 10 
-                            ? 'bg-gradient-to-r from-[#ff4600] to-orange-400 text-white shadow-lg scale-105' 
-                            : 'bg-gray-100 text-gray-500'
-                        }`}>
-                          <div className="text-lg mb-1">📊</div>
-                          <div className="text-xs font-semibold">Salvando roteiros</div>
-                        </div>
-                        <div className={`p-3 rounded-xl text-center transition-all duration-300 ${
-                          loadingAba4.progresso >= 25 
-                            ? 'bg-gradient-to-r from-[#ff4600] to-orange-400 text-white shadow-lg scale-105' 
-                            : 'bg-gray-100 text-gray-500'
-                        }`}>
-                          <div className="text-lg mb-1">🔄</div>
-                          <div className="text-xs font-semibold">Consultando dados</div>
-                        </div>
-                        <div className={`p-3 rounded-xl text-center transition-all duration-300 ${
-                          loadingAba4.progresso >= 40 
-                            ? 'bg-gradient-to-r from-[#ff4600] to-orange-400 text-white shadow-lg scale-105' 
-                            : 'bg-gray-100 text-gray-500'
-                        }`}>
-                          <div className="text-lg mb-1">🏢</div>
-                          <div className="text-xs font-semibold">Banco de Ativos</div>
-                        </div>
-                        <div className={`p-3 rounded-xl text-center transition-all duration-300 ${
-                          loadingAba4.progresso >= 70 
-                            ? 'bg-gradient-to-r from-[#ff4600] to-orange-400 text-white shadow-lg scale-105' 
-                            : 'bg-gray-100 text-gray-500'
-                        }`}>
-                          <div className="text-lg mb-1">📋</div>
-                          <div className="text-xs font-semibold">Criando planos</div>
-                        </div>
-                        <div className={`p-3 rounded-xl text-center transition-all duration-300 ${
-                          loadingAba4.progresso >= 90 
-                            ? 'bg-gradient-to-r from-[#ff4600] to-orange-400 text-white shadow-lg scale-105' 
-                            : 'bg-gray-100 text-gray-500'
-                        }`}>
-                          <div className="text-lg mb-1">🚀</div>
-                          <div className="text-xs font-semibold">Databricks</div>
-                        </div>
+
+                      {/* Etapas inline */}
+                      <div className="flex items-center gap-0 text-[11px]">
+                        {[
+                          { label: 'Roteiros', threshold: 10 },
+                          { label: 'Dados', threshold: 25 },
+                          { label: 'Banco Ativos', threshold: 40 },
+                          { label: 'Planos', threshold: 70 },
+                          { label: 'Processamento', threshold: 90 },
+                        ].map((step, i, arr) => {
+                          const done = loadingAba4.progresso > step.threshold;
+                          const active = loadingAba4.progresso >= step.threshold && !done;
+                          return (
+                            <div key={step.label} className="flex items-center">
+                              <div className={`flex items-center gap-1 px-2 py-1 rounded ${
+                                done ? 'text-[#ff4600]' : active ? 'text-[#3a3a3a] font-semibold' : 'text-gray-300'
+                              }`}>
+                                {done && <span>✓</span>}
+                                <span>{step.label}</span>
+                              </div>
+                              {i < arr.length - 1 && <span className="text-gray-200 mx-0.5">›</span>}
+                            </div>
+                          );
+                        })}
                       </div>
-                      
+
                       {loadingAba4.etapa === 'Banco de Ativos' && (
-                        <div className="mt-6 p-4 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl shadow-md">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
-                              <span className="text-white text-sm font-bold">⚡</span>
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-amber-900">
-                                Processo crítico em execução
-                              </p>
-                              <p className="text-xs text-amber-700 mt-1">
-                                Consultando API externa para dados de passantes. Este processo pode demorar alguns minutos.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
+                        <p className="mt-3 text-xs text-gray-400 border-t border-gray-100 pt-3">
+                          Consultando API externa para dados de passantes — pode levar alguns minutos.
+                        </p>
                       )}
                     </div>
                   )}
 
-                  {/* 🎯 CONTROLE GRANULAR DO BANCO DE ATIVOS */}
+                  {/* Banco de Ativos — progresso granular */}
                   {bancoAtivosStatus.ativo && (
-                    <div className="mb-8 p-6 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg shadow-sm">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center">
-                          <div className="animate-pulse rounded-full h-6 w-6 bg-green-500 mr-3"></div>
+                    <div className="mb-8 border border-gray-200 rounded-lg bg-white p-5">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-[#ff4600] animate-pulse" />
                           <div>
-                            <h4 className="text-lg font-bold text-green-800">Banco de Ativos - Controle Granular</h4>
-                            <p className="text-sm text-green-600 mt-1">{bancoAtivosStatus.detalhes}</p>
+                            <p className="text-sm font-semibold text-[#3a3a3a]">Banco de Ativos</p>
+                            <p className="text-xs text-gray-400">{bancoAtivosStatus.detalhes}</p>
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-2xl font-bold text-green-800">
+                          <p className="text-lg font-bold text-[#3a3a3a] tabular-nums">
                             {bancoAtivosStatus.coordenadasProcessadas}/{bancoAtivosStatus.coordenadasTotal}
-                          </div>
-                          <div className="text-xs text-green-600 mt-1">
-                            {bancoAtivosStatus.taxaSucesso.toFixed(1)}% sucesso
-                          </div>
+                          </p>
+                          <p className="text-[10px] text-gray-400">{bancoAtivosStatus.taxaSucesso.toFixed(1)}% sucesso</p>
                         </div>
                       </div>
-                      
-                      {/* Progresso das coordenadas */}
-                      <div className="w-full bg-green-200 rounded-full h-3 mb-4">
-                        <div 
-                          className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all duration-500 ease-out"
+
+                      <div className="w-full bg-gray-100 rounded-full h-1.5 mb-4">
+                        <div
+                          className="bg-[#ff4600] h-1.5 rounded-full transition-all duration-500 ease-out"
                           style={{ width: `${(bancoAtivosStatus.coordenadasProcessadas / bancoAtivosStatus.coordenadasTotal) * 100}%` }}
-                        ></div>
+                        />
                       </div>
-                      
-                      {/* Estatísticas detalhadas */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div className="bg-green-100 p-3 rounded-lg text-center">
-                          <div className="text-lg font-bold text-green-800">{bancoAtivosStatus.sucessos}</div>
-                          <div className="text-xs text-green-600">Sucessos</div>
-                        </div>
-                        <div className="bg-red-100 p-3 rounded-lg text-center">
-                          <div className="text-lg font-bold text-red-800">{bancoAtivosStatus.falhas}</div>
-                          <div className="text-xs text-red-600">Falhas</div>
-                        </div>
-                        <div className="bg-blue-100 p-3 rounded-lg text-center">
-                          <div className="text-lg font-bold text-blue-800">{bancoAtivosStatus.lotesProcessados}/{bancoAtivosStatus.lotesTotal}</div>
-                          <div className="text-xs text-blue-600">Lotes</div>
-                        </div>
-                        <div className="bg-purple-100 p-3 rounded-lg text-center">
-                          <div className="text-lg font-bold text-purple-800">{bancoAtivosStatus.modoProcessamento}</div>
-                          <div className="text-xs text-purple-600">Modo</div>
-                        </div>
+
+                      <div className="grid grid-cols-4 gap-3 text-center">
+                        {[
+                          { value: bancoAtivosStatus.sucessos, label: 'Sucessos' },
+                          { value: bancoAtivosStatus.falhas, label: 'Falhas' },
+                          { value: `${bancoAtivosStatus.lotesProcessados}/${bancoAtivosStatus.lotesTotal}`, label: 'Lotes' },
+                          { value: bancoAtivosStatus.modoProcessamento, label: 'Modo' },
+                        ].map((s) => (
+                          <div key={s.label} className="bg-gray-50 border border-gray-100 rounded-lg p-2.5">
+                            <p className="text-sm font-bold text-[#3a3a3a] tabular-nums">{s.value}</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">{s.label}</p>
+                          </div>
+                        ))}
                       </div>
-                      
-                      {/* Tempo decorrido */}
+
                       {bancoAtivosStatus.tempoInicio && (
-                        <div className="mt-4 text-center text-sm text-green-600">
-                          ⏱️ Tempo decorrido: {Math.floor((new Date().getTime() - bancoAtivosStatus.tempoInicio.getTime()) / 1000)}s
-                        </div>
+                        <p className="mt-3 text-[11px] text-gray-400 text-center">
+                          {Math.floor((new Date().getTime() - bancoAtivosStatus.tempoInicio.getTime()) / 1000)}s decorridos
+                        </p>
                       )}
                     </div>
                   )}
@@ -3726,17 +3686,11 @@ export const CriarRoteiro: React.FC = () => {
                     {tipoRoteiro === 'completo' && (
                       <>
                     {/* Card de Upload */}
-                    <div className="mb-8 bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl border-2 border-orange-200 shadow-sm">
-                      {/* Header com ícone */}
+                    <div className="mb-8 border border-gray-200 rounded-lg bg-white p-5">
                       <div className="flex items-center gap-3 mb-4">
-                        <div className="w-12 h-12 bg-[#ff4600] rounded-lg flex items-center justify-center">
-                          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                          </svg>
-                        </div>
                         <div>
-                          <h4 className="text-lg font-bold text-gray-800">Upload do Arquivo Excel</h4>
-                          <p className="text-sm text-gray-600">Carregue seu plano de mídia formatado</p>
+                          <h4 className="text-sm font-semibold text-[#3a3a3a]">Upload do arquivo Excel</h4>
+                          <p className="text-xs text-gray-400">Carregue seu plano de mídia formatado</p>
                         </div>
                       </div>
 
@@ -3773,12 +3727,12 @@ export const CriarRoteiro: React.FC = () => {
                         {/* Botão de Upload */}
                           <label
                             htmlFor="excel-upload"
-                          className={`flex items-center justify-center gap-2 px-6 py-4 rounded-lg transition-all duration-200 ${
+                          className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg transition-colors text-sm font-medium ${
                               processandoExcel
-                                ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
+                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                                 : uploadCompleto
-                              ? 'bg-green-500 text-white cursor-not-allowed shadow-lg'
-                              : 'bg-[#ff4600] text-white hover:bg-orange-600 cursor-pointer shadow-md hover:shadow-lg'
+                              ? 'bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200'
+                              : 'bg-[#ff4600] text-white hover:bg-orange-600 cursor-pointer'
                           }`}
                         >
                           {processandoExcel ? (
@@ -3805,21 +3759,11 @@ export const CriarRoteiro: React.FC = () => {
 
                         {/* Nome do arquivo */}
                         {arquivoExcel && !processandoExcel && uploadCompleto && (
-                          <div className="bg-white border-2 border-green-200 rounded-lg p-4 mt-3">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                                <svg className="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                                  <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
-                                  <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
-                                </svg>
-                          </div>
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-gray-800">{arquivoExcel.name}</p>
-                                <p className="text-xs text-gray-500">Arquivo processado com sucesso</p>
-                              </div>
-                              <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
+                          <div className="border border-gray-200 rounded-md p-3 mt-3 bg-gray-50 flex items-center gap-2">
+                            <span className="text-[#ff4600] text-sm">✓</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-[#3a3a3a] truncate">{arquivoExcel.name}</p>
+                              <p className="text-xs text-gray-400">Processado com sucesso</p>
                             </div>
                           </div>
                         )}
@@ -3827,16 +3771,12 @@ export const CriarRoteiro: React.FC = () => {
                       
                       {/* Mensagem de status */}
                       {mensagemProcessamento && (
-                        <div className={`mt-4 p-4 rounded-lg text-sm font-medium border-2 ${
-                          mensagemProcessamento.includes('❌') 
-                            ? 'bg-red-50 text-red-700 border-red-200' 
-                            : mensagemProcessamento.includes('✅')
-                            ? 'bg-green-50 text-green-700 border-green-200'
-                            : 'bg-blue-50 text-blue-700 border-blue-200'
+                        <p className={`mt-3 text-xs ${
+                          mensagemProcessamento.includes('❌') ? 'text-red-500' : 'text-gray-500'
                         }`}>
                           {mensagemProcessamento}
-                        </div>
-                          )}
+                        </p>
+                      )}
                         </div>
                       </>
                     )}
@@ -3865,7 +3805,7 @@ export const CriarRoteiro: React.FC = () => {
                               title={!planoMidiaGrupo_pk ? 'Salve a Aba 1 primeiro para habilitar a importação' : undefined}
                               className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
                                 modoSimulado === 'importar'
-                                  ? 'bg-white text-indigo-600 shadow-sm border border-indigo-200'
+                                  ? 'bg-white text-[#ff4600] shadow-sm border border-orange-200'
                                   : !planoMidiaGrupo_pk
                                   ? 'text-[#aaa] cursor-not-allowed'
                                   : 'text-[#666] hover:text-[#333]'
@@ -3898,45 +3838,27 @@ export const CriarRoteiro: React.FC = () => {
                           </label>
                           <div className="relative">
                             {cidadesSalvas.length > 0 ? (
-                              <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl shadow-sm">
-                                <div className="flex items-center gap-3 mb-4">
-                                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center shadow-md">
-                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                  </div>
-                                  <span className="font-bold text-blue-800 text-lg">
-                                    {cidadesSalvas.length} praça{cidadesSalvas.length > 1 ? 's' : ''} configurada{cidadesSalvas.length > 1 ? 's' : ''}
-                                  </span>
-                                </div>
+                              <div className="border border-gray-200 rounded-lg bg-white p-4">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
+                                  {cidadesSalvas.length} praça{cidadesSalvas.length > 1 ? 's' : ''} configurada{cidadesSalvas.length > 1 ? 's' : ''}
+                                </p>
                                 <div className="flex flex-wrap gap-2">
                                   {cidadesSalvas.map((cidade, index) => (
-                                    <div key={cidade.id_cidade} className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border border-blue-300 shadow-sm">
-                                      <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">
-                                        {index + 1}
-                                      </span>
-                                      <span className="text-blue-700 font-medium">
-                                        {cidade.nome_cidade} - {cidade.nome_estado}
+                                    <div key={cidade.id_cidade} className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-md">
+                                      <span className="text-[10px] font-bold text-gray-400 tabular-nums">{index + 1}</span>
+                                      <span className="text-sm text-[#3a3a3a]">
+                                        {cidade.nome_cidade} — {cidade.nome_estado}
                                       </span>
                                     </div>
                                   ))}
                                 </div>
                               </div>
                             ) : (
-                              <div className="p-6 bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-200 rounded-xl shadow-sm">
-                                <div className="flex items-start gap-4">
-                                  <div className="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center flex-shrink-0 shadow-md">
-                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
-                                    </svg>
-                                  </div>
-                                  <div>
-                                    <p className="font-bold text-yellow-800 text-lg">Configuração necessária</p>
-                                    <p className="text-sm text-yellow-700 mt-1">
-                                      Vá para a Aba 3 e configure as praças antes de criar o roteiro simulado.
-                                    </p>
-                                  </div>
-                                </div>
+                              <div className="border border-gray-200 rounded-lg bg-gray-50 p-4">
+                                <p className="text-sm font-medium text-[#3a3a3a]">Praças não configuradas</p>
+                                <p className="text-xs text-gray-400 mt-1">
+                                  Configure as praças na Aba 3 antes de criar o roteiro simulado.
+                                </p>
                               </div>
                             )}
                           </div>
@@ -3945,47 +3867,44 @@ export const CriarRoteiro: React.FC = () => {
 
                         {/* Card de Configuração */}
                         {cidadesSalvas.length > 0 && (
-                          <div className="mb-8 bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl border-2 border-orange-200 shadow-sm">
+                          <div className="mb-8 border border-gray-200 rounded-lg bg-white p-5">
                             <div className="space-y-4">
                               {/* Seleção de Semanas */}
                               <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-2">
-                                  Quantidade de Semanas
+                                <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
+                                  Quantidade de semanas
                                 </label>
-                                <select 
+                                <select
                                   value={quantidadeSemanas}
                                   onChange={(e) => {
                                     const novasSemanas = parseInt(e.target.value);
                                     setQuantidadeSemanas(novasSemanas);
-                                    // Regenerar tabelas com novas semanas se já existem
                                     if (Object.keys(tabelaSimulado).length > 0) {
                                       gerarTabelaSimulado(novasSemanas);
                                     }
                                   }}
-                                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                                  className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm text-[#3a3a3a] bg-white focus:outline-none focus:ring-1 focus:ring-[#ff4600]/20 focus:border-[#ff4600]"
                                 >
                                   {Array.from({length: 12}, (_, i) => i + 1).map(sem => (
                                     <option key={sem} value={sem}>
-                                      {sem} {sem === 1 ? 'Semana' : 'Semanas'}
+                                      {sem} {sem === 1 ? 'semana' : 'semanas'}
                                     </option>
                                   ))}
                                 </select>
                               </div>
-                              
+
                               {/* Botão para gerar tabela */}
                               <div>
-                                <p className="text-sm text-gray-600 mb-3">
-                                  Clique no botão abaixo para gerar automaticamente as tabelas de vias públicas para <span className="font-bold text-orange-600">{cidadesSalvas.length} {cidadesSalvas.length === 1 ? 'praça configurada' : 'praças configuradas'}</span>
+                                <p className="text-xs text-gray-400 mb-3">
+                                  Gera automaticamente as tabelas de vias públicas para{' '}
+                                  <span className="font-semibold text-[#3a3a3a]">{cidadesSalvas.length} {cidadesSalvas.length === 1 ? 'praça' : 'praças'}</span>.
                                 </p>
                                 <button
                                   type="button"
                                   onClick={() => gerarTabelaSimulado(quantidadeSemanas)}
-                                  className="w-full flex items-center justify-center gap-3 px-8 py-4 bg-[#ff4600] text-white rounded-xl hover:bg-orange-600 transition-all duration-200 shadow-lg hover:shadow-xl font-bold text-lg"
+                                  className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#ff4600] text-white rounded-lg hover:bg-orange-600 transition-colors font-semibold text-sm"
                                 >
-                                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                  </svg>
-                                  Gerar Tabelas para Todas as Praças
+                                  Gerar tabelas para todas as praças
                                 </button>
                               </div>
                             </div>
@@ -4003,46 +3922,36 @@ export const CriarRoteiro: React.FC = () => {
                               return (
                                 <div key={praca.id_cidade} className="mb-8">
                                   {/* Header da Tabela */}
-                                  <div className="mb-6 p-6 bg-gradient-to-r from-blue-600 to-blue-700 rounded-t-xl border-b-4 border-blue-800">
-                                    <div className="flex items-center justify-between">
-                                      <div>
-                                        <h4 className="text-xl font-bold text-white uppercase tracking-wide mb-2">
-                                          Configure as vias públicas
-                                        </h4>
-                                        <p className="text-blue-100">
-                                          📍 {praca.nome_cidade} - {praca.nome_estado}
-                                        </p>
-                                      </div>
-                                      <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center shadow-lg">
-                                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                      </div>
+                                  <div className="mb-0 px-4 pt-4 pb-3 border border-gray-200 rounded-t-lg bg-gray-50 flex items-center justify-between">
+                                    <div>
+                                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Vias públicas</p>
+                                      <p className="text-sm font-semibold text-[#3a3a3a] mt-0.5">
+                                        {praca.nome_cidade} — {praca.nome_estado}
+                                      </p>
                                     </div>
                                   </div>
 
                                   {/* Tabela */}
-                                  <div className="overflow-x-auto border-2 border-gray-300 rounded-b-xl shadow-lg">
+                                  <div className="overflow-x-auto border border-t-0 border-gray-200 rounded-b-lg">
                                     <table className="w-full">
-                                      <thead className="bg-gradient-to-r from-gray-700 to-gray-800 text-white">
+                                      <thead className="bg-gray-50 border-b border-gray-200">
                                         <tr>
-                                          <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-xs">Grupo</th>
-                                          <th className="px-4 py-3 text-left font-bold uppercase tracking-wide text-xs">Descrição</th>
-                                          <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Visibilidade</th>
-                                          <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Digital Inserções</th>
-                                          <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Digital Máx. Inserções</th>
-                                          <th className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">Total de Ativos</th>
-                                          {/* Colunas dinâmicas de semanas */}
+                                          <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">Grupo</th>
+                                          <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">Descrição</th>
+                                          <th className="px-4 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-400">Visibilidade</th>
+                                          <th className="px-4 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-400">Digital Inserções</th>
+                                          <th className="px-4 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-400">Máx. Inserções</th>
+                                          <th className="px-4 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-400">Total Ativos</th>
                                           {tabelaDaPraca[0]?.semanas && tabelaDaPraca[0].semanas.map((semana: any, idx: number) => (
-                                            <th key={idx} className="px-4 py-3 text-center font-bold uppercase tracking-wide text-xs">
-                                              Semana {semana.semana}
+                                            <th key={idx} className="px-4 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                                              S{semana.semana}
                                             </th>
                                           ))}
                                         </tr>
                                       </thead>
                                       <tbody>
                                         {tabelaDaPraca.map((linha, index) => (
-                                          <tr key={index} className={`border-b border-gray-200 transition-colors ${index % 2 === 0 ? 'bg-white hover:bg-blue-50' : 'bg-gray-50 hover:bg-blue-50'}`}>
+                                          <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                                             <td className="px-4 py-3 text-sm font-bold text-gray-800">{linha.grupoSub_st}</td>
                                             <td className="px-4 py-3 text-sm text-gray-700">{linha.grupoDesc_st}</td>
                                             <td className="px-4 py-3">
@@ -4056,7 +3965,7 @@ export const CriarRoteiro: React.FC = () => {
                                                     novasTabelas[idPracaKey][index].visibilidade = e.target.value;
                                                     setTabelaSimulado(novasTabelas);
                                                   }}
-                                                  className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                                  className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#ff4600]/20 focus:border-[#ff4600] bg-white"
                                                 >
                                                   <option value="25">Baixa</option>
                                                   <option value="50">Média</option>
@@ -4080,7 +3989,7 @@ export const CriarRoteiro: React.FC = () => {
                                                   novasTabelas[idPracaKey][index].seDigitalInsercoes_vl = parseInt(e.target.value) || 0;
                                                   setTabelaSimulado(novasTabelas);
                                                 }}
-                                                className="w-full px-3 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                                className="w-full px-2 py-1.5 text-sm text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#ff4600]/20 focus:border-[#ff4600] bg-white tabular-nums"
                                                 placeholder="0"
                                               />
                                             </td>
@@ -4095,7 +4004,7 @@ export const CriarRoteiro: React.FC = () => {
                                                   novasTabelas[idPracaKey][index].seDigitalMaximoInsercoes_vl = parseInt(e.target.value) || 0;
                                                   setTabelaSimulado(novasTabelas);
                                                 }}
-                                                className="w-full px-3 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                                className="w-full px-2 py-1.5 text-sm text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#ff4600]/20 focus:border-[#ff4600] bg-white tabular-nums"
                                                 placeholder="0"
                                               />
                                             </td>
@@ -4118,7 +4027,7 @@ export const CriarRoteiro: React.FC = () => {
                                                     novasTabelas[idPracaKey][index].semanas[semanaIdx].insercaoComprada = valor;
                                                     setTabelaSimulado(novasTabelas);
                                                   }}
-                                                  className="w-full px-2 py-2 text-sm text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white"
+                                                  className="w-full px-2 py-1.5 text-sm text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#ff4600]/20 focus:border-[#ff4600] bg-white tabular-nums"
                                                   placeholder="0"
                                                 />
                                               </td>
@@ -4140,34 +4049,24 @@ export const CriarRoteiro: React.FC = () => {
                             <button
                               type="button"
                               onClick={salvarRoteiroSimulado}
-                              className={`flex items-center justify-center gap-3 px-8 py-4 rounded-xl transition-all duration-200 font-bold text-lg shadow-lg ${
-                                roteiroSimuladoSalvo 
-                                  ? 'bg-green-500 text-white cursor-default shadow-green-300' 
+                              className={`w-[200px] h-[50px] flex items-center justify-center gap-2 rounded-lg border transition-colors text-sm font-medium ${
+                                roteiroSimuladoSalvo
+                                  ? 'bg-gray-100 text-gray-500 border-gray-200 cursor-default'
                                   : salvandoAba4
-                                  ? 'bg-gray-500 text-white cursor-not-allowed'
-                                  : 'bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700 hover:shadow-xl'
+                                  ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
+                                  : 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600'
                               }`}
                               disabled={salvandoAba4 || roteiroSimuladoSalvo}
                             >
                               {salvandoAba4 ? (
                                 <>
-                                  <div className="animate-spin h-6 w-6 border-3 border-white border-t-transparent rounded-full"></div>
-                                  <span>Processando...</span>
+                                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                                  <span>Salvando...</span>
                                 </>
                               ) : roteiroSimuladoSalvo ? (
-                                <>
-                                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                  <span>Roteiro Simulado Salvo!</span>
-                                </>
+                                <span>✓ Salvo</span>
                               ) : (
-                                <>
-                                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                                  </svg>
-                                  <span>Salvar Roteiro Simulado</span>
-                                </>
+                                <span>Salvar roteiro</span>
                               )}
                             </button>
                           </div>
@@ -4189,62 +4088,35 @@ export const CriarRoteiro: React.FC = () => {
                           
                           if (validacao.valido) {
                             return (
-                              <div className="p-6 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-xl shadow-sm">
-                                <div className="flex items-center gap-4">
-                                  <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-                                    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                  </div>
-                                  <div className="flex-1">
-                                    <h4 className="font-bold text-green-800 text-lg mb-1">✅ Consistência Validada!</h4>
-                                    <p className="text-sm text-green-700">
-                                      As {validacao.detalhes?.totalCidadesAba3} cidades da Aba 3 correspondem exatamente às {validacao.detalhes?.totalPracasExcel} praças do Excel.
-                                    </p>
-                                  </div>
-                                </div>
+                              <div className="border border-gray-200 rounded-lg bg-white p-4 flex items-center gap-3">
+                                <span className="text-[#ff4600] text-sm shrink-0">✓</span>
+                                <p className="text-sm text-[#3a3a3a]">
+                                  <span className="font-medium">Consistência validada.</span>{' '}
+                                  {validacao.detalhes?.totalCidadesAba3} cidades da Aba 3 correspondem às {validacao.detalhes?.totalPracasExcel} praças do Excel.
+                                </p>
                               </div>
                             );
                           } else if (validacao.detalhes) {
                             return (
-                              <div className="p-6 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-300 rounded-xl shadow-sm">
-                                <div className="flex items-start gap-4">
-                                  <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
-                                    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                  </div>
-                                  <div className="flex-1">
-                                    <h4 className="font-bold text-red-800 text-lg mb-2">❌ Inconsistência Detectada!</h4>
-                                    <p className="text-sm text-red-700 mb-4">
-                                      As cidades da Aba 3 não correspondem às praças do Excel.
-                                    </p>
-                                    
-                                    <div className="bg-white rounded-lg p-4 space-y-3">
-                                    {validacao.detalhes.cidadesFaltandoNoExcel.length > 0 && (
-                                        <div className="border-l-4 border-yellow-500 pl-3 py-2 bg-yellow-50 rounded-r">
-                                          <p className="text-xs font-bold text-yellow-800 mb-1">⚠️ Cidades da Aba 3 ausentes no Excel:</p>
-                                          <p className="text-xs text-yellow-700">
-                                          {validacao.detalhes.cidadesFaltandoNoExcel.join(', ')}
-                                        </p>
-                                      </div>
-                                    )}
-                                    
-                                    {validacao.detalhes.pracasSobrandoNoExcel.length > 0 && (
-                                        <div className="border-l-4 border-blue-500 pl-3 py-2 bg-blue-50 rounded-r">
-                                          <p className="text-xs font-bold text-blue-800 mb-1">ℹ️ Praças do Excel não selecionadas na Aba 3:</p>
-                                          <p className="text-xs text-blue-700">
-                                          {validacao.detalhes.pracasSobrandoNoExcel.join(', ')}
-                                        </p>
-                                      </div>
-                                    )}
+                              <div className="border border-gray-200 rounded-lg bg-white p-4 space-y-3">
+                                <p className="text-sm font-medium text-[#3a3a3a]">Inconsistência detectada — as cidades da Aba 3 não correspondem às praças do Excel.</p>
+                                <div className="space-y-2">
+                                  {validacao.detalhes.cidadesFaltandoNoExcel.length > 0 && (
+                                    <div className="pl-3 border-l-2 border-gray-300">
+                                      <p className="text-xs font-semibold text-gray-500 mb-0.5">Cidades da Aba 3 ausentes no Excel:</p>
+                                      <p className="text-xs text-gray-400">{validacao.detalhes.cidadesFaltandoNoExcel.join(', ')}</p>
                                     </div>
-                                    
-                                    <p className="text-xs text-red-700 font-medium mt-4">
-                                      📊 Aba 3: {validacao.detalhes.totalCidadesAba3} cidades | Excel: {validacao.detalhes.totalPracasExcel} praças
-                                    </p>
-                                  </div>
+                                  )}
+                                  {validacao.detalhes.pracasSobrandoNoExcel.length > 0 && (
+                                    <div className="pl-3 border-l-2 border-gray-300">
+                                      <p className="text-xs font-semibold text-gray-500 mb-0.5">Praças do Excel não selecionadas na Aba 3:</p>
+                                      <p className="text-xs text-gray-400">{validacao.detalhes.pracasSobrandoNoExcel.join(', ')}</p>
+                                    </div>
+                                  )}
                                 </div>
+                                <p className="text-[10px] text-gray-400">
+                                  Aba 3: {validacao.detalhes.totalCidadesAba3} cidades · Excel: {validacao.detalhes.totalPracasExcel} praças
+                                </p>
                               </div>
                             );
                           }
@@ -4256,21 +4128,11 @@ export const CriarRoteiro: React.FC = () => {
 
                     {/* Mensagem informativa quando dados não foram salvos */}
                     {roteirosCarregados.length > 0 && uploadRoteiros_pks.length === 0 && (
-                      <div className="mb-8 p-6 bg-blue-50 border border-blue-200 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                            <span className="text-blue-600 font-bold">ℹ️</span>
-                          </div>
-                          <div>
-                            <h4 className="text-lg font-semibold text-blue-800">Tabelas Dinâmicas</h4>
-                            <p className="text-blue-700 mt-1">
-                              As tabelas dinâmicas para definir vias públicas aparecerão aqui após você salvar os dados carregados.
-                            </p>
-                            <p className="text-sm text-blue-600 mt-2">
-                              Clique em "Salvar" na Aba 4 para processar os dados e carregar as tabelas.
-                            </p>
-                          </div>
-                        </div>
+                      <div className="mb-8 border border-gray-200 rounded-lg bg-gray-50 p-4">
+                        <p className="text-sm font-medium text-[#3a3a3a]">Tabelas dinâmicas</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          As tabelas de vias públicas aparecerão aqui após salvar os dados. Clique em "Salvar" para processar.
+                        </p>
                       </div>
                     )}
 
@@ -4335,43 +4197,33 @@ export const CriarRoteiro: React.FC = () => {
                                 .filter(grupo => (grupoComDados.get(grupo.grupoSub_st) || 0) > 0);
                               
                               return (
-                                <div key={pracaIndex} className="bg-white border-2 border-gray-300 rounded-xl overflow-hidden shadow-lg">
+                                <div key={pracaIndex} className="border border-gray-200 rounded-lg overflow-hidden">
                                   {/* Header da Praça */}
-                                  <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 border-b-4 border-blue-800">
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg">
-                                          {String(pracaIndex + 1).padStart(2, '0')}
-                                        </div>
+                                  <div className="px-4 pt-4 pb-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-xs font-bold text-gray-300 tabular-nums">{String(pracaIndex + 1).padStart(2, '0')}</span>
                                       <div>
-                                          <h4 className="text-xl font-bold text-white uppercase tracking-wide">
-                                            Praça {String(pracaIndex + 1)}
-                                        </h4>
-                                          <p className="text-sm text-blue-100 mt-1">
-                                            📍 {praca.praca} - {praca.uf} | {semanasPraca.length} semana{semanasPraca.length > 1 ? 's' : ''}
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Praça</p>
+                                        <p className="text-sm font-semibold text-[#3a3a3a]">
+                                          {praca.praca} — {praca.uf}
                                         </p>
                                       </div>
-                                        </div>
-                                      <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                        </svg>
-                                      </div>
                                     </div>
+                                    <span className="text-xs text-gray-400">{semanasPraca.length} semana{semanasPraca.length > 1 ? 's' : ''}</span>
                                   </div>
 
                                   {/* Tabela da Praça */}
                                   <div className="overflow-x-auto">
                                     <table className="w-full text-sm">
                                       <thead>
-                                        <tr className="bg-gradient-to-r from-gray-700 to-gray-800 text-white">
-                                          <th className="px-4 py-3 text-left font-bold uppercase tracking-wide">Grupo</th>
-                                          <th className="px-4 py-3 text-left font-bold uppercase tracking-wide">Descrição</th>
-                                          <th className="px-4 py-3 text-left font-bold uppercase tracking-wide">Visibilidade</th>
-                                          <th className="px-4 py-3 text-left font-bold uppercase tracking-wide">Inserção comprada</th>
-                                          <th className="px-4 py-3 text-left font-bold uppercase tracking-wide">Inserção oferecida</th>
+                                        <tr className="bg-gray-50 border-b border-gray-200">
+                                          <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">Grupo</th>
+                                          <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">Descrição</th>
+                                          <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">Visibilidade</th>
+                                          <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">Inserção comprada</th>
+                                          <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">Inserção oferecida</th>
                                           {semanasPraca.map((semana, semanaIndex) => (
-                                            <th key={semanaIndex} className="px-4 py-3 text-center font-bold uppercase tracking-wide">
+                                            <th key={semanaIndex} className="px-4 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                                               W{semanaIndex + 1}
                                             </th>
                                           ))}
@@ -4517,21 +4369,11 @@ export const CriarRoteiro: React.FC = () => {
 
                     {/* Aviso para arquivos grandes */}
                     {roteirosCarregados.length > 100 && (
-                      <div className="mt-8 p-4 bg-yellow-100 border border-yellow-400 rounded-lg">
-                        <div className="flex items-center">
-                          <div className="mr-3">
-                            <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
-                            </svg>
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-yellow-800">Arquivo grande detectado</h4>
-                            <p className="text-sm text-yellow-700">
-                              Seu arquivo contém {roteirosCarregados.length} roteiros. O processo de salvamento pode levar até 2 minutos. 
-                              Por favor, aguarde sem fechar a aba.
-                            </p>
-                          </div>
-                        </div>
+                      <div className="mt-8 border border-gray-200 rounded-lg bg-gray-50 p-4">
+                        <p className="text-xs font-semibold text-[#3a3a3a]">Arquivo grande — {roteirosCarregados.length} roteiros</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          O salvamento pode levar até 2 minutos. Aguarde sem fechar a aba.
+                        </p>
                       </div>
                     )}
 
@@ -4588,54 +4430,35 @@ export const CriarRoteiro: React.FC = () => {
               {/* Aba 5 - Definir indoor */}
               {abaAtiva === 5 && (
                 <>
-                  <div className="mb-8">
+                  <div className="mb-6">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
                       Definir indoor
                     </h3>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Etapa opcional. Configure e salve os ambientes indoor do seu roteiro.
+                      A finalização do roteiro acontece na Aba 4 (Vias Públicas).
+                    </p>
                   </div>
 
-                  {/* Mensagem de funcionalidade em desenvolvimento */}
-                  <div className="flex items-center justify-center py-20">
-                    <div className="max-w-2xl w-full bg-gradient-to-br from-orange-50 to-amber-50 border-2 border-[#ff4600] rounded-2xl p-12 text-center shadow-lg">
-                      <div className="mb-6">
-                        <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-[#ff4600] to-[#e03700] rounded-full shadow-lg mb-4">
-                          <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                          </svg>
-                        </div>
-                        <h4 className="text-2xl font-bold text-gray-900 mb-3 uppercase tracking-wide">
-                          Funcionalidade em Desenvolvimento
-                        </h4>
-                        <p className="text-lg text-gray-700 mb-6 leading-relaxed">
-                          A funcionalidade de <span className="font-bold text-[#ff4600]">configuração de mídia indoor</span> está sendo desenvolvida 
-                          e estará disponível em breve.
-                        </p>
-                        <div className="bg-white rounded-lg p-4 border border-gray-200 inline-block">
-                          <p className="text-sm text-gray-600 mb-2 font-medium">
-                            Esta aba permitirá:
-                          </p>
-                          <ul className="text-sm text-gray-700 text-left space-y-2">
-                            <li className="flex items-center gap-2">
-                              <span className="text-[#ff4600]">▸</span>
-                              Configurar pontos de mídia indoor
-                            </li>
-                            <li className="flex items-center gap-2">
-                              <span className="text-[#ff4600]">▸</span>
-                              Definir estratégias para shoppings e estabelecimentos
-                            </li>
-                            <li className="flex items-center gap-2">
-                              <span className="text-[#ff4600]">▸</span>
-                              Upload e gerenciamento de planos indoor
-                            </li>
-                          </ul>
-                        </div>
-                      </div>
-                      <div className="pt-6 border-t border-gray-300">
-                        <p className="text-sm text-gray-600 font-medium">
-                          Continue seu roteiro configurando as <span className="font-bold">vias públicas na Aba 4</span>
-                        </p>
-                      </div>
-                    </div>
+                  <ConfigurarIndoor
+                    planoMidiaGrupo_pk={planoMidiaGrupo_pk}
+                    cidadesSalvas={cidadesSalvas}
+                    quantidadeSemanas={quantidadeSemanas}
+                    onVoltarAba4={() => {
+                      setAba5Preenchida(true);
+                      setAbaAtiva(4);
+                    }}
+                  />
+
+                  {/* Botão voltar para Aba 4 */}
+                  <div className="mt-6 pt-4 border-t border-gray-200">
+                    <button
+                      type="button"
+                      onClick={() => setAbaAtiva(4)}
+                      className="text-sm text-gray-500 hover:text-[#ff4600] underline"
+                    >
+                      ← Voltar para Vias Públicas
+                    </button>
                   </div>
                 </>
               )}
@@ -4807,18 +4630,18 @@ export const CriarRoteiro: React.FC = () => {
                     {/* Seção TARGET */}
                     {tipoVisualizacao === 'geral' && (
                       <div>
-                        <h4 className="text-lg font-bold text-blue-600 mb-4">TARGET</h4>
+                        <h4 className="text-sm font-semibold text-[#3a3a3a] mb-3">Target</h4>
                         {dadosTarget.length > 0 ? (
                             <div className="overflow-x-auto">
-                              <table className="w-full border-collapse border border-gray-300">
+                              <table className="w-full border-collapse border border-gray-200">
                                 <thead>
-                                  <tr className="bg-blue-50">
-                                    <th className="border border-gray-300 px-4 py-2 text-left font-medium text-blue-700">Praça</th>
-                                    <th className="border border-gray-300 px-4 py-2 text-right font-medium text-blue-700">Impactos</th>
-                                    <th className="border border-gray-300 px-4 py-2 text-right font-medium text-blue-700">Cobertura (pessoas)</th>
-                                    <th className="border border-gray-300 px-4 py-2 text-right font-medium text-blue-700">Cobertura (%)</th>
-                                    <th className="border border-gray-300 px-4 py-2 text-right font-medium text-blue-700">Frequência</th>
-                                    <th className="border border-gray-300 px-4 py-2 text-right font-medium text-blue-700">GRP</th>
+                                  <tr className="bg-gray-50">
+                                    <th className="border border-gray-200 px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">Praça</th>
+                                    <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Impactos</th>
+                                    <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Cobertura (pessoas)</th>
+                                    <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Cobertura (%)</th>
+                                    <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Frequência</th>
+                                    <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">GRP</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -4846,23 +4669,23 @@ export const CriarRoteiro: React.FC = () => {
                                   ))}
                                   {/* Linha de totais */}
                                   {totaisTarget && (
-                                    <tr className="bg-blue-100 font-bold">
-                                      <td className="border border-gray-300 px-4 py-2 text-blue-800">
-                                        TOTAL
+                                    <tr className="bg-gray-50 font-semibold">
+                                      <td className="border border-gray-200 px-4 py-2 text-[#3a3a3a]">
+                                        Total
                                       </td>
-                                      <td className="border border-gray-300 px-4 py-2 text-right text-blue-800">
+                                      <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">
                                         {Math.round(totaisTarget.impactosTotal_vl || 0).toLocaleString('pt-BR')}
                                       </td>
-                                      <td className="border border-gray-300 px-4 py-2 text-right text-blue-800">
+                                      <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">
                                         {Math.round(totaisTarget.coberturaPessoasTotal_vl || 0).toLocaleString('pt-BR')}
                                       </td>
-                                      <td className="border border-gray-300 px-4 py-2 text-right text-blue-800">
+                                      <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">
                                         {(totaisTarget.coberturaProp_vl || 0).toFixed(1)}
                                       </td>
-                                      <td className="border border-gray-300 px-4 py-2 text-right text-blue-800">
+                                      <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">
                                         {(totaisTarget.frequencia_vl || 0).toFixed(1)}
                                       </td>
-                                      <td className="border border-gray-300 px-4 py-2 text-right text-blue-800">
+                                      <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">
                                         {(totaisTarget.grp_vl || 0).toFixed(3)}
                                       </td>
                                     </tr>

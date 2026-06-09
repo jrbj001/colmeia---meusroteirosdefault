@@ -66,6 +66,10 @@
     { "source": "/api/matrix-data-row-query", "destination": "/api/reports?action=matrix-data-row" },
     { "source": "/api/grupo-sub-distinct", "destination": "/api/reports?action=grupo-sub-distinct" },
 
+    { "source": "/api/indoor-dims",       "destination": "/api/indoor?action=dims" },
+    { "source": "/api/indoor-salvar",     "destination": "/api/indoor?action=salvar" },
+    { "source": "/api/indoor-processar",  "destination": "/api/indoor?action=processar" },
+
     { "source": "/api/banco-ativos-dashboard",        "destination": "/api/banco-ativos?action=dashboard" },
     { "source": "/banco-ativos-dashboard",             "destination": "/api/banco-ativos?action=dashboard" },
     { "source": "/api/home-indicadores-operacao",      "destination": "/api/banco-ativos?action=home-indicadores-operacao" },
