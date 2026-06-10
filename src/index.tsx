@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Auth0Provider } from "@auth0/auth0-react";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute/ProtectedRoute";
+import { OcorrenciaWidget } from "./components/OcorrenciaWidget/OcorrenciaWidget";
 import '../tailwind.css';
 import 'leaflet/dist/leaflet.css';
 
@@ -50,7 +51,12 @@ const PageLoader = () => (
 function AppGuard({ children }: { children: React.ReactNode }) {
   const { acessoBloqueado } = useAuth();
   if (acessoBloqueado) return <AcessoNegado />;
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <OcorrenciaWidget />
+    </>
+  );
 }
 
 // Redireciona exibidores para /exibidor/dashboard; demais usuários ficam no HomeDashboard
