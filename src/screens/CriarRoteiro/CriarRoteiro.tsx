@@ -2604,6 +2604,11 @@ export const CriarRoteiro: React.FC = () => {
   // Função para salvar Aba 1 - Criar Plano Mídia Grupo
   const salvarAba1 = async () => {
     // Validações
+    if (!tipoRoteiro || (tipoRoteiro !== 'completo' && tipoRoteiro !== 'simulado')) {
+      mostrarModal('Selecione o tipo de roteiro antes de continuar.', 'warning', 'Tipo de roteiro obrigatório');
+      return;
+    }
+
     if (!nomeRoteiro.trim()) {
       mostrarModal('Dê um nome para o seu roteiro antes de salvar.', 'warning', 'Nome obrigatório');
       return;
@@ -2890,6 +2895,9 @@ export const CriarRoteiro: React.FC = () => {
                 <label className="block text-base text-[#3a3a3a] mb-2">
                   Tipo de roteiro <span className="text-red-500">*</span>
                 </label>
+                {!tipoRoteiro && !modoVisualizacao && (
+                  <p className="text-xs text-amber-600 mb-1.5">Selecione o tipo para continuar com as demais etapas.</p>
+                )}
                 <div className="relative">
                   <select
                     value={tipoRoteiro}
@@ -2898,7 +2906,9 @@ export const CriarRoteiro: React.FC = () => {
                       setTipoRoteiro(v);
                       if (v === 'completo') setImportPlanoData(null);
                     }}
-                    className="w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal"
+                    className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${
+                      !tipoRoteiro && !modoVisualizacao ? 'border-amber-400' : 'border-[#d9d9d9]'
+                    }`}
                   >
                     <option value="">Selecione qual tipo do roteiro irá criar</option>
                     <option value="completo">Roteiro Completo</option>
