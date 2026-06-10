@@ -15,7 +15,11 @@ const SkeletonRow: React.FC<SkeletonRowProps> = ({ isEven }) => {
       <td className="px-6 py-4">
         <div className="h-4 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 rounded animate-shimmer bg-[length:200%_100%] w-24"></div>
       </td>
-      {/* Tipo de Roteiro / Status */}
+      {/* Status (negócio) */}
+      <td className="px-6 py-4">
+        <div className="h-6 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 rounded-full animate-shimmer bg-[length:200%_100%] w-20"></div>
+      </td>
+      {/* Processamento */}
       <td className="px-6 py-4">
         <div className="h-4 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 rounded animate-shimmer bg-[length:200%_100%] w-28"></div>
       </td>

@@ -7,6 +7,8 @@ const handlers = {
   'simulado': require('../handlers/roteiro-simulado'),
   'completo': require('../handlers/roteiro-completo'),
   'liberar-agencia': require('../handlers/roteiros-liberar-agencia'),
+  'status-list': require('../handlers/roteiros-status-list'),
+  'atualizar-status': require('../handlers/roteiros-atualizar-status'),
 };
 
 module.exports = async (req, res) => {

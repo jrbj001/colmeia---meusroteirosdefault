@@ -42,6 +42,17 @@ interface Roteiro {
   delete_bl: number;
   liberadoAgencia_bl?: number;
   agencia_st?: string;
+  // Campos de status de negócio (novos)
+  planoMidiaStatus_pk: number;
+  planoMidiaStatus_st: string;
+  statusHexColor_st: string;
+}
+
+interface StatusOpcao {
+  pk: number;
+  planoMidiaStatus_st: string;
+  hexColor_st: string;
+  ordem_vl: number;
 }
 
 interface PaginationInfo {
@@ -74,7 +85,8 @@ export const MeusRoteiros: React.FC = () => {
     roteiro: null
   });
   const [isDeleting, setIsDeleting] = useState(false);
-  
+  const [statusOpcoes, setStatusOpcoes] = useState<StatusOpcao[]>([]);
+
   // Aplicar debounce ao termo de busca (300ms)
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
@@ -160,6 +172,13 @@ export const MeusRoteiros: React.FC = () => {
     carregarDados(1);
   }, []);
 
+  // Carregar opções de status (apenas para usuários internos — mas o endpoint é aberto para leitura)
+  useEffect(() => {
+    api.get('/roteiros?action=status-list')
+      .then((res) => setStatusOpcoes(res.data.data || []))
+      .catch((err) => console.error('Erro ao carregar opções de status:', err));
+  }, []);
+
   // Effect para busca com debounce
   useEffect(() => {
     if (debouncedSearchTerm && debouncedSearchTerm.length >= 2) {
@@ -222,6 +241,39 @@ Email: suporte@be180.com.br`;
     } catch (err: any) {
       console.error('Erro ao liberar roteiro:', err);
       setErro(err.response?.data?.error || 'Erro ao alterar liberação');
+    }
+  };
+
+  const handleChangeStatus = async (
+    roteiro: Roteiro,
+    novoStatusPk: number,
+    novoStatusSt: string,
+    novoHex: string
+  ) => {
+    // Update otimista
+    setDados((prev) =>
+      prev.map((r) =>
+        r.planoMidiaGrupo_pk === roteiro.planoMidiaGrupo_pk
+          ? { ...r, planoMidiaStatus_pk: novoStatusPk, planoMidiaStatus_st: novoStatusSt, statusHexColor_st: novoHex }
+          : r
+      )
+    );
+    try {
+      await api.put('/roteiros?action=atualizar-status', {
+        planoMidiaGrupo_pk: roteiro.planoMidiaGrupo_pk,
+        planoMidiaStatus_pk: novoStatusPk,
+      });
+    } catch (err: any) {
+      console.error('Erro ao atualizar status:', err);
+      setErro(err.response?.data?.error || 'Erro ao atualizar status do roteiro');
+      // Reverter update otimista
+      setDados((prev) =>
+        prev.map((r) =>
+          r.planoMidiaGrupo_pk === roteiro.planoMidiaGrupo_pk
+            ? { ...r, planoMidiaStatus_pk: roteiro.planoMidiaStatus_pk, planoMidiaStatus_st: roteiro.planoMidiaStatus_st, statusHexColor_st: roteiro.statusHexColor_st }
+            : r
+        )
+      );
     }
   };
 
@@ -364,11 +416,16 @@ Email: suporte@be180.com.br`;
                       Data de criação
                     </th>
                     <th
+                      className="text-white text-xs font-bold uppercase text-left px-6 py-2 tracking-wider font-sans"
+                    >
+                      Status
+                    </th>
+                    <th
                       className="text-white text-xs font-bold uppercase text-left px-6 py-2 tracking-wider font-sans cursor-pointer hover:text-[#FF9800] transition-colors duration-200"
                       tabIndex={0}
                       role="button"
                     >
-                      Status do roteiro
+                      Processamento
                     </th>
                     <th
                       className="text-white text-xs font-bold uppercase text-left px-6 py-2 tracking-wider font-sans cursor-pointer hover:text-[#FF9800] transition-colors duration-200"
@@ -390,11 +447,11 @@ Email: suporte@be180.com.br`;
                     <TableSkeleton />
                   ) : erro ? (
                     <tr>
-                      <td colSpan={isAgencia ? 5 : 6} className="text-center py-4 text-red-500">{erro}</td>
-                    </tr>
+                    <td colSpan={isAgencia ? 6 : 7} className="text-center py-4 text-red-500">{erro}</td>
+                  </tr>
                   ) : dados.length === 0 ? (
                     <tr>
-                      <td colSpan={isAgencia ? 5 : 6} className="text-center py-4">
+                      <td colSpan={isAgencia ? 6 : 7} className="text-center py-4">
                         {isSearching ? "Nenhum roteiro encontrado com esse termo" : "Nenhum roteiro encontrado"}
                       </td>
                     </tr>
@@ -406,6 +463,49 @@ Email: suporte@be180.com.br`;
                       >
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans max-w-xs truncate">{item.planoMidiaGrupo_st}</td>
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{formatarData(item.date_dh)}</td>
+
+                        {/* Coluna STATUS — badge + dropdown (só interno) */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {(() => {
+                            const hex = item.statusHexColor_st || '#6b7280';
+                            const label = item.planoMidiaStatus_st || 'Teste';
+                            const badge = (
+                              <span
+                                style={{ color: hex, backgroundColor: `${hex}1A` }}
+                                className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap"
+                              >
+                                <span style={{ backgroundColor: hex }} className="w-1.5 h-1.5 rounded-full flex-shrink-0" />
+                                {label}
+                              </span>
+                            );
+
+                            if (isAgencia) return badge;
+
+                            // Interno: select estilizado + badge de preview
+                            return (
+                              <select
+                                value={item.planoMidiaStatus_pk || ''}
+                                onChange={(e) => {
+                                  const pk = parseInt(e.target.value, 10);
+                                  const opt = statusOpcoes.find((s) => s.pk === pk);
+                                  if (opt) handleChangeStatus(item, pk, opt.planoMidiaStatus_st, opt.hexColor_st);
+                                }}
+                                style={{ borderColor: hex, color: hex }}
+                                className="text-xs font-semibold rounded-full px-2.5 py-1 bg-white border-2 focus:outline-none focus:ring-1 cursor-pointer appearance-none pr-5"
+                                title="Alterar status do roteiro"
+                              >
+                                {statusOpcoes.length === 0 && (
+                                  <option value={item.planoMidiaStatus_pk}>{label}</option>
+                                )}
+                                {statusOpcoes.map((s) => (
+                                  <option key={s.pk} value={s.pk}>{s.planoMidiaStatus_st}</option>
+                                ))}
+                              </select>
+                            );
+                          })()}
+                        </td>
+
+                        {/* Coluna PROCESSAMENTO (antes "Status do roteiro") */}
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">
                           {item.inProgress_bl === 1 ? (
                             <div className="flex items-center gap-2">
