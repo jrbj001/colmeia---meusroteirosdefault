@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { LoteAnalise } from '../types';
 import { StatusBadge } from './StatusBadge';
 import { InventarioCompleto } from './InventarioCompleto';
-import api from '../../../api';
+import api from '../../../config/axios';
 
 const fmt = (n: number | null | undefined) => {
   if (n === null || n === undefined) return '—';
