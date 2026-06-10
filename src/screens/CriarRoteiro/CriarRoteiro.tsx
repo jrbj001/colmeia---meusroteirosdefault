@@ -92,6 +92,8 @@ export const CriarRoteiro: React.FC = () => {
   const [aba3Preenchida, setAba3Preenchida] = useState(false);
   const [aba4Preenchida, setAba4Preenchida] = useState(false);
   const [aba5Preenchida, setAba5Preenchida] = useState(false);
+  // Lazy-mount: renderiza Aba 5 na 1ª visita e nunca desmonta (preserva state indoor)
+  const [aba5JaAberta, setAba5JaAberta] = useState(false);
   
   // Estados para aba 6 - Resultados
   const [dadosResultados, setDadosResultados] = useState<any[]>([]);
@@ -4428,8 +4430,10 @@ export const CriarRoteiro: React.FC = () => {
               )}
 
               {/* Aba 5 - Definir indoor */}
-              {abaAtiva === 5 && (
-                <>
+              {/* Aba 5 — lazy mount: renderiza na 1ª visita e nunca desmonta */}
+              {abaAtiva === 5 && !aba5JaAberta && (() => { setAba5JaAberta(true); return null; })()}
+              {aba5JaAberta && (
+                <div style={{ display: abaAtiva === 5 ? 'block' : 'none' }}>
                   <div className="mb-6">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
                       Definir indoor
@@ -4450,7 +4454,6 @@ export const CriarRoteiro: React.FC = () => {
                     }}
                   />
 
-                  {/* Botão voltar para Aba 4 */}
                   <div className="mt-6 pt-4 border-t border-gray-200">
                     <button
                       type="button"
@@ -4460,7 +4463,7 @@ export const CriarRoteiro: React.FC = () => {
                       ← Voltar para Vias Públicas
                     </button>
                   </div>
-                </>
+                </div>
               )}
 
               {/* Aba 6 - Resultados */}

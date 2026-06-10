@@ -29,9 +29,9 @@ type StepStatus = 'pending' | 'processing' | 'completed' | 'error';
 interface Step { id: string; label: string; status: StepStatus; detail?: string }
 
 const mkSteps = (praca: string, count: number): Step[] => [
-  { id: 'validar', label: 'Validando configuração',      status: 'pending', detail: `${count} ambiente(s) · ${praca}` },
-  { id: 'gravar',  label: 'Gravando no banco de dados',  status: 'pending', detail: 'planoMidiaIndoor_ft' },
-  { id: 'ok',      label: 'Configuração salva',          status: 'pending', detail: '' },
+  { id: 'validar', label: 'Validando configuração',     status: 'pending', detail: `${count} ambiente(s) · ${praca}` },
+  { id: 'gravar',  label: 'Gravando no banco de dados', status: 'pending', detail: 'planoMidiaIndoor_ft' },
+  { id: 'ok',      label: 'Configuração salva',         status: 'pending', detail: '' },
 ];
 
 export default function ConfigurarIndoor({
@@ -47,7 +47,11 @@ export default function ConfigurarIndoor({
   const semanas = Math.max(1, Math.min(12, quantidadeSemanas));
   const pracasDisponiveis = cidadesSalvas.map((c) => c.nome_cidade);
 
-  const [pracaSelecionada, setPracaSelecionada] = useState<string>(pracasDisponiveis[0] ?? '');
+  // Índice da praça ativa no wizard (0-based)
+  const [stepIdx, setStepIdx] = useState(0);
+  const pracaSelecionada = pracasDisponiveis[stepIdx] ?? '';
+  const isUltimaPraca = stepIdx === pracasDisponiveis.length - 1;
+  const isEtapaConclusao = stepIdx >= pracasDisponiveis.length;
 
   const [linhasPorPraca, setLinhasPorPraca] = useState<Record<string, IndoorLinha[]>>({});
   const linhas: IndoorLinha[] = linhasPorPraca[pracaSelecionada] ?? [emptyIndoorLinha()];
@@ -62,7 +66,7 @@ export default function ConfigurarIndoor({
   const [pracasSalvas, setPracasSalvas] = useState<PracaSalva[]>([]);
   const [erro, setErro] = useState('');
 
-  // Apple loader state
+  // Apple loader
   const [showLoader, setShowLoader] = useState(false);
   const [loaderSteps, setLoaderSteps] = useState<Step[]>([]);
   const [loaderProgress, setLoaderProgress] = useState(0);
@@ -81,28 +85,25 @@ export default function ConfigurarIndoor({
   const setStep = (id: string, status: StepStatus) =>
     setLoaderSteps((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
 
-  const handleSalvar = async () => {
+  const handleSalvarEAvancar = async () => {
     if (!planoMidiaGrupo_pk) { setErro('Roteiro ainda não foi salvo. Finalize as etapas anteriores primeiro.'); return; }
     if (!pracaSelecionada) { setErro('Selecione uma praça.'); return; }
 
     const linhasValidas = linhas.filter((l) => l.ambiente.trim());
     if (linhasValidas.length === 0) { setErro('Adicione ao menos um ambiente antes de salvar.'); return; }
 
-    // ── Inicia Apple loader ──
     const steps = mkSteps(pracaSelecionada, linhasValidas.length);
     setLoaderSteps(steps);
     setLoaderProgress(0);
     setShowLoader(true);
     setErro('');
 
-    // Etapa 1 — validação (instantânea, só visual)
     setStep('validar', 'processing');
     setLoaderProgress(10);
     await new Promise((r) => setTimeout(r, 400));
     setStep('validar', 'completed');
     setLoaderProgress(35);
 
-    // Etapa 2 — gravar
     setStep('gravar', 'processing');
     setLoaderProgress(50);
 
@@ -135,7 +136,6 @@ export default function ConfigurarIndoor({
         return;
       }
 
-      // Etapa 3 — concluído
       setStep('gravar', 'completed');
       setLoaderProgress(80);
       setStep('ok', 'processing');
@@ -143,19 +143,16 @@ export default function ConfigurarIndoor({
       setStep('ok', 'completed');
       setLoaderProgress(100);
       await new Promise((r) => setTimeout(r, 600));
-
       setShowLoader(false);
 
-      const novasSalvas = [
-        ...pracasSalvas.filter((p) => p.praca !== pracaSelecionada),
+      setPracasSalvas((prev) => [
+        ...prev.filter((p) => p.praca !== pracaSelecionada),
         { praca: pracaSelecionada, linhasCount: linhasValidas.length },
-      ];
-      setPracasSalvas(novasSalvas);
+      ]);
 
-      const proxima = pracasDisponiveis.find(
-        (p) => p !== pracaSelecionada && !novasSalvas.some((ps) => ps.praca === p)
-      );
-      if (proxima) setPracaSelecionada(proxima);
+      // Avança para próxima praça ou etapa de conclusão
+      setStepIdx((i) => i + 1);
+      setErro('');
 
     } catch (e: any) {
       setStep('gravar', 'error');
@@ -166,7 +163,17 @@ export default function ConfigurarIndoor({
     }
   };
 
-  // ── Loading inicial de dimensões (estilo Apple — sem overlay, inline elegante) ──
+  const handlePular = () => {
+    setErro('');
+    setStepIdx((i) => i + 1);
+  };
+
+  const handleVoltar = () => {
+    setErro('');
+    setStepIdx((i) => Math.max(0, i - 1));
+  };
+
+  // ── Loading inicial ──
   if (loadingDims) {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-6">
@@ -192,15 +199,122 @@ export default function ConfigurarIndoor({
 
   if (!dims) return null;
 
-  const todasSalvas =
-    pracasDisponiveis.length > 0 &&
-    pracasDisponiveis.every((p) => pracasSalvas.some((ps) => ps.praca === p));
+  // ── Stepper ──
+  const StepperHeader = () => (
+    <div className="flex items-center gap-0 mb-6">
+      {pracasDisponiveis.map((p, i) => {
+        const salva  = pracasSalvas.some((ps) => ps.praca === p);
+        const ativa  = i === stepIdx;
+        const futura = i > stepIdx;
+        return (
+          <div key={p} className="flex items-center">
+            <button
+              type="button"
+              onClick={() => { setStepIdx(i); setErro(''); }}
+              disabled={futura && !salva}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                salva
+                  ? ativa
+                    ? 'bg-[#ff4600] text-white'
+                    : 'text-[#ff4600] hover:bg-orange-50'
+                  : ativa
+                  ? 'bg-[#3a3a3a] text-white'
+                  : 'text-gray-300 cursor-not-allowed'
+              }`}
+            >
+              {salva && !ativa ? (
+                <span className="w-4 h-4 rounded-full bg-[#ff4600] text-white flex items-center justify-center text-[9px]">✓</span>
+              ) : (
+                <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center text-[9px] font-bold ${
+                  ativa ? 'border-current bg-current text-white' : 'border-current'
+                }`}>
+                  {ativa ? <span className="text-white">{i + 1}</span> : i + 1}
+                </span>
+              )}
+              {p}
+            </button>
+            {i < pracasDisponiveis.length - 1 && (
+              <span className="mx-1 text-gray-200 text-sm">›</span>
+            )}
+          </div>
+        );
+      })}
+      {/* Etapa conclusão */}
+      <span className="mx-1 text-gray-200 text-sm">›</span>
+      <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
+        isEtapaConclusao ? 'bg-[#3a3a3a] text-white' : 'text-gray-300'
+      }`}>
+        Concluir
+      </span>
+    </div>
+  );
 
-  const estaSalva = pracasSalvas.some((ps) => ps.praca === pracaSelecionada);
+  // ── Etapa de conclusão ──
+  if (isEtapaConclusao) {
+    return (
+      <>
+        <AppleSaveLoader isOpen={showLoader} steps={loaderSteps} currentProgress={loaderProgress} title="Salvando configuração indoor" />
+        <div className="space-y-5">
+          <StepperHeader />
+          <div className="border border-gray-200 rounded-lg bg-white p-8 flex flex-col items-center gap-5 text-center">
+            <div className="w-12 h-12 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center">
+              <svg className="w-6 h-6 text-[#ff4600]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[#3a3a3a]">
+                {pracasSalvas.length === pracasDisponiveis.length
+                  ? 'Todas as praças configuradas'
+                  : `${pracasSalvas.length} de ${pracasDisponiveis.length} praça(s) configurada(s)`}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                A finalização do roteiro acontece na Aba 4. Clique abaixo para continuar.
+              </p>
+            </div>
+
+            {/* Resumo das praças salvas */}
+            {pracasSalvas.length > 0 && (
+              <div className="flex flex-wrap justify-center gap-2">
+                {pracasSalvas.map((ps) => (
+                  <span key={ps.praca} className="inline-flex items-center gap-1 text-xs bg-gray-50 border border-gray-200 rounded-full px-3 py-1 text-[#3a3a3a]">
+                    <span className="text-[#ff4600]">✓</span> {ps.praca} · {ps.linhasCount} amb.
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="flex flex-col items-center gap-2 w-full pt-2">
+              <button
+                type="button"
+                onClick={onVoltarAba4}
+                className="w-full max-w-xs rounded-lg bg-[#ff4600] px-6 py-2.5 text-sm font-semibold text-white hover:brightness-95 transition-all"
+              >
+                Voltar para Aba 4 e finalizar roteiro
+              </button>
+              {pracasSalvas.length < pracasDisponiveis.length && (
+                <button
+                  type="button"
+                  onClick={() => setStepIdx(pracasDisponiveis.findIndex((p) => !pracasSalvas.some((ps) => ps.praca === p)))}
+                  className="text-xs text-gray-400 hover:text-[#3a3a3a]"
+                >
+                  Voltar e configurar praças pendentes
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // ── Etapa de configuração de praça ──
+  const labelBotao = isUltimaPraca
+    ? 'Salvar e concluir'
+    : `Salvar e ir para ${pracasDisponiveis[stepIdx + 1] ?? 'próxima'} →`;
 
   return (
     <>
-      {/* ── Apple Save Loader (overlay) ── */}
       <AppleSaveLoader
         isOpen={showLoader}
         steps={loaderSteps}
@@ -209,62 +323,18 @@ export default function ConfigurarIndoor({
       />
 
       <div className="space-y-5">
+        <StepperHeader />
 
-        {/* ── Barra de status das praças ── */}
-        {pracasSalvas.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 px-1">
-            <span className="text-xs text-gray-400">Praças salvas:</span>
-            {pracasSalvas.map((ps) => (
-              <button
-                key={ps.praca}
-                type="button"
-                onClick={() => { setPracaSelecionada(ps.praca); setErro(''); }}
-                className={`inline-flex items-center gap-1 text-xs rounded-full px-3 py-0.5 border transition-colors ${
-                  ps.praca === pracaSelecionada
-                    ? 'bg-green-500 text-white border-green-500'
-                    : 'bg-white text-green-700 border-green-300 hover:border-green-500'
-                }`}
-              >
-                ✓ {ps.praca} · {ps.linhasCount} amb.
-              </button>
-            ))}
-            {!todasSalvas && (
-              <span className="text-xs text-gray-400">
-                {pracasDisponiveis.length - pracasSalvas.length} praça(s) pendente(s)
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* ── Área de edição ── */}
+        {/* Área de edição */}
         <div className="border border-gray-200 rounded-lg bg-white">
 
-          {/* Cabeçalho */}
+          {/* Cabeçalho da praça */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <div className="flex items-center gap-3">
-              {pracasDisponiveis.length > 1 ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Praça</span>
-                  <select
-                    className="rounded border border-gray-200 px-2 py-1 text-sm text-[#3a3a3a] focus:border-[#ff4600] focus:outline-none"
-                    value={pracaSelecionada}
-                    onChange={(e) => { setPracaSelecionada(e.target.value); setErro(''); }}
-                  >
-                    {pracasDisponiveis.map((p) => (
-                      <option key={p} value={p}>
-                        {p}{pracasSalvas.some((ps) => ps.praca === p) ? ' ✓' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Praça</span>
-                  <span className="text-sm font-medium text-[#3a3a3a]">{pracaSelecionada || '—'}</span>
-                </div>
-              )}
-              {estaSalva && (
-                <span className="text-[11px] text-green-600 font-medium">✓ salvo</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Praça</span>
+              <span className="text-sm font-semibold text-[#3a3a3a]">{pracaSelecionada}</span>
+              {pracasSalvas.some((ps) => ps.praca === pracaSelecionada) && (
+                <span className="text-[11px] text-[#ff4600] font-medium">✓ salvo</span>
               )}
             </div>
             <span className="text-[11px] text-gray-400">W1–W{semanas}</span>
@@ -285,48 +355,49 @@ export default function ConfigurarIndoor({
             ))}
           </div>
 
-          {/* Rodapé com ações */}
+          {/* Rodapé da card */}
           <div className="flex items-center gap-3 px-4 py-3 border-t border-gray-100 bg-gray-50/50 flex-wrap">
             <button
               type="button"
               onClick={() => setLinhas((ls) => [...ls, emptyIndoorLinha()])}
-              className="text-sm text-gray-500 hover:text-[#ff4600] flex items-center gap-1"
+              className="text-sm text-gray-400 hover:text-[#ff4600] flex items-center gap-1"
             >
               <span className="text-base leading-none">+</span> Ambiente
             </button>
-
             <div className="flex-1" />
-
             {erro && <p className="text-xs text-red-500">{erro}</p>}
-
-            <button
-              type="button"
-              onClick={handleSalvar}
-              disabled={!pracaSelecionada}
-              className="rounded bg-[#ff4600] px-4 py-1.5 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {estaSalva ? 'Salvar alterações' : 'Salvar'}
-            </button>
           </div>
         </div>
 
-        {/* ── Rodapé de conclusão ── */}
-        {pracasSalvas.length > 0 && (
-          <div className="flex items-center justify-between gap-4 px-1 flex-wrap">
-            <p className="text-xs text-gray-500">
-              {todasSalvas
-                ? 'Todas as praças configuradas. Volte para a Aba 4 para rodar o modelo.'
-                : `${pracasSalvas.length}/${pracasDisponiveis.length} praça(s) salva(s). Configure as demais ou finalize na Aba 4.`}
-            </p>
+        {/* Navegação wizard */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            {stepIdx > 0 && (
+              <button
+                type="button"
+                onClick={handleVoltar}
+                className="text-xs text-gray-400 hover:text-[#3a3a3a]"
+              >
+                ← {pracasDisponiveis[stepIdx - 1]}
+              </button>
+            )}
             <button
               type="button"
-              onClick={onVoltarAba4}
-              className="rounded bg-[#ff4600] text-white px-5 py-2 text-sm font-semibold hover:brightness-95 whitespace-nowrap"
+              onClick={handlePular}
+              className="text-xs text-gray-400 hover:text-[#3a3a3a]"
             >
-              Concluir e voltar para Aba 4
+              Pular praça
             </button>
           </div>
-        )}
+
+          <button
+            type="button"
+            onClick={handleSalvarEAvancar}
+            className="rounded-lg bg-[#ff4600] px-5 py-2 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {labelBotao}
+          </button>
+        </div>
       </div>
     </>
   );
