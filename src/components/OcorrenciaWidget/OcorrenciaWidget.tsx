@@ -91,7 +91,7 @@ export function OcorrenciaWidget() {
       <button
         onClick={() => setAberto((v) => !v)}
         aria-label="Registrar ocorrência"
-        className={`fixed bottom-6 right-6 z-50 w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shadow-md transition-all duration-150 ${
+        className={`fixed bottom-6 right-6 z-50 w-9 h-9 rounded-full flex items-center justify-center shadow-md transition-all duration-150 ${
           aberto
             ? 'bg-[#3a3a3a] text-white shadow-lg'
             : 'bg-white border border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600 hover:shadow-lg'
@@ -102,7 +102,9 @@ export function OcorrenciaWidget() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         ) : (
-          '?'
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 21V4m0 0l8 3 8-3v11l-8 3-8-3V4z" />
+          </svg>
         )}
       </button>
 
