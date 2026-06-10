@@ -92,6 +92,8 @@ export const CriarRoteiro: React.FC = () => {
   const [aba3Preenchida, setAba3Preenchida] = useState(false);
   const [aba4Preenchida, setAba4Preenchida] = useState(false);
   const [aba5Preenchida, setAba5Preenchida] = useState(false);
+  // Lazy-mount: Set com abas já visitadas — nunca desmontamos após a 1ª visita
+  const [abasAbertas, setAbasAbertas] = useState<Set<number>>(new Set([1]));
   
   // Estados para aba 6 - Resultados
   const [dadosResultados, setDadosResultados] = useState<any[]>([]);
@@ -156,6 +158,14 @@ export const CriarRoteiro: React.FC = () => {
   const [aguardandoProcessamento, setAguardandoProcessamento] = useState(false);
   const [planoMidiaGrupo_pk, setPlanoMidiaGrupo_pk] = useState<number | null>(null);
 
+  // Carência após processamento para o arquivo SharePoint ser gerado
+  // O Databricks popula o banco ANTES de gravar no SharePoint, então
+  // precisamos de um delay antes de liberar o download.
+  const SHAREPOINT_CARENCIA_SEGUNDOS = 90; // ajuste conforme tempo real observado
+  const [sharepointContagemRegressiva, setSharepointContagemRegressiva] = useState(0);
+  const sharepointTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const sharepointArquivoPronto = sharepointContagemRegressiva === 0;
+
   // Hook de polling para verificar status do processamento
   // ✅ Usa dataCriacao do banco como timestamp - sempre consistente!
   const { isProcessing, tempoDecorrido } = useRoteiroStatusPolling({
@@ -167,6 +177,8 @@ export const CriarRoteiro: React.FC = () => {
       if (planoMidiaGrupo_pk) {
         carregarDadosResultados(planoMidiaGrupo_pk);
       }
+      // Iniciar contagem regressiva para liberar o download do SharePoint
+      setSharepointContagemRegressiva(SHAREPOINT_CARENCIA_SEGUNDOS);
     },
     interval: 3000 // Verificar a cada 3 segundos
   });
@@ -177,6 +189,17 @@ export const CriarRoteiro: React.FC = () => {
     console.log('📍 aguardandoProcessamento:', aguardandoProcessamento);
     console.log('📍 planoMidiaGrupo_pk:', planoMidiaGrupo_pk);
   }, [tempoDecorrido, aguardandoProcessamento, planoMidiaGrupo_pk]);
+
+  // Contagem regressiva do SharePoint: decrementa 1s até chegar a 0 (arquivo pronto)
+  useEffect(() => {
+    if (sharepointContagemRegressiva <= 0) return;
+    sharepointTimerRef.current = setTimeout(() => {
+      setSharepointContagemRegressiva((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => {
+      if (sharepointTimerRef.current) clearTimeout(sharepointTimerRef.current);
+    };
+  }, [sharepointContagemRegressiva]);
 
   // Detectar modo visualização e carregar dados
   useEffect(() => {
@@ -239,6 +262,14 @@ export const CriarRoteiro: React.FC = () => {
 
   // useEffect removido - não é mais necessário forçar re-render
   // O estado unificado carregandoDadosGerais é gerenciado pela função carregarDadosResultados
+
+  // Registrar aba visitada para lazy-mount (nunca desmonta após 1ª visita)
+  useEffect(() => {
+    setAbasAbertas((prev) => {
+      if (prev.has(abaAtiva)) return prev;
+      return new Set([...prev, abaAtiva]);
+    });
+  }, [abaAtiva]);
 
   // Verificar status e carregar dados ao entrar na Aba 6
   useEffect(() => {
@@ -306,6 +337,8 @@ export const CriarRoteiro: React.FC = () => {
     tempoInicio: null as Date | null,
     ativo: false
   });
+  const [gerandoTabelaSimulado, setGerandoTabelaSimulado] = useState(false);
+  const [gerandoPracaAtual, setGerandoPracaAtual] = useState('');
 
   // Estados para controle específico do Banco de Ativos
   const [bancoAtivosStatus, setBancoAtivosStatus] = useState({
@@ -532,6 +565,9 @@ export const CriarRoteiro: React.FC = () => {
         alert('Configure as praças na Aba 3 primeiro');
         return;
       }
+
+      setGerandoTabelaSimulado(true);
+      setGerandoPracaAtual('');
       
       // Objeto para armazenar tabelas por praça: id_cidade -> array de linhas
       const tabelasPorPraca: Record<string, any[]> = {};
@@ -539,6 +575,7 @@ export const CriarRoteiro: React.FC = () => {
       // Gerar uma tabela separada para cada praça configurada na Aba 3
       for (const praca of cidadesSalvas) {
         try {
+          setGerandoPracaAtual(praca.nome_cidade);
           const estruturaTabela: any[] = [];
           
           const inventarioResponse = await axios.get(`/inventario-cidade?cidade=${encodeURIComponent(praca.nome_cidade)}`);
@@ -604,6 +641,9 @@ export const CriarRoteiro: React.FC = () => {
     } catch (error) {
       console.error('❌ Erro ao gerar tabelas simuladas:', error);
       alert('Erro ao gerar estrutura das tabelas. Tente novamente.');
+    } finally {
+      setGerandoTabelaSimulado(false);
+      setGerandoPracaAtual('');
     }
   };
 
@@ -2594,6 +2634,11 @@ export const CriarRoteiro: React.FC = () => {
   // Função para salvar Aba 1 - Criar Plano Mídia Grupo
   const salvarAba1 = async () => {
     // Validações
+    if (!tipoRoteiro || (tipoRoteiro !== 'completo' && tipoRoteiro !== 'simulado')) {
+      mostrarModal('Selecione o tipo de roteiro antes de continuar.', 'warning', 'Tipo de roteiro obrigatório');
+      return;
+    }
+
     if (!nomeRoteiro.trim()) {
       mostrarModal('Dê um nome para o seu roteiro antes de salvar.', 'warning', 'Nome obrigatório');
       return;
@@ -2658,8 +2703,9 @@ export const CriarRoteiro: React.FC = () => {
       if (response.data && response.data[0]?.new_pk) {
         const newPk = response.data[0].new_pk;
         setPlanoMidiaGrupo_pk(newPk);
-        setAba1Preenchida(true); // Marcar Aba 1 como preenchida
-        mostrarModal('Seu roteiro foi criado! Agora configure o público-alvo.', 'success', '✅ Roteiro Salvo!');
+        setAba1Preenchida(true);
+        setAbaAtiva(2); // Avança automaticamente para a próxima etapa
+        mostrarModal('Roteiro criado! Agora configure o público-alvo.', 'success', '✅ Etapa 1 concluída');
       } else {
         throw new Error('Resposta inválida do servidor');
       }
@@ -2709,12 +2755,12 @@ export const CriarRoteiro: React.FC = () => {
         salvo: true
       });
       
-      setAba2Preenchida(true); // Marcar Aba 2 como preenchida
-      
+      setAba2Preenchida(true);
+      setAbaAtiva(3); // Avança automaticamente para a próxima etapa
       mostrarModal(
-        `Público-alvo configurado e salvo na base: ${genero}, ${classe}, ${faixaEtaria}. Agora selecione as cidades do seu roteiro.`,
+        `Target salvo: ${genero}, ${classe}, ${faixaEtaria}. Agora selecione as cidades do seu roteiro.`,
         'success',
-        '✅ Target Salvo!'
+        '✅ Etapa 2 concluída'
       );
 
     } catch (error) {
@@ -2747,18 +2793,18 @@ export const CriarRoteiro: React.FC = () => {
       // Salvar as cidades selecionadas para controle de estado
       setCidadesSalvas([...cidadesSelecionadas]);
       
-      setAba3Preenchida(true); // Marcar Aba 3 como preenchida
-      
+      setAba3Preenchida(true);
+      setAbaAtiva(4); // Avança automaticamente para a próxima etapa
+
       // Simular um plano mídia PK temporário para ativar a Aba 4
       setPlanoMidia_pks([999999]); // PK temporário, será substituído na Aba 4
       
       const totalCidades = cidadesSelecionadas.length;
-      
       const cidadesNomes = cidadesSelecionadas.map(c => c.nome_cidade).join(', ');
       mostrarModal(
-        `${totalCidades} ${totalCidades === 1 ? 'cidade selecionada' : 'cidades selecionadas'}: ${cidadesNomes}. Agora faça o upload do arquivo Excel com os roteiros.`,
+        `${totalCidades} ${totalCidades === 1 ? 'cidade salva' : 'cidades salvas'}: ${cidadesNomes}. Agora faça o upload das mídias.`,
         'success',
-        '✅ Cidades Salvas!'
+        '✅ Etapa 3 concluída'
       );
 
     } catch (error) {
@@ -2879,6 +2925,9 @@ export const CriarRoteiro: React.FC = () => {
                 <label className="block text-base text-[#3a3a3a] mb-2">
                   Tipo de roteiro <span className="text-red-500">*</span>
                 </label>
+                {!tipoRoteiro && !modoVisualizacao && (
+                  <p className="text-xs text-amber-600 mb-1.5">Selecione o tipo para continuar com as demais etapas.</p>
+                )}
                 <div className="relative">
                   <select
                     value={tipoRoteiro}
@@ -2887,7 +2936,9 @@ export const CriarRoteiro: React.FC = () => {
                       setTipoRoteiro(v);
                       if (v === 'completo') setImportPlanoData(null);
                     }}
-                    className="w-full h-[50px] px-4 py-3 bg-white rounded-lg border border-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal"
+                    className={`w-full h-[50px] px-4 py-3 bg-white rounded-lg border focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none text-[#3a3a3a] leading-normal ${
+                      !tipoRoteiro && !modoVisualizacao ? 'border-amber-400' : 'border-[#d9d9d9]'
+                    }`}
                   >
                     <option value="">Selecione qual tipo do roteiro irá criar</option>
                     <option value="completo">Roteiro Completo</option>
@@ -2906,76 +2957,70 @@ export const CriarRoteiro: React.FC = () => {
             <div className="px-16 mb-8">
               <div className="flex items-center">
                 {/* Aba 01 - Nomear roteiro */}
-                <div 
+                <div
                   className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
-                    abaAtiva === 1 
-                      ? 'bg-white border-2 border-[#ff4600] rounded-lg' 
-                      : 'hover:bg-gray-50 rounded-lg'
+                    abaAtiva === 1 ? 'bg-white border-2 border-[#ff4600] rounded-lg' : 'hover:bg-gray-50 rounded-lg'
                   }`}
                   onClick={() => navegarParaAba(1)}
                 >
-                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 1 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>01</span>
-                  <span className={`font-medium ${abaAtiva === 1 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Nomear roteiro</span>
+                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 1 ? 'text-[#ff4600]' : aba1Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>01</span>
+                  <span className={`font-medium ${abaAtiva === 1 ? 'text-[#ff4600]' : aba1Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>Nomear roteiro</span>
+                  {aba1Preenchida && abaAtiva !== 1 && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
                   {abaAtiva === 1 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
-                
+
                 {/* Aba 02 - Configurar target */}
-                <div 
+                <div
                   className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
-                    abaAtiva === 2 
-                      ? 'bg-white border-2 border-[#ff4600] rounded-lg' 
-                      : 'hover:bg-gray-50 rounded-lg'
+                    abaAtiva === 2 ? 'bg-white border-2 border-[#ff4600] rounded-lg' : 'hover:bg-gray-50 rounded-lg'
                   }`}
                   onClick={() => navegarParaAba(2)}
                 >
-                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 2 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>02</span>
-                  <span className={`font-medium ${abaAtiva === 2 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Configurar target</span>
+                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 2 ? 'text-[#ff4600]' : aba2Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>02</span>
+                  <span className={`font-medium ${abaAtiva === 2 ? 'text-[#ff4600]' : aba2Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>Configurar target</span>
+                  {aba2Preenchida && abaAtiva !== 2 && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
                   {abaAtiva === 2 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
-                
+
                 {/* Aba 03 - Configurar praça */}
-                <div 
+                <div
                   className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
-                    abaAtiva === 3 
-                      ? 'bg-white border-2 border-[#ff4600] rounded-lg' 
-                      : 'hover:bg-gray-50 rounded-lg'
+                    abaAtiva === 3 ? 'bg-white border-2 border-[#ff4600] rounded-lg' : 'hover:bg-gray-50 rounded-lg'
                   }`}
                   onClick={() => navegarParaAba(3)}
                 >
-                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 3 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>03</span>
-                  <span className={`font-medium ${abaAtiva === 3 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Configurar praça</span>
+                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 3 ? 'text-[#ff4600]' : aba3Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>03</span>
+                  <span className={`font-medium ${abaAtiva === 3 ? 'text-[#ff4600]' : aba3Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>Configurar praça</span>
+                  {aba3Preenchida && abaAtiva !== 3 && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
                   {abaAtiva === 3 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
-                
-                <div 
+
+                {/* Aba 04 - Definir vias públicas */}
+                <div
                   className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
-                    abaAtiva === 4 
-                      ? 'bg-white border-2 border-[#ff4600] rounded-lg' 
-                      : 'hover:bg-gray-50 rounded-lg'
+                    abaAtiva === 4 ? 'bg-white border-2 border-[#ff4600] rounded-lg' : 'hover:bg-gray-50 rounded-lg'
                   }`}
                   onClick={() => navegarParaAba(4)}
                 >
-                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 4 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>04</span>
-                  <span className={`font-medium ${abaAtiva === 4 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Definir vias públicas</span>
+                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 4 ? 'text-[#ff4600]' : aba4Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>04</span>
+                  <span className={`font-medium ${abaAtiva === 4 ? 'text-[#ff4600]' : aba4Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>Definir vias públicas</span>
+                  {aba4Preenchida && abaAtiva !== 4 && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
                   {abaAtiva === 4 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
-                
-                <div 
+
+                {/* Aba 05 - Definir indoor */}
+                <div
                   className={`flex items-center px-4 py-2 mr-8 relative ${
-                    !aba3Preenchida
-                      ? 'cursor-not-allowed opacity-40'
-                      : 'cursor-pointer'
+                    !aba3Preenchida ? 'cursor-not-allowed' : 'cursor-pointer'
                   } ${
-                    abaAtiva === 5 
-                      ? 'bg-white border-2 border-[#ff4600] rounded-lg' 
-                      : aba3Preenchida ? 'hover:bg-gray-50 rounded-lg' : ''
+                    abaAtiva === 5 ? 'bg-white border-2 border-[#ff4600] rounded-lg' : aba3Preenchida ? 'hover:bg-gray-50 rounded-lg' : ''
                   }`}
                   onClick={() => navegarParaAba(5)}
                   title={!aba3Preenchida ? 'Configure as praças (Aba 3) antes de configurar indoor' : ''}
                 >
-                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 5 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>05</span>
-                  <span className={`font-medium ${abaAtiva === 5 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Definir indoor</span>
-                  {aba5Preenchida && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
+                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 5 ? 'text-[#ff4600]' : aba5Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>05</span>
+                  <span className={`font-medium ${abaAtiva === 5 ? 'text-[#ff4600]' : aba5Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>Definir indoor</span>
+                  {aba5Preenchida && abaAtiva !== 5 && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
                   {abaAtiva === 5 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
                 
@@ -2988,8 +3033,8 @@ export const CriarRoteiro: React.FC = () => {
                     }`}
                     onClick={() => navegarParaAba(6)}
                   >
-                    <span className={`font-bold text-sm mr-2 ${abaAtiva === 6 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>06</span>
-                    <span className={`font-medium ${abaAtiva === 6 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Resultados</span>
+                    <span className={`font-bold text-sm mr-2 ${abaAtiva === 6 ? 'text-[#ff4600]' : aba4Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>06</span>
+                    <span className={`font-medium ${abaAtiva === 6 ? 'text-[#ff4600]' : aba4Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>Resultados</span>
                     {abaAtiva === 6 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                   </div>
                 )}
@@ -2999,8 +3044,8 @@ export const CriarRoteiro: React.FC = () => {
             {/* Conteúdo das Abas */}
             <div className="px-16 pb-20">
               {/* Aba 1 - Nomear roteiro */}
-              {abaAtiva === 1 && (
-                <>
+              {abasAbertas.has(1) && (
+                <div style={{ display: abaAtiva === 1 ? 'block' : 'none' }}>
                   <div className="mb-8">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
                       {modoVisualizacao ? 'Dados do roteiro' : 'Cadastre os dados do seu novo roteiro'}
@@ -3207,12 +3252,12 @@ export const CriarRoteiro: React.FC = () => {
                       </div>
                     )}
                   </form>
-                </>
+                </div>
               )}
 
               {/* Aba 2 - Configurar target */}
-              {abaAtiva === 2 && (
-                <>
+              {abasAbertas.has(2) && (
+                <div style={{ display: abaAtiva === 2 ? 'block' : 'none' }}>
                   <div className="mb-8">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
                       {modoVisualizacao ? 'Target do roteiro' : 'Defina o target que fará parte do seu roteiro'}
@@ -3340,12 +3385,12 @@ export const CriarRoteiro: React.FC = () => {
                       </div>
                     )}
                   </form>
-                </>
+                </div>
               )}
 
               {/* Aba 3 - Configurar praça */}
-              {abaAtiva === 3 && (
-                <>
+              {abasAbertas.has(3) && (
+                <div style={{ display: abaAtiva === 3 ? 'block' : 'none' }}>
                   <div className="mb-8">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
                       {modoVisualizacao ? 'Praças do roteiro' : 'Defina as praças (cidade / estado) que estarão no seu roteiro.'}
@@ -3550,12 +3595,12 @@ export const CriarRoteiro: React.FC = () => {
                       </div>
                     )}
                   </form>
-                </>
+                </div>
               )}
 
               {/* Aba 4 - Definir vias públicas */}
-              {abaAtiva === 4 && (
-                <>
+              {abasAbertas.has(4) && (
+                <div style={{ display: abaAtiva === 4 ? 'block' : 'none' }}>
                   <div className="mb-8">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
                       {modoVisualizacao 
@@ -3902,17 +3947,45 @@ export const CriarRoteiro: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => gerarTabelaSimulado(quantidadeSemanas)}
-                                  className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#ff4600] text-white rounded-lg hover:bg-orange-600 transition-colors font-semibold text-sm"
+                                  disabled={gerandoTabelaSimulado}
+                                  className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#ff4600] text-white rounded-lg hover:bg-orange-600 transition-colors font-semibold text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
-                                  Gerar tabelas para todas as praças
+                                  {gerandoTabelaSimulado ? (
+                                    <>
+                                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                      </svg>
+                                      {gerandoPracaAtual ? `Gerando ${gerandoPracaAtual}…` : 'Gerando tabelas…'}
+                                    </>
+                                  ) : (
+                                    'Gerar tabelas para todas as praças'
+                                  )}
                                 </button>
                               </div>
                             </div>
                           </div>
                         )}
 
+                        {/* Loading overlay enquanto gera tabelas */}
+                        {gerandoTabelaSimulado && (
+                          <div className="mb-8 border border-gray-200 rounded-lg bg-white p-8 flex flex-col items-center gap-4">
+                            <svg className="animate-spin h-8 w-8 text-[#ff4600]" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            <div className="text-center">
+                              <p className="text-sm font-semibold text-[#3a3a3a]">Gerando tabelas</p>
+                              {gerandoPracaAtual && (
+                                <p className="text-xs text-gray-400 mt-1">Consultando inventário de <span className="font-medium text-[#3a3a3a]">{gerandoPracaAtual}</span>…</p>
+                              )}
+                              <p className="text-xs text-gray-300 mt-2">{cidadesSalvas.length} {cidadesSalvas.length === 1 ? 'praça' : 'praças'} no total</p>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Tabelas Simuladas - Uma por Praça */}
-                        {Object.keys(tabelaSimulado).length > 0 && (
+                        {!gerandoTabelaSimulado && Object.keys(tabelaSimulado).length > 0 && (
                           <div className="mb-8 space-y-8">
                             {cidadesSalvas.map((praca) => {
                               const idPracaKey = getCidadeIdKey(praca);
@@ -4424,12 +4497,12 @@ export const CriarRoteiro: React.FC = () => {
                       </>
                     )}
                   </form>
-                </>
+                </div>
               )}
 
               {/* Aba 5 - Definir indoor */}
-              {abaAtiva === 5 && (
-                <>
+              {abasAbertas.has(5) && (
+                <div style={{ display: abaAtiva === 5 ? 'block' : 'none' }}>
                   <div className="mb-6">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
                       Definir indoor
@@ -4450,7 +4523,6 @@ export const CriarRoteiro: React.FC = () => {
                     }}
                   />
 
-                  {/* Botão voltar para Aba 4 */}
                   <div className="mt-6 pt-4 border-t border-gray-200">
                     <button
                       type="button"
@@ -4460,7 +4532,7 @@ export const CriarRoteiro: React.FC = () => {
                       ← Voltar para Vias Públicas
                     </button>
                   </div>
-                </>
+                </div>
               )}
 
               {/* Aba 6 - Resultados */}
@@ -4871,36 +4943,62 @@ export const CriarRoteiro: React.FC = () => {
 
                   {/* Botão Download Excel do SharePoint */}
                   {!aguardandoProcessamento && (
-                  <div className="mt-8 flex justify-center">
-                      <button
-                        onClick={baixarExcelSharePoint}
-                        disabled={downloadingExcel || !planoMidiaGrupo_pk}
-                        className={`px-6 py-3 rounded-lg transition-colors font-medium flex items-center gap-2 ${
-                          downloadingExcel || !planoMidiaGrupo_pk
-                            ? 'bg-gray-400 cursor-not-allowed'
-                            : 'bg-orange-500 text-white hover:bg-orange-600'
-                        }`}
-                      >
-                        {downloadingExcel ? (
-                          <>
-                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            <span>Baixando...</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>📊</span>
-                            <span>Download Excel</span>
-                          </>
-                        )}
-                      </button>
-                      {!planoMidiaGrupo_pk && (
-                        <p className="text-sm text-gray-500 mt-2 text-center">
-                          Salve o roteiro primeiro para habilitar o download
-                        </p>
+                  <div className="mt-8 flex flex-col items-center gap-3">
+                    {/* Carência: arquivo SharePoint ainda sendo gerado */}
+                    {!sharepointArquivoPronto && (
+                      <div className="flex items-center gap-3 px-5 py-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <svg className="animate-spin h-4 w-4 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        <div>
+                          <p className="text-sm font-medium text-amber-800">Consolidando arquivo no SharePoint…</p>
+                          <p className="text-xs text-amber-600 mt-0.5">
+                            Disponível em <span className="font-bold">{sharepointContagemRegressiva}s</span> · O relatório é gerado após os dados do banco estarem prontos
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={baixarExcelSharePoint}
+                      disabled={downloadingExcel || !planoMidiaGrupo_pk || !sharepointArquivoPronto}
+                      className={`px-6 py-3 rounded-lg transition-colors font-medium flex items-center gap-2 ${
+                        downloadingExcel || !planoMidiaGrupo_pk || !sharepointArquivoPronto
+                          ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                          : 'bg-[#ff4600] text-white hover:bg-orange-600'
+                      }`}
+                    >
+                      {downloadingExcel ? (
+                        <>
+                          <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          <span>Baixando…</span>
+                        </>
+                      ) : !sharepointArquivoPronto ? (
+                        <>
+                          <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v2m0-2h2m-2 0H10M12 4v8m0 0l-3-3m3 3l3-3" />
+                          </svg>
+                          <span>Download Excel</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          </svg>
+                          <span>Download Excel</span>
+                        </>
                       )}
+                    </button>
+
+                    {!planoMidiaGrupo_pk && (
+                      <p className="text-xs text-gray-400 text-center">
+                        Salve o roteiro primeiro para habilitar o download
+                      </p>
+                    )}
                   </div>
                   )}
 
