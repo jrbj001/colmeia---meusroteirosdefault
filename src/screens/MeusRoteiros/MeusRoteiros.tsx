@@ -464,43 +464,48 @@ Email: suporte@be180.com.br`;
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans max-w-xs truncate">{item.planoMidiaGrupo_st}</td>
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{formatarData(item.date_dh)}</td>
 
-                        {/* Coluna STATUS — badge + dropdown (só interno) */}
+                        {/* Coluna STATUS — badge (agência) ou select (interno) */}
                         <td className="px-6 py-4 whitespace-nowrap text-center">
                           {(() => {
                             const hex = item.statusHexColor_st || '#6b7280';
                             const label = item.planoMidiaStatus_st || 'Teste';
-                            const badge = (
-                              <span
-                                style={{ color: hex, backgroundColor: `${hex}1A` }}
-                                className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap"
-                              >
-                                <span style={{ backgroundColor: hex }} className="w-1.5 h-1.5 rounded-full flex-shrink-0" />
-                                {label}
-                              </span>
-                            );
 
-                            if (isAgencia) return badge;
+                            // Agência: somente leitura
+                            if (isAgencia) {
+                              return (
+                                <span
+                                  style={{ color: hex, borderColor: `${hex}55` }}
+                                  className="inline-block border px-3 py-0.5 rounded text-xs font-semibold tracking-wide"
+                                >
+                                  {label}
+                                </span>
+                              );
+                            }
 
-                            // Interno: select estilizado + badge de preview
+                            // Interno: select nativo estilizado como tag
                             return (
-                              <select
-                                value={item.planoMidiaStatus_pk || ''}
-                                onChange={(e) => {
-                                  const pk = parseInt(e.target.value, 10);
-                                  const opt = statusOpcoes.find((s) => s.pk === pk);
-                                  if (opt) handleChangeStatus(item, pk, opt.planoMidiaStatus_st, opt.hexColor_st);
-                                }}
-                                style={{ borderColor: hex, color: hex }}
-                                className="text-xs font-semibold rounded-full px-2.5 py-1 bg-white border-2 focus:outline-none focus:ring-1 cursor-pointer appearance-none pr-5"
-                                title="Alterar status do roteiro"
-                              >
-                                {statusOpcoes.length === 0 && (
-                                  <option value={item.planoMidiaStatus_pk}>{label}</option>
-                                )}
-                                {statusOpcoes.map((s) => (
-                                  <option key={s.pk} value={s.pk}>{s.planoMidiaStatus_st}</option>
-                                ))}
-                              </select>
+                              <div className="inline-flex items-center justify-center">
+                                <select
+                                  value={item.planoMidiaStatus_pk || ''}
+                                  onChange={(e) => {
+                                    const pk = parseInt(e.target.value, 10);
+                                    const opt = statusOpcoes.find((s) => s.pk === pk);
+                                    if (opt) handleChangeStatus(item, pk, opt.planoMidiaStatus_st, opt.hexColor_st);
+                                  }}
+                                  style={{ color: hex, borderColor: `${hex}55` }}
+                                  className="border rounded text-xs font-semibold px-2 py-0.5 bg-transparent focus:outline-none cursor-pointer tracking-wide"
+                                  title="Alterar status do roteiro"
+                                >
+                                  {statusOpcoes.length === 0 && (
+                                    <option value={item.planoMidiaStatus_pk}>{label}</option>
+                                  )}
+                                  {statusOpcoes.map((s) => (
+                                    <option key={s.pk} value={s.pk} style={{ color: '#3a3a3a' }}>
+                                      {s.planoMidiaStatus_st}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
                             );
                           })()}
                         </td>
