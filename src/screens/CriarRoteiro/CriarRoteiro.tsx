@@ -316,6 +316,8 @@ export const CriarRoteiro: React.FC = () => {
     tempoInicio: null as Date | null,
     ativo: false
   });
+  const [gerandoTabelaSimulado, setGerandoTabelaSimulado] = useState(false);
+  const [gerandoPracaAtual, setGerandoPracaAtual] = useState('');
 
   // Estados para controle específico do Banco de Ativos
   const [bancoAtivosStatus, setBancoAtivosStatus] = useState({
@@ -542,6 +544,9 @@ export const CriarRoteiro: React.FC = () => {
         alert('Configure as praças na Aba 3 primeiro');
         return;
       }
+
+      setGerandoTabelaSimulado(true);
+      setGerandoPracaAtual('');
       
       // Objeto para armazenar tabelas por praça: id_cidade -> array de linhas
       const tabelasPorPraca: Record<string, any[]> = {};
@@ -549,6 +554,7 @@ export const CriarRoteiro: React.FC = () => {
       // Gerar uma tabela separada para cada praça configurada na Aba 3
       for (const praca of cidadesSalvas) {
         try {
+          setGerandoPracaAtual(praca.nome_cidade);
           const estruturaTabela: any[] = [];
           
           const inventarioResponse = await axios.get(`/inventario-cidade?cidade=${encodeURIComponent(praca.nome_cidade)}`);
@@ -614,6 +620,9 @@ export const CriarRoteiro: React.FC = () => {
     } catch (error) {
       console.error('❌ Erro ao gerar tabelas simuladas:', error);
       alert('Erro ao gerar estrutura das tabelas. Tente novamente.');
+    } finally {
+      setGerandoTabelaSimulado(false);
+      setGerandoPracaAtual('');
     }
   };
 
@@ -3917,17 +3926,45 @@ export const CriarRoteiro: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => gerarTabelaSimulado(quantidadeSemanas)}
-                                  className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#ff4600] text-white rounded-lg hover:bg-orange-600 transition-colors font-semibold text-sm"
+                                  disabled={gerandoTabelaSimulado}
+                                  className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#ff4600] text-white rounded-lg hover:bg-orange-600 transition-colors font-semibold text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
-                                  Gerar tabelas para todas as praças
+                                  {gerandoTabelaSimulado ? (
+                                    <>
+                                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                      </svg>
+                                      {gerandoPracaAtual ? `Gerando ${gerandoPracaAtual}…` : 'Gerando tabelas…'}
+                                    </>
+                                  ) : (
+                                    'Gerar tabelas para todas as praças'
+                                  )}
                                 </button>
                               </div>
                             </div>
                           </div>
                         )}
 
+                        {/* Loading overlay enquanto gera tabelas */}
+                        {gerandoTabelaSimulado && (
+                          <div className="mb-8 border border-gray-200 rounded-lg bg-white p-8 flex flex-col items-center gap-4">
+                            <svg className="animate-spin h-8 w-8 text-[#ff4600]" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            <div className="text-center">
+                              <p className="text-sm font-semibold text-[#3a3a3a]">Gerando tabelas</p>
+                              {gerandoPracaAtual && (
+                                <p className="text-xs text-gray-400 mt-1">Consultando inventário de <span className="font-medium text-[#3a3a3a]">{gerandoPracaAtual}</span>…</p>
+                              )}
+                              <p className="text-xs text-gray-300 mt-2">{cidadesSalvas.length} {cidadesSalvas.length === 1 ? 'praça' : 'praças'} no total</p>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Tabelas Simuladas - Uma por Praça */}
-                        {Object.keys(tabelaSimulado).length > 0 && (
+                        {!gerandoTabelaSimulado && Object.keys(tabelaSimulado).length > 0 && (
                           <div className="mb-8 space-y-8">
                             {cidadesSalvas.map((praca) => {
                               const idPracaKey = getCidadeIdKey(praca);
