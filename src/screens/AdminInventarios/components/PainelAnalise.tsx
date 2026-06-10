@@ -47,7 +47,7 @@ export const PainelAnalise: React.FC<Props> = ({
   // ── Correção de praças ──────────────────────────────────────────
   const [pracaCorrecoes, setPracaCorrecoes] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
-    pracas_reconciliacao.forEach((p) => {
+    (pracas_reconciliacao ?? []).forEach((p) => {
       if (p.status !== 'match') init[p.praca_novo] = p.cidade_legado || '';
     });
     return init;
@@ -78,7 +78,7 @@ export const PainelAnalise: React.FC<Props> = ({
   type DeParaCorrection = { mapped_ambiente: string; mapped_formato: string; mapped_tipo: string };
   const [tipoCorrecoes, setTipoCorrecoes] = useState<Record<string, DeParaCorrection>>(() => {
     const init: Record<string, DeParaCorrection> = {};
-    sem_depara.forEach((r) => {
+    (sem_depara ?? []).forEach((r) => {
       const key = `${r.ambiente}||${r.formato}||${r.tipo}`;
       init[key] = { mapped_ambiente: r.ambiente, mapped_formato: r.formato, mapped_tipo: r.tipo };
     });
