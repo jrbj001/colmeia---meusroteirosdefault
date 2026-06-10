@@ -2668,8 +2668,9 @@ export const CriarRoteiro: React.FC = () => {
       if (response.data && response.data[0]?.new_pk) {
         const newPk = response.data[0].new_pk;
         setPlanoMidiaGrupo_pk(newPk);
-        setAba1Preenchida(true); // Marcar Aba 1 como preenchida
-        mostrarModal('Seu roteiro foi criado! Agora configure o público-alvo.', 'success', '✅ Roteiro Salvo!');
+        setAba1Preenchida(true);
+        setAbaAtiva(2); // Avança automaticamente para a próxima etapa
+        mostrarModal('Roteiro criado! Agora configure o público-alvo.', 'success', '✅ Etapa 1 concluída');
       } else {
         throw new Error('Resposta inválida do servidor');
       }
@@ -2719,12 +2720,12 @@ export const CriarRoteiro: React.FC = () => {
         salvo: true
       });
       
-      setAba2Preenchida(true); // Marcar Aba 2 como preenchida
-      
+      setAba2Preenchida(true);
+      setAbaAtiva(3); // Avança automaticamente para a próxima etapa
       mostrarModal(
-        `Público-alvo configurado e salvo na base: ${genero}, ${classe}, ${faixaEtaria}. Agora selecione as cidades do seu roteiro.`,
+        `Target salvo: ${genero}, ${classe}, ${faixaEtaria}. Agora selecione as cidades do seu roteiro.`,
         'success',
-        '✅ Target Salvo!'
+        '✅ Etapa 2 concluída'
       );
 
     } catch (error) {
@@ -2757,18 +2758,18 @@ export const CriarRoteiro: React.FC = () => {
       // Salvar as cidades selecionadas para controle de estado
       setCidadesSalvas([...cidadesSelecionadas]);
       
-      setAba3Preenchida(true); // Marcar Aba 3 como preenchida
-      
+      setAba3Preenchida(true);
+      setAbaAtiva(4); // Avança automaticamente para a próxima etapa
+
       // Simular um plano mídia PK temporário para ativar a Aba 4
       setPlanoMidia_pks([999999]); // PK temporário, será substituído na Aba 4
       
       const totalCidades = cidadesSelecionadas.length;
-      
       const cidadesNomes = cidadesSelecionadas.map(c => c.nome_cidade).join(', ');
       mostrarModal(
-        `${totalCidades} ${totalCidades === 1 ? 'cidade selecionada' : 'cidades selecionadas'}: ${cidadesNomes}. Agora faça o upload do arquivo Excel com os roteiros.`,
+        `${totalCidades} ${totalCidades === 1 ? 'cidade salva' : 'cidades salvas'}: ${cidadesNomes}. Agora faça o upload das mídias.`,
         'success',
-        '✅ Cidades Salvas!'
+        '✅ Etapa 3 concluída'
       );
 
     } catch (error) {
