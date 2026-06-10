@@ -861,6 +861,105 @@ async function listarItens(req, res, pool) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Corrige praça de itens do lote (admin renomeia praca_novo → praca_correta)
+// ───────────────────────────────────────────────────────────────────────────
+async function corrigirPraca(req, res, pool) {
+  const lotePk     = Number(req.body?.lote_pk || 0);
+  const pracaNovo  = String(req.body?.praca_novo  || '').trim();
+  const pracaCorreta = String(req.body?.praca_correta || '').trim();
+
+  if (!lotePk || !pracaNovo || !pracaCorreta) {
+    return res.status(400).json({ success: false, error: 'lote_pk, praca_novo e praca_correta são obrigatórios' });
+  }
+
+  const result = await pool.request()
+    .input('lote_pk',      sql.Int,        lotePk)
+    .input('praca_novo',   sql.NVarChar(200), pracaNovo)
+    .input('praca_correta', sql.NVarChar(200), pracaCorreta)
+    .query(`
+      UPDATE [serv_product_be180].[exibidor_inventario_item_dm]
+      SET praca_st = @praca_correta
+      WHERE lote_fk = @lote_pk
+        AND praca_st = @praca_novo
+        AND delete_bl = 0
+    `);
+
+  return res.json({ success: true, rowsAffected: result.rowsAffected?.[0] ?? 0 });
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Corrige tipo de mídia — cadastra/atualiza regra de-para para um tipo do envio
+// ───────────────────────────────────────────────────────────────────────────
+async function corrigirTipo(req, res, pool) {
+  const lotePk         = Number(req.body?.lote_pk || 0);
+  const exibidorFk     = Number(req.body?.exibidor_fk || 0);
+  const ambienteNovo   = String(req.body?.ambiente_novo  || '').trim();
+  const formatoNovo    = String(req.body?.formato_novo   || '').trim();
+  const tipoNovo       = String(req.body?.tipo_novo      || '').trim();
+  const mappedAmbiente = String(req.body?.mapped_ambiente || '').trim();
+  const mappedFormato  = String(req.body?.mapped_formato  || '').trim();
+  const mappedTipo     = String(req.body?.mapped_tipo     || '').trim();
+
+  if (!lotePk || !exibidorFk) {
+    return res.status(400).json({ success: false, error: 'lote_pk e exibidor_fk são obrigatórios' });
+  }
+  if (!mappedAmbiente || !mappedFormato || !mappedTipo) {
+    return res.status(400).json({ success: false, error: 'mapped_ambiente, mapped_formato e mapped_tipo são obrigatórios' });
+  }
+
+  // Upsert da regra de-para para este exibidor
+  await pool.request()
+    .input('exibidor_fk',     sql.Int,        exibidorFk)
+    .input('ambiente_st',     sql.NVarChar(200), ambienteNovo)
+    .input('formato_st',      sql.NVarChar(200), formatoNovo)
+    .input('tipo_st',         sql.NVarChar(200), tipoNovo)
+    .input('mapped_ambiente_st', sql.NVarChar(200), mappedAmbiente)
+    .input('mapped_formato_st',  sql.NVarChar(200), mappedFormato)
+    .input('mapped_tipo_st',     sql.NVarChar(200), mappedTipo)
+    .query(`
+      MERGE [serv_product_be180].[exibidor_midia_depara_dm] AS target
+      USING (SELECT @exibidor_fk AS exibidor_fk, @ambiente_st AS ambiente_st, @formato_st AS formato_st, @tipo_st AS tipo_st) AS src
+        ON target.exibidor_fk = src.exibidor_fk
+           AND target.ambiente_st = src.ambiente_st
+           AND target.formato_st  = src.formato_st
+           AND target.tipo_st     = src.tipo_st
+      WHEN MATCHED THEN
+        UPDATE SET
+          mapped_ambiente_st = @mapped_ambiente_st,
+          mapped_formato_st  = @mapped_formato_st,
+          mapped_tipo_st     = @mapped_tipo_st
+      WHEN NOT MATCHED THEN
+        INSERT (exibidor_fk, ambiente_st, formato_st, tipo_st, mapped_ambiente_st, mapped_formato_st, mapped_tipo_st)
+        VALUES (@exibidor_fk, @ambiente_st, @formato_st, @tipo_st, @mapped_ambiente_st, @mapped_formato_st, @mapped_tipo_st);
+    `);
+
+  // Re-aplica o mapeamento nos itens do lote afetados
+  await pool.request()
+    .input('lote_pk',     sql.Int,        lotePk)
+    .input('ambiente_st', sql.NVarChar(200), ambienteNovo)
+    .input('formato_st',  sql.NVarChar(200), formatoNovo)
+    .input('tipo_st',     sql.NVarChar(200), tipoNovo)
+    .input('mapped_ambiente_st', sql.NVarChar(200), mappedAmbiente)
+    .input('mapped_formato_st',  sql.NVarChar(200), mappedFormato)
+    .input('mapped_tipo_st',     sql.NVarChar(200), mappedTipo)
+    .query(`
+      UPDATE [serv_product_be180].[exibidor_inventario_item_dm]
+      SET
+        mapped_ambiente_st = @mapped_ambiente_st,
+        mapped_formato_st  = @mapped_formato_st,
+        mapped_tipo_st     = @mapped_tipo_st,
+        mapped_bl          = 1
+      WHERE lote_fk    = @lote_pk
+        AND delete_bl  = 0
+        AND ambiente_st    = @ambiente_st
+        AND formato_midia_st = @formato_st
+        AND tipo_midia_st    = @tipo_st
+    `);
+
+  return res.json({ success: true });
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Comentário admin (mesmo do exibidor, mas autor padrão BE180)
 // ───────────────────────────────────────────────────────────────────────────
 async function adicionarComentario(req, res, pool) {
@@ -896,6 +995,8 @@ module.exports = async (req, res) => {
     if (req.method === 'POST') {
       const op = String(req.body?.op || '');
       if (op === 'comentario') return adicionarComentario(req, res, pool);
+      if (op === 'corrigir-praca') return corrigirPraca(req, res, pool);
+      if (op === 'corrigir-tipo')  return corrigirTipo(req, res, pool);
       if (['aprovar-lote', 'rejeitar-lote', 'pedir-correcao'].includes(op)) return decidir(req, res, pool);
       return res.status(400).json({ success: false, error: `Operação inválida: ${op}` });
     }

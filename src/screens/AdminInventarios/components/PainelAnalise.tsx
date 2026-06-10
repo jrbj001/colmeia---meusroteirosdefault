@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { LoteAnalise } from '../types';
 import { StatusBadge } from './StatusBadge';
 import { InventarioCompleto } from './InventarioCompleto';
+import api from '../../../api';
 
 const fmt = (n: number | null | undefined) => {
   if (n === null || n === undefined) return '—';
@@ -42,6 +43,74 @@ export const PainelAnalise: React.FC<Props> = ({
   const { lote, visao, qualidade, distribuicao, duplicidades, erros, sem_depara, comparativo_tipos, pracas_reconciliacao, amostra, legado, places, comentarios, veredito } = analise;
   const [mensagem, setMensagem] = useState('');
   const [confirmando, setConfirmando] = useState<null | 'aprovar' | 'corrigir' | 'rejeitar'>(null);
+
+  // ── Correção de praças ──────────────────────────────────────────
+  const [pracaCorrecoes, setPracaCorrecoes] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    pracas_reconciliacao.forEach((p) => {
+      if (p.status !== 'match') init[p.praca_novo] = p.cidade_legado || '';
+    });
+    return init;
+  });
+  const [pracaSalvando, setPracaSalvando] = useState<Record<string, boolean>>({});
+  const [pracaSalvas, setPracaSalvas] = useState<Record<string, boolean>>({});
+
+  const salvarCorrecaoPraca = async (pracaNovo: string) => {
+    const pracaCorreta = (pracaCorrecoes[pracaNovo] || '').trim();
+    if (!pracaCorreta || pracaCorreta === pracaNovo) return;
+    setPracaSalvando((prev) => ({ ...prev, [pracaNovo]: true }));
+    try {
+      await api.post('/admin-inventario-analise', {
+        op: 'corrigir-praca',
+        lote_pk: lote.lote_pk,
+        praca_novo: pracaNovo,
+        praca_correta: pracaCorreta,
+      });
+      setPracaSalvas((prev) => ({ ...prev, [pracaNovo]: true }));
+    } catch {
+      alert('Erro ao salvar correção de praça. Tente novamente.');
+    } finally {
+      setPracaSalvando((prev) => ({ ...prev, [pracaNovo]: false }));
+    }
+  };
+
+  // ── Correção de tipos (de-para) ─────────────────────────────────
+  type DeParaCorrection = { mapped_ambiente: string; mapped_formato: string; mapped_tipo: string };
+  const [tipoCorrecoes, setTipoCorrecoes] = useState<Record<string, DeParaCorrection>>(() => {
+    const init: Record<string, DeParaCorrection> = {};
+    sem_depara.forEach((r) => {
+      const key = `${r.ambiente}||${r.formato}||${r.tipo}`;
+      init[key] = { mapped_ambiente: r.ambiente, mapped_formato: r.formato, mapped_tipo: r.tipo };
+    });
+    return init;
+  });
+  const [tipoSalvando, setTipoSalvando] = useState<Record<string, boolean>>({});
+  const [tipoSalvas, setTipoSalvas] = useState<Record<string, boolean>>({});
+
+  const salvarCorrecaoTipo = async (ambiente: string, formato: string, tipo: string) => {
+    const key = `${ambiente}||${formato}||${tipo}`;
+    const corr = tipoCorrecoes[key];
+    if (!corr?.mapped_tipo.trim()) return;
+    setTipoSalvando((prev) => ({ ...prev, [key]: true }));
+    try {
+      await api.post('/admin-inventario-analise', {
+        op: 'corrigir-tipo',
+        lote_pk: lote.lote_pk,
+        exibidor_fk: lote.exibidor_fk,
+        ambiente_novo: ambiente,
+        formato_novo: formato,
+        tipo_novo: tipo,
+        mapped_ambiente: corr.mapped_ambiente,
+        mapped_formato: corr.mapped_formato,
+        mapped_tipo: corr.mapped_tipo,
+      });
+      setTipoSalvas((prev) => ({ ...prev, [key]: true }));
+    } catch {
+      alert('Erro ao salvar de-para. Tente novamente.');
+    } finally {
+      setTipoSalvando((prev) => ({ ...prev, [key]: false }));
+    }
+  };
 
   const recomend = RECOMEND_CFG[veredito.recomendacao];
 
@@ -126,72 +195,7 @@ export const PainelAnalise: React.FC<Props> = ({
         <FluxoTimeline lote={lote} />
       </section>
 
-      {/* ────────────────  PRÓXIMAS AÇÕES (diagnósticos)  ──────────────── */}
-      {veredito.diagnosticos.length > 0 && (
-        <section>
-          <SectionTitle eyebrow="Próximas ações" titulo="O que precisa ser feito antes da aprovação" />
-          <ol className="space-y-4">
-            {veredito.diagnosticos.map((d, i) => {
-              const cor = d.tipo === 'critico' ? '#b91c1c' : '#b45309';
-              const bg = d.tipo === 'critico' ? '#fef2f2' : '#fffbeb';
-              const border = d.tipo === 'critico' ? '#fecaca' : '#fed7aa';
-              return (
-                <li
-                  key={i}
-                  className="flex gap-5 p-6 rounded-2xl bg-white border"
-                  style={{ borderColor: border }}
-                >
-                  <div className="flex-shrink-0 flex flex-col items-center gap-2">
-                    <div
-                      className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm"
-                      style={{ backgroundColor: cor }}
-                    >
-                      {i + 1}
-                    </div>
-                    {d.bloqueia && (
-                      <span className="text-[9px] uppercase tracking-wider font-bold text-[#b91c1c] writing-mode-vertical">
-                        BLOQUEIA
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-3 mb-2">
-                      <h3 className="text-[16px] font-semibold" style={{ color: cor }}>
-                        {d.titulo}
-                      </h3>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span
-                          className="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
-                          style={{ color: '#fff', backgroundColor: d.responsavel === 'BE180' ? '#1d4ed8' : '#ff4600' }}
-                        >
-                          {d.responsavel === 'BE180' ? 'Time BE' : 'Exibidor'}
-                        </span>
-                        {d.bloqueia && (
-                          <span className="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider text-white bg-[#b91c1c]">
-                            Bloqueia
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="space-y-2.5">
-                      <div>
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-gray-400 font-bold">Causa</span>
-                        <p className="text-[13.5px] text-gray-700 leading-relaxed mt-0.5">{d.causa}</p>
-                      </div>
-                      <div className="rounded-lg p-3" style={{ backgroundColor: bg }}>
-                        <span className="text-[10px] uppercase tracking-[0.18em] font-bold" style={{ color: cor }}>
-                          Ação recomendada
-                        </span>
-                        <p className="text-[13.5px] text-gray-800 leading-relaxed mt-0.5">{d.acao}</p>
-                      </div>
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        </section>
-      )}
+      {/* Seção de diagnósticos removida a pedido do time */}
 
       {/* ──────────────────────  CABEÇALHO DO LOTE  ────────────────────── */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-x-12 gap-y-6">
@@ -245,36 +249,7 @@ export const PainelAnalise: React.FC<Props> = ({
         ) : null}
       </section>
 
-      {/* ─────────────  COMPARATIVO COM LEGADO  ─────────────── */}
-      {legado && (
-        <section>
-          <SectionTitle eyebrow="Comparativo" titulo="Versus banco de ativos atual" />
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-5 mb-6">
-            <BigNumber label="Legado válido" valor={fmt(legado.validos)} />
-            <BigNumber label="Novo (ativos)" valor={fmt(visao.ativos)} />
-            <BigNumber
-              label="Delta"
-              valor={`${visao.ativos - legado.validos > 0 ? '+' : ''}${fmt(visao.ativos - legado.validos)}`}
-              cor={visao.ativos - legado.validos < 0 ? '#b91c1c' : '#15803d'}
-            />
-            <BigNumber label="Cidades em comum" valor={fmt(legado.cidades?.comum)} />
-            <BigNumber label="Cidades só no legado" valor={fmt(legado.cidades?.apenas_legado)} cor={legado.cidades?.apenas_legado ? '#b45309' : undefined} />
-          </div>
-
-          <p className="text-[13px] text-gray-500 mb-6">
-            Códigos do lote que coincidem com o legado: <strong className="text-gray-700">{fmt(legado.codigos_match)}</strong> de {fmt(legado.codigos_lote)} ({pct(legado.codigos_match, legado.codigos_lote)})
-          </p>
-
-          {legado.cidades_faltantes.length > 0 && (
-            <SubCard titulo={`${legado.cidades_faltantes.length} cidades existiam no legado e não vieram no novo`} alerta>
-              <Tabela
-                cabecalho={['Cidade', 'UF', 'Pontos no legado']}
-                linhas={legado.cidades_faltantes.map((r) => [r.cidade_st, r.estado_st, fmt(r.qtd)])}
-              />
-            </SubCard>
-          )}
-        </section>
-      )}
+      {/* Seção comparativo com legado removida a pedido do time */}
 
       {/* ───────────  DISTRIBUIÇÃO GEOGRÁFICA  ──────────── */}
       <section>
@@ -300,8 +275,8 @@ export const PainelAnalise: React.FC<Props> = ({
         <section>
           <SectionTitle
             eyebrow="Nomenclatura"
-            titulo="Reconciliação de praças com o legado"
-            descricao="Como os nomes das praças no envio podem diferir do banco atual (ex: 'Brasília Relógio' vs 'Brasília'), tentamos identificar a cidade equivalente. Decida com o exibidor se padroniza para o nome canônico ou registra como subdivisão intencional."
+            titulo="Praças fora do padrão"
+            descricao="Praças do envio que diferem do nome canônico no banco. Corrija o nome para padronizar os itens deste lote."
           />
           <SubCard>
             <table className="w-full text-[13px]">
@@ -310,17 +285,18 @@ export const PainelAnalise: React.FC<Props> = ({
                   <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold">Praça no envio</th>
                   <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold w-16">UF</th>
                   <th className="text-right px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold w-24">Itens</th>
-                  <th className="px-5 py-3 text-center text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold w-32">Status</th>
-                  <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold">Cidade equivalente no legado</th>
-                  <th className="text-right px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold w-32">Pontos no legado</th>
+                  <th className="px-5 py-3 text-center text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold w-28">Status</th>
+                  <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold">Corrigir para</th>
+                  <th className="px-5 py-3 text-center text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold w-28">Ação</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {pracas_reconciliacao.map((p, idx) => {
+                {pracas_reconciliacao.filter((p) => p.status !== 'match').map((p, idx) => {
                   const cfg =
-                    p.status === 'match'    ? { label: 'Match exato', color: '#15803d', bg: '#dcfce7' }
-                    : p.status === 'parecida' ? { label: 'Parecida',   color: '#b45309', bg: '#fef3c7' }
-                    :                            { label: 'Nova',        color: '#1d4ed8', bg: '#dbeafe' };
+                    p.status === 'parecida' ? { label: 'Parecida', color: '#b45309', bg: '#fef3c7' }
+                    :                          { label: 'Nova',      color: '#1d4ed8', bg: '#dbeafe' };
+                  const salvando = pracaSalvando[p.praca_novo];
+                  const salva    = pracaSalvas[p.praca_novo];
                   return (
                     <tr key={idx} className="hover:bg-gray-50 transition-colors">
                       <td className="px-5 py-3 text-gray-800 font-medium">{p.praca_novo}</td>
@@ -332,8 +308,34 @@ export const PainelAnalise: React.FC<Props> = ({
                           {cfg.label}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-gray-700">{p.cidade_legado || '—'}</td>
-                      <td className="px-5 py-3 text-right text-gray-500 font-mono">{p.qtd_legado != null ? fmt(p.qtd_legado) : '—'}</td>
+                      <td className="px-5 py-3">
+                        {salva ? (
+                          <span className="text-[13px] text-green-600 font-medium">
+                            ✓ {pracaCorrecoes[p.praca_novo]}
+                          </span>
+                        ) : (
+                          <input
+                            type="text"
+                            value={pracaCorrecoes[p.praca_novo] ?? ''}
+                            onChange={(e) => setPracaCorrecoes((prev) => ({ ...prev, [p.praca_novo]: e.target.value }))}
+                            placeholder={p.cidade_legado || 'Nome canônico...'}
+                            className="w-full text-[13px] border border-gray-200 rounded-lg px-3 py-1.5 bg-white outline-none focus:border-[#ff4600] transition-colors"
+                          />
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-center">
+                        {salva ? (
+                          <span className="text-[11px] text-green-600 font-semibold uppercase tracking-wide">Salvo</span>
+                        ) : (
+                          <button
+                            onClick={() => salvarCorrecaoPraca(p.praca_novo)}
+                            disabled={salvando || !pracaCorrecoes[p.praca_novo]?.trim()}
+                            className="px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-[#ff4600] text-white hover:bg-[#e03e00] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {salvando ? '…' : 'Corrigir'}
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -415,20 +417,88 @@ export const PainelAnalise: React.FC<Props> = ({
         </section>
       )}
 
-      {/* ───────────  GAP DE-PARA  ──────────── */}
+      {/* ───────────  GAP DE-PARA (correção de tipos de mídia)  ──────────── */}
       {sem_depara.length > 0 && (
         <section>
           <SectionTitle
-            eyebrow="Mapeamento"
-            titulo="Combinações sem de-para cadastrado"
+            eyebrow="Tipos de mídia fora do padrão"
+            titulo="Mapeamento de de-para pendente"
             alerta
-            descricao="Estas combinações precisam ter regras de-para cadastradas antes da aprovação para integrar com a nomenclatura padrão do produto."
+            descricao="Informe o equivalente canônico (ambiente, formato e tipo) para cada combinação. Ao salvar, a regra de-para é cadastrada e os itens deste lote são atualizados automaticamente."
           />
-          <SubCard alerta titulo={`${sem_depara.length} combinações distintas`}>
-            <Tabela
-              cabecalho={['Ambiente', 'Formato', 'Tipo', 'Itens']}
-              linhas={sem_depara.map((r) => [r.ambiente, r.formato, r.tipo, fmt(r.qtd)])}
-            />
+          <SubCard alerta titulo={`${sem_depara.length} combinação${sem_depara.length > 1 ? 'ões' : ''} sem de-para`}>
+            <table className="w-full text-[13px]">
+              <thead className="sticky top-0 bg-red-50 z-10">
+                <tr>
+                  <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold">Ambiente</th>
+                  <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold">Formato</th>
+                  <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold">Tipo</th>
+                  <th className="text-right px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold w-20">Itens</th>
+                  <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold" colSpan={3}>Mapear para (canônico)</th>
+                  <th className="px-5 py-3 text-center text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold w-28">Ação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-red-100">
+                {sem_depara.map((r, idx) => {
+                  const key = `${r.ambiente}||${r.formato}||${r.tipo}`;
+                  const corr = tipoCorrecoes[key] ?? { mapped_ambiente: '', mapped_formato: '', mapped_tipo: '' };
+                  const salvando = tipoSalvando[key];
+                  const salva    = tipoSalvas[key];
+                  return (
+                    <tr key={idx} className="hover:bg-red-50/40 transition-colors">
+                      <td className="px-5 py-3 text-gray-700">{r.ambiente || '—'}</td>
+                      <td className="px-5 py-3 text-gray-700">{r.formato || '—'}</td>
+                      <td className="px-5 py-3 text-gray-700 font-medium">{r.tipo || '—'}</td>
+                      <td className="px-5 py-3 text-right text-gray-500 font-mono">{fmt(r.qtd)}</td>
+                      {salva ? (
+                        <td colSpan={4} className="px-5 py-3 text-green-600 font-medium text-[13px]">
+                          ✓ {corr.mapped_ambiente} / {corr.mapped_formato} / {corr.mapped_tipo}
+                        </td>
+                      ) : (
+                        <>
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={corr.mapped_ambiente}
+                              onChange={(e) => setTipoCorrecoes((prev) => ({ ...prev, [key]: { ...prev[key], mapped_ambiente: e.target.value } }))}
+                              placeholder="Ambiente"
+                              className="w-full text-[12px] border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-[#ff4600] transition-colors"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={corr.mapped_formato}
+                              onChange={(e) => setTipoCorrecoes((prev) => ({ ...prev, [key]: { ...prev[key], mapped_formato: e.target.value } }))}
+                              placeholder="Formato"
+                              className="w-full text-[12px] border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-[#ff4600] transition-colors"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={corr.mapped_tipo}
+                              onChange={(e) => setTipoCorrecoes((prev) => ({ ...prev, [key]: { ...prev[key], mapped_tipo: e.target.value } }))}
+                              placeholder="Tipo"
+                              className="w-full text-[12px] border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-[#ff4600] transition-colors"
+                            />
+                          </td>
+                          <td className="px-5 py-3 text-center">
+                            <button
+                              onClick={() => salvarCorrecaoTipo(r.ambiente, r.formato, r.tipo)}
+                              disabled={salvando || !corr.mapped_tipo.trim()}
+                              className="px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-[#ff4600] text-white hover:bg-[#e03e00] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {salvando ? '…' : 'Salvar'}
+                            </button>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </SubCard>
         </section>
       )}
@@ -452,26 +522,9 @@ export const PainelAnalise: React.FC<Props> = ({
         </section>
       )}
 
-      {/* ───────────  AMOSTRA  ──────────── */}
-      <section>
-        <SectionTitle eyebrow="Amostra" titulo="Primeiros 10 itens" descricao="Visão rápida para conferência. Para inspecionar o envio inteiro, use a seção “Inventário completo” logo abaixo." />
-        <SubCard>
-          <Tabela
-            cabecalho={['Item', 'Código', 'Praça', 'UF', 'Tipo', 'Lat / Long', 'Valor']}
-            linhas={amostra.map((r) => [
-              `#${r.item_pk}`,
-              r.codigo_ativo_st,
-              r.praca_st || '—',
-              r.uf_st || '—',
-              r.tipo_midia_st || '—',
-              r.latitude && r.longitude ? `${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}` : '—',
-              r.valor_tabela_vl ? `R$ ${Number(r.valor_tabela_vl).toFixed(2)}` : '—',
-            ])}
-          />
-        </SubCard>
-      </section>
+      {/* Seção amostra removida a pedido do time */}
 
-      {/* ───────────  INVENTÁRIO COMPLETO  ──────────── */}
+            {/* ───────────  INVENTÁRIO COMPLETO  ──────────── */}
       <section>
         <SectionTitle eyebrow="Inventário completo" titulo="Todos os itens enviados" descricao="Tabela paginada com busca, filtros rápidos (sem geo, sem de-para, sem código, sem valor, com erro) e exportação CSV." />
         <InventarioCompleto
