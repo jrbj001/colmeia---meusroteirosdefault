@@ -92,8 +92,8 @@ export const CriarRoteiro: React.FC = () => {
   const [aba3Preenchida, setAba3Preenchida] = useState(false);
   const [aba4Preenchida, setAba4Preenchida] = useState(false);
   const [aba5Preenchida, setAba5Preenchida] = useState(false);
-  // Lazy-mount: renderiza Aba 5 na 1ª visita e nunca desmonta (preserva state indoor)
-  const [aba5JaAberta, setAba5JaAberta] = useState(false);
+  // Lazy-mount: Set com abas já visitadas — nunca desmontamos após a 1ª visita
+  const [abasAbertas, setAbasAbertas] = useState<Set<number>>(new Set([1]));
   
   // Estados para aba 6 - Resultados
   const [dadosResultados, setDadosResultados] = useState<any[]>([]);
@@ -241,6 +241,14 @@ export const CriarRoteiro: React.FC = () => {
 
   // useEffect removido - não é mais necessário forçar re-render
   // O estado unificado carregandoDadosGerais é gerenciado pela função carregarDadosResultados
+
+  // Registrar aba visitada para lazy-mount (nunca desmonta após 1ª visita)
+  useEffect(() => {
+    setAbasAbertas((prev) => {
+      if (prev.has(abaAtiva)) return prev;
+      return new Set([...prev, abaAtiva]);
+    });
+  }, [abaAtiva]);
 
   // Verificar status e carregar dados ao entrar na Aba 6
   useEffect(() => {
@@ -2908,76 +2916,70 @@ export const CriarRoteiro: React.FC = () => {
             <div className="px-16 mb-8">
               <div className="flex items-center">
                 {/* Aba 01 - Nomear roteiro */}
-                <div 
+                <div
                   className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
-                    abaAtiva === 1 
-                      ? 'bg-white border-2 border-[#ff4600] rounded-lg' 
-                      : 'hover:bg-gray-50 rounded-lg'
+                    abaAtiva === 1 ? 'bg-white border-2 border-[#ff4600] rounded-lg' : 'hover:bg-gray-50 rounded-lg'
                   }`}
                   onClick={() => navegarParaAba(1)}
                 >
-                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 1 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>01</span>
-                  <span className={`font-medium ${abaAtiva === 1 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Nomear roteiro</span>
+                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 1 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>01</span>
+                  <span className={`font-medium ${abaAtiva === 1 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Nomear roteiro</span>
+                  {aba1Preenchida && abaAtiva !== 1 && <span className="ml-1.5 text-[#ff4600] text-xs">✓</span>}
                   {abaAtiva === 1 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
-                
+
                 {/* Aba 02 - Configurar target */}
-                <div 
+                <div
                   className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
-                    abaAtiva === 2 
-                      ? 'bg-white border-2 border-[#ff4600] rounded-lg' 
-                      : 'hover:bg-gray-50 rounded-lg'
+                    abaAtiva === 2 ? 'bg-white border-2 border-[#ff4600] rounded-lg' : 'hover:bg-gray-50 rounded-lg'
                   }`}
                   onClick={() => navegarParaAba(2)}
                 >
-                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 2 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>02</span>
-                  <span className={`font-medium ${abaAtiva === 2 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Configurar target</span>
+                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 2 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>02</span>
+                  <span className={`font-medium ${abaAtiva === 2 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Configurar target</span>
+                  {aba2Preenchida && abaAtiva !== 2 && <span className="ml-1.5 text-[#ff4600] text-xs">✓</span>}
                   {abaAtiva === 2 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
-                
+
                 {/* Aba 03 - Configurar praça */}
-                <div 
+                <div
                   className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
-                    abaAtiva === 3 
-                      ? 'bg-white border-2 border-[#ff4600] rounded-lg' 
-                      : 'hover:bg-gray-50 rounded-lg'
+                    abaAtiva === 3 ? 'bg-white border-2 border-[#ff4600] rounded-lg' : 'hover:bg-gray-50 rounded-lg'
                   }`}
                   onClick={() => navegarParaAba(3)}
                 >
-                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 3 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>03</span>
-                  <span className={`font-medium ${abaAtiva === 3 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Configurar praça</span>
+                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 3 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>03</span>
+                  <span className={`font-medium ${abaAtiva === 3 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Configurar praça</span>
+                  {aba3Preenchida && abaAtiva !== 3 && <span className="ml-1.5 text-[#ff4600] text-xs">✓</span>}
                   {abaAtiva === 3 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
-                
-                <div 
+
+                {/* Aba 04 - Definir vias públicas */}
+                <div
                   className={`flex items-center px-4 py-2 mr-8 relative cursor-pointer ${
-                    abaAtiva === 4 
-                      ? 'bg-white border-2 border-[#ff4600] rounded-lg' 
-                      : 'hover:bg-gray-50 rounded-lg'
+                    abaAtiva === 4 ? 'bg-white border-2 border-[#ff4600] rounded-lg' : 'hover:bg-gray-50 rounded-lg'
                   }`}
                   onClick={() => navegarParaAba(4)}
                 >
-                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 4 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>04</span>
-                  <span className={`font-medium ${abaAtiva === 4 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Definir vias públicas</span>
+                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 4 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>04</span>
+                  <span className={`font-medium ${abaAtiva === 4 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Definir vias públicas</span>
+                  {aba4Preenchida && abaAtiva !== 4 && <span className="ml-1.5 text-[#ff4600] text-xs">✓</span>}
                   {abaAtiva === 4 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
-                
-                <div 
+
+                {/* Aba 05 - Definir indoor */}
+                <div
                   className={`flex items-center px-4 py-2 mr-8 relative ${
-                    !aba3Preenchida
-                      ? 'cursor-not-allowed opacity-40'
-                      : 'cursor-pointer'
+                    !aba3Preenchida ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'
                   } ${
-                    abaAtiva === 5 
-                      ? 'bg-white border-2 border-[#ff4600] rounded-lg' 
-                      : aba3Preenchida ? 'hover:bg-gray-50 rounded-lg' : ''
+                    abaAtiva === 5 ? 'bg-white border-2 border-[#ff4600] rounded-lg' : aba3Preenchida ? 'hover:bg-gray-50 rounded-lg' : ''
                   }`}
                   onClick={() => navegarParaAba(5)}
                   title={!aba3Preenchida ? 'Configure as praças (Aba 3) antes de configurar indoor' : ''}
                 >
-                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 5 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>05</span>
-                  <span className={`font-medium ${abaAtiva === 5 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Definir indoor</span>
-                  {aba5Preenchida && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
+                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 5 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>05</span>
+                  <span className={`font-medium ${abaAtiva === 5 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Definir indoor</span>
+                  {aba5Preenchida && abaAtiva !== 5 && <span className="ml-1.5 text-[#ff4600] text-xs">✓</span>}
                   {abaAtiva === 5 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
                 
@@ -2990,8 +2992,8 @@ export const CriarRoteiro: React.FC = () => {
                     }`}
                     onClick={() => navegarParaAba(6)}
                   >
-                    <span className={`font-bold text-sm mr-2 ${abaAtiva === 6 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>06</span>
-                    <span className={`font-medium ${abaAtiva === 6 ? 'text-blue-500' : 'text-[#3a3a3a]'}`}>Resultados</span>
+                    <span className={`font-bold text-sm mr-2 ${abaAtiva === 6 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>06</span>
+                    <span className={`font-medium ${abaAtiva === 6 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Resultados</span>
                     {abaAtiva === 6 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                   </div>
                 )}
@@ -3001,8 +3003,8 @@ export const CriarRoteiro: React.FC = () => {
             {/* Conteúdo das Abas */}
             <div className="px-16 pb-20">
               {/* Aba 1 - Nomear roteiro */}
-              {abaAtiva === 1 && (
-                <>
+              {abasAbertas.has(1) && (
+                <div style={{ display: abaAtiva === 1 ? 'block' : 'none' }}>
                   <div className="mb-8">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
                       {modoVisualizacao ? 'Dados do roteiro' : 'Cadastre os dados do seu novo roteiro'}
@@ -3209,12 +3211,12 @@ export const CriarRoteiro: React.FC = () => {
                       </div>
                     )}
                   </form>
-                </>
+                </div>
               )}
 
               {/* Aba 2 - Configurar target */}
-              {abaAtiva === 2 && (
-                <>
+              {abasAbertas.has(2) && (
+                <div style={{ display: abaAtiva === 2 ? 'block' : 'none' }}>
                   <div className="mb-8">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
                       {modoVisualizacao ? 'Target do roteiro' : 'Defina o target que fará parte do seu roteiro'}
@@ -3342,12 +3344,12 @@ export const CriarRoteiro: React.FC = () => {
                       </div>
                     )}
                   </form>
-                </>
+                </div>
               )}
 
               {/* Aba 3 - Configurar praça */}
-              {abaAtiva === 3 && (
-                <>
+              {abasAbertas.has(3) && (
+                <div style={{ display: abaAtiva === 3 ? 'block' : 'none' }}>
                   <div className="mb-8">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
                       {modoVisualizacao ? 'Praças do roteiro' : 'Defina as praças (cidade / estado) que estarão no seu roteiro.'}
@@ -3552,12 +3554,12 @@ export const CriarRoteiro: React.FC = () => {
                       </div>
                     )}
                   </form>
-                </>
+                </div>
               )}
 
               {/* Aba 4 - Definir vias públicas */}
-              {abaAtiva === 4 && (
-                <>
+              {abasAbertas.has(4) && (
+                <div style={{ display: abaAtiva === 4 ? 'block' : 'none' }}>
                   <div className="mb-8">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
                       {modoVisualizacao 
@@ -4426,13 +4428,11 @@ export const CriarRoteiro: React.FC = () => {
                       </>
                     )}
                   </form>
-                </>
+                </div>
               )}
 
               {/* Aba 5 - Definir indoor */}
-              {/* Aba 5 — lazy mount: renderiza na 1ª visita e nunca desmonta */}
-              {abaAtiva === 5 && !aba5JaAberta && (() => { setAba5JaAberta(true); return null; })()}
-              {aba5JaAberta && (
+              {abasAbertas.has(5) && (
                 <div style={{ display: abaAtiva === 5 ? 'block' : 'none' }}>
                   <div className="mb-6">
                     <h3 className="text-base font-bold text-[#3a3a3a] tracking-[0] leading-[22.4px]">
