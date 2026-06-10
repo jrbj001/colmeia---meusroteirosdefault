@@ -2924,7 +2924,7 @@ export const CriarRoteiro: React.FC = () => {
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 1 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>01</span>
                   <span className={`font-medium ${abaAtiva === 1 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Nomear roteiro</span>
-                  {aba1Preenchida && abaAtiva !== 1 && <span className="ml-1.5 text-[#ff4600] text-xs">✓</span>}
+                  {aba1Preenchida && abaAtiva !== 1 && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
                   {abaAtiva === 1 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
 
@@ -2937,7 +2937,7 @@ export const CriarRoteiro: React.FC = () => {
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 2 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>02</span>
                   <span className={`font-medium ${abaAtiva === 2 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Configurar target</span>
-                  {aba2Preenchida && abaAtiva !== 2 && <span className="ml-1.5 text-[#ff4600] text-xs">✓</span>}
+                  {aba2Preenchida && abaAtiva !== 2 && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
                   {abaAtiva === 2 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
 
@@ -2950,7 +2950,7 @@ export const CriarRoteiro: React.FC = () => {
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 3 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>03</span>
                   <span className={`font-medium ${abaAtiva === 3 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Configurar praça</span>
-                  {aba3Preenchida && abaAtiva !== 3 && <span className="ml-1.5 text-[#ff4600] text-xs">✓</span>}
+                  {aba3Preenchida && abaAtiva !== 3 && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
                   {abaAtiva === 3 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
 
@@ -2963,7 +2963,7 @@ export const CriarRoteiro: React.FC = () => {
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 4 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>04</span>
                   <span className={`font-medium ${abaAtiva === 4 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Definir vias públicas</span>
-                  {aba4Preenchida && abaAtiva !== 4 && <span className="ml-1.5 text-[#ff4600] text-xs">✓</span>}
+                  {aba4Preenchida && abaAtiva !== 4 && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
                   {abaAtiva === 4 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
 
@@ -2979,7 +2979,7 @@ export const CriarRoteiro: React.FC = () => {
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 5 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>05</span>
                   <span className={`font-medium ${abaAtiva === 5 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Definir indoor</span>
-                  {aba5Preenchida && abaAtiva !== 5 && <span className="ml-1.5 text-[#ff4600] text-xs">✓</span>}
+                  {aba5Preenchida && abaAtiva !== 5 && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
                   {abaAtiva === 5 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
                 
