@@ -2942,8 +2942,8 @@ export const CriarRoteiro: React.FC = () => {
                   }`}
                   onClick={() => navegarParaAba(1)}
                 >
-                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 1 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>01</span>
-                  <span className={`font-medium ${abaAtiva === 1 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Nomear roteiro</span>
+                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 1 ? 'text-[#ff4600]' : aba1Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>01</span>
+                  <span className={`font-medium ${abaAtiva === 1 ? 'text-[#ff4600]' : aba1Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>Nomear roteiro</span>
                   {aba1Preenchida && abaAtiva !== 1 && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
                   {abaAtiva === 1 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
@@ -2955,8 +2955,8 @@ export const CriarRoteiro: React.FC = () => {
                   }`}
                   onClick={() => navegarParaAba(2)}
                 >
-                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 2 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>02</span>
-                  <span className={`font-medium ${abaAtiva === 2 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Configurar target</span>
+                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 2 ? 'text-[#ff4600]' : aba2Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>02</span>
+                  <span className={`font-medium ${abaAtiva === 2 ? 'text-[#ff4600]' : aba2Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>Configurar target</span>
                   {aba2Preenchida && abaAtiva !== 2 && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
                   {abaAtiva === 2 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
@@ -2968,8 +2968,8 @@ export const CriarRoteiro: React.FC = () => {
                   }`}
                   onClick={() => navegarParaAba(3)}
                 >
-                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 3 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>03</span>
-                  <span className={`font-medium ${abaAtiva === 3 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Configurar praça</span>
+                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 3 ? 'text-[#ff4600]' : aba3Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>03</span>
+                  <span className={`font-medium ${abaAtiva === 3 ? 'text-[#ff4600]' : aba3Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>Configurar praça</span>
                   {aba3Preenchida && abaAtiva !== 3 && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
                   {abaAtiva === 3 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
@@ -2981,8 +2981,8 @@ export const CriarRoteiro: React.FC = () => {
                   }`}
                   onClick={() => navegarParaAba(4)}
                 >
-                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 4 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>04</span>
-                  <span className={`font-medium ${abaAtiva === 4 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Definir vias públicas</span>
+                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 4 ? 'text-[#ff4600]' : aba4Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>04</span>
+                  <span className={`font-medium ${abaAtiva === 4 ? 'text-[#ff4600]' : aba4Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>Definir vias públicas</span>
                   {aba4Preenchida && abaAtiva !== 4 && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
                   {abaAtiva === 4 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
@@ -2990,15 +2990,15 @@ export const CriarRoteiro: React.FC = () => {
                 {/* Aba 05 - Definir indoor */}
                 <div
                   className={`flex items-center px-4 py-2 mr-8 relative ${
-                    !aba3Preenchida ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'
+                    !aba3Preenchida ? 'cursor-not-allowed' : 'cursor-pointer'
                   } ${
                     abaAtiva === 5 ? 'bg-white border-2 border-[#ff4600] rounded-lg' : aba3Preenchida ? 'hover:bg-gray-50 rounded-lg' : ''
                   }`}
                   onClick={() => navegarParaAba(5)}
                   title={!aba3Preenchida ? 'Configure as praças (Aba 3) antes de configurar indoor' : ''}
                 >
-                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 5 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>05</span>
-                  <span className={`font-medium ${abaAtiva === 5 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Definir indoor</span>
+                  <span className={`font-bold text-sm mr-2 ${abaAtiva === 5 ? 'text-[#ff4600]' : aba5Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>05</span>
+                  <span className={`font-medium ${abaAtiva === 5 ? 'text-[#ff4600]' : aba5Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>Definir indoor</span>
                   {aba5Preenchida && abaAtiva !== 5 && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
                   {abaAtiva === 5 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
@@ -3012,8 +3012,8 @@ export const CriarRoteiro: React.FC = () => {
                     }`}
                     onClick={() => navegarParaAba(6)}
                   >
-                    <span className={`font-bold text-sm mr-2 ${abaAtiva === 6 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>06</span>
-                    <span className={`font-medium ${abaAtiva === 6 ? 'text-[#ff4600]' : 'text-[#3a3a3a]'}`}>Resultados</span>
+                    <span className={`font-bold text-sm mr-2 ${abaAtiva === 6 ? 'text-[#ff4600]' : aba4Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>06</span>
+                    <span className={`font-medium ${abaAtiva === 6 ? 'text-[#ff4600]' : aba4Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>Resultados</span>
                     {abaAtiva === 6 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                   </div>
                 )}
