@@ -416,7 +416,7 @@ Email: suporte@be180.com.br`;
                       Data de criação
                     </th>
                     <th
-                      className="text-white text-xs font-bold uppercase text-left px-6 py-2 tracking-wider font-sans"
+                      className="text-white text-xs font-bold uppercase text-center px-6 py-2 tracking-wider font-sans"
                     >
                       Status
                     </th>
@@ -465,7 +465,7 @@ Email: suporte@be180.com.br`;
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{formatarData(item.date_dh)}</td>
 
                         {/* Coluna STATUS — badge + dropdown (só interno) */}
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
                           {(() => {
                             const hex = item.statusHexColor_st || '#6b7280';
                             const label = item.planoMidiaStatus_st || 'Teste';
