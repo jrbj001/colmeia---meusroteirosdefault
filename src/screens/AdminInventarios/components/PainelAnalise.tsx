@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LoteAnalise } from '../types';
 import { StatusBadge } from './StatusBadge';
 import { InventarioCompleto } from './InventarioCompleto';
 import api from '../../../config/axios';
+
+interface CidadeCanonica { id_cidade: string; nome_cidade: string; nome_estado: string; }
+interface TipoCanonicos  { tipo: string; ambiente: string; formato: string; qtd: number; }
 
 const fmt = (n: number | null | undefined) => {
   if (n === null || n === undefined) return '—';
@@ -44,6 +47,17 @@ export const PainelAnalise: React.FC<Props> = ({
   const [mensagem, setMensagem] = useState('');
   const [confirmando, setConfirmando] = useState<null | 'aprovar' | 'corrigir' | 'rejeitar'>(null);
 
+  // ── Listas canônicas (carregadas uma vez) ──────────────────────
+  const [cidadesCanon, setCidadesCanon] = useState<CidadeCanonica[]>([]);
+  const [tiposCanon,   setTiposCanon]   = useState<TipoCanonicos[]>([]);
+
+  useEffect(() => {
+    api.get<CidadeCanonica[]>('/cidades-praca').then((r) => setCidadesCanon(r.data)).catch(() => {});
+    api.get<{ success: boolean; data: TipoCanonicos[] }>('/admin-inventario-analise', {
+      params: { mode: 'tipos-canonicos' },
+    }).then((r) => setTiposCanon(r.data.data ?? [])).catch(() => {});
+  }, []);
+
   // ── Correção de praças ──────────────────────────────────────────
   const [pracaCorrecoes, setPracaCorrecoes] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
@@ -75,12 +89,21 @@ export const PainelAnalise: React.FC<Props> = ({
   };
 
   // ── Correção de tipos (de-para) ─────────────────────────────────
-  type DeParaCorrection = { mapped_ambiente: string; mapped_formato: string; mapped_tipo: string };
+  // Mapa de sugestão: tipoNovo → tipoCanônico sugerido (via comparativo_tipos)
+  const sugestaoTipo = React.useMemo(() => {
+    const m: Record<string, string> = {};
+    (comparativo_tipos ?? []).forEach((c) => {
+      if (c.sugestao_legado?.tipo) m[c.tipo_novo] = c.sugestao_legado.tipo;
+    });
+    return m;
+  }, [comparativo_tipos]);
+
+  type DeParaCorrection = { mapped_tipo: string };
   const [tipoCorrecoes, setTipoCorrecoes] = useState<Record<string, DeParaCorrection>>(() => {
     const init: Record<string, DeParaCorrection> = {};
     (sem_depara ?? []).forEach((r) => {
       const key = `${r.ambiente}||${r.formato}||${r.tipo}`;
-      init[key] = { mapped_ambiente: r.ambiente, mapped_formato: r.formato, mapped_tipo: r.tipo };
+      init[key] = { mapped_tipo: sugestaoTipo[r.tipo] || '' };
     });
     return init;
   });
@@ -91,6 +114,8 @@ export const PainelAnalise: React.FC<Props> = ({
     const key = `${ambiente}||${formato}||${tipo}`;
     const corr = tipoCorrecoes[key];
     if (!corr?.mapped_tipo.trim()) return;
+    // Busca ambiente e formato canônicos a partir do tipo selecionado
+    const canonico = tiposCanon.find((t) => t.tipo === corr.mapped_tipo);
     setTipoSalvando((prev) => ({ ...prev, [key]: true }));
     try {
       await api.post('/admin-inventario-analise', {
@@ -100,8 +125,8 @@ export const PainelAnalise: React.FC<Props> = ({
         ambiente_novo: ambiente,
         formato_novo: formato,
         tipo_novo: tipo,
-        mapped_ambiente: corr.mapped_ambiente,
-        mapped_formato: corr.mapped_formato,
+        mapped_ambiente: canonico?.ambiente || ambiente,
+        mapped_formato: canonico?.formato || formato,
         mapped_tipo: corr.mapped_tipo,
       });
       setTipoSalvas((prev) => ({ ...prev, [key]: true }));
@@ -314,13 +339,23 @@ export const PainelAnalise: React.FC<Props> = ({
                             ✓ {pracaCorrecoes[p.praca_novo]}
                           </span>
                         ) : (
-                          <input
-                            type="text"
-                            value={pracaCorrecoes[p.praca_novo] ?? ''}
-                            onChange={(e) => setPracaCorrecoes((prev) => ({ ...prev, [p.praca_novo]: e.target.value }))}
-                            placeholder={p.cidade_legado || 'Nome canônico...'}
-                            className="w-full text-[13px] border border-gray-200 rounded-lg px-3 py-1.5 bg-white outline-none focus:border-[#ff4600] transition-colors"
-                          />
+                          <>
+                            <input
+                              type="text"
+                              list={`praca-list-${idx}`}
+                              value={pracaCorrecoes[p.praca_novo] ?? ''}
+                              onChange={(e) => setPracaCorrecoes((prev) => ({ ...prev, [p.praca_novo]: e.target.value }))}
+                              placeholder={p.cidade_legado || 'Buscar praça canônica...'}
+                              className="w-full text-[13px] border border-gray-200 rounded-lg px-3 py-1.5 bg-white outline-none focus:border-[#ff4600] transition-colors"
+                            />
+                            <datalist id={`praca-list-${idx}`}>
+                              {cidadesCanon.map((c) => (
+                                <option key={c.id_cidade} value={c.nome_cidade}>
+                                  {c.nome_cidade} — {c.nome_estado}
+                                </option>
+                              ))}
+                            </datalist>
+                          </>
                         )}
                       </td>
                       <td className="px-5 py-3 text-center">
@@ -434,7 +469,7 @@ export const PainelAnalise: React.FC<Props> = ({
                   <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold">Formato</th>
                   <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold">Tipo</th>
                   <th className="text-right px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold w-20">Itens</th>
-                  <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold" colSpan={3}>Mapear para (canônico)</th>
+                  <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold" colSpan={3}>Tipo canônico (Colmeia)</th>
                   <th className="px-5 py-3 text-center text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold w-28">Ação</th>
                 </tr>
               </thead>
@@ -452,36 +487,32 @@ export const PainelAnalise: React.FC<Props> = ({
                       <td className="px-5 py-3 text-right text-gray-500 font-mono">{fmt(r.qtd)}</td>
                       {salva ? (
                         <td colSpan={4} className="px-5 py-3 text-green-600 font-medium text-[13px]">
-                          ✓ {corr.mapped_ambiente} / {corr.mapped_formato} / {corr.mapped_tipo}
+                          ✓ {corr.mapped_tipo}
                         </td>
                       ) : (
                         <>
-                          <td className="px-3 py-2">
-                            <input
-                              type="text"
-                              value={corr.mapped_ambiente}
-                              onChange={(e) => setTipoCorrecoes((prev) => ({ ...prev, [key]: { ...prev[key], mapped_ambiente: e.target.value } }))}
-                              placeholder="Ambiente"
-                              className="w-full text-[12px] border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-[#ff4600] transition-colors"
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <input
-                              type="text"
-                              value={corr.mapped_formato}
-                              onChange={(e) => setTipoCorrecoes((prev) => ({ ...prev, [key]: { ...prev[key], mapped_formato: e.target.value } }))}
-                              placeholder="Formato"
-                              className="w-full text-[12px] border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-[#ff4600] transition-colors"
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <input
-                              type="text"
-                              value={corr.mapped_tipo}
-                              onChange={(e) => setTipoCorrecoes((prev) => ({ ...prev, [key]: { ...prev[key], mapped_tipo: e.target.value } }))}
-                              placeholder="Tipo"
-                              className="w-full text-[12px] border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-[#ff4600] transition-colors"
-                            />
+                          <td colSpan={3} className="px-3 py-2">
+                            <div className="flex flex-col gap-1">
+                              <select
+                                value={corr.mapped_tipo}
+                                onChange={(e) => setTipoCorrecoes((prev) => ({ ...prev, [key]: { mapped_tipo: e.target.value } }))}
+                                className="w-full text-[12px] border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-[#ff4600] transition-colors"
+                              >
+                                <option value="">Selecionar tipo canônico…</option>
+                                {tiposCanon.map((t) => (
+                                  <option key={t.tipo} value={t.tipo}>{t.tipo}</option>
+                                ))}
+                              </select>
+                              {sugestaoTipo[r.tipo] && !corr.mapped_tipo && (
+                                <button
+                                  type="button"
+                                  onClick={() => setTipoCorrecoes((prev) => ({ ...prev, [key]: { mapped_tipo: sugestaoTipo[r.tipo] } }))}
+                                  className="text-left text-[11px] text-[#ff4600] hover:underline px-0.5"
+                                >
+                                  Sugestão: {sugestaoTipo[r.tipo]}
+                                </button>
+                              )}
+                            </div>
                           </td>
                           <td className="px-5 py-3 text-center">
                             <button

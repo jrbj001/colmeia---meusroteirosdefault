@@ -861,6 +861,34 @@ async function listarItens(req, res, pool) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Lista tipos de mídia canônicos do banco de ativos (para dropdown de correção)
+// ───────────────────────────────────────────────────────────────────────────
+async function tiposCanonicos(req, res, pool) {
+  const result = await pool.request().query(`
+    SELECT DISTINCT
+      LTRIM(RTRIM(tipoMidia_st))     AS tipo,
+      LTRIM(RTRIM(environment_st))   AS ambiente,
+      LTRIM(RTRIM(media_format_st))  AS formato,
+      COUNT(1) OVER (PARTITION BY LTRIM(RTRIM(tipoMidia_st))) AS qtd
+    FROM [serv_product_be180].[bancoAtivosJoin_ft]
+    WHERE valid_bl = 1
+      AND tipoMidia_st IS NOT NULL
+      AND LTRIM(RTRIM(tipoMidia_st)) <> ''
+    ORDER BY tipo ASC
+  `);
+
+  const vistos = new Set();
+  const tipos = [];
+  for (const r of result.recordset) {
+    if (!vistos.has(r.tipo)) {
+      vistos.add(r.tipo);
+      tipos.push({ tipo: r.tipo, ambiente: r.ambiente || '', formato: r.formato || '', qtd: r.qtd });
+    }
+  }
+  return res.json({ success: true, data: tipos });
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Corrige praça de itens do lote (admin renomeia praca_novo → praca_correta)
 // ───────────────────────────────────────────────────────────────────────────
 async function corrigirPraca(req, res, pool) {
@@ -987,8 +1015,9 @@ module.exports = async (req, res) => {
 
     if (req.method === 'GET') {
       const mode = String(req.query.mode || 'lista');
-      if (mode === 'analise') return analisarLote(req, res, pool);
-      if (mode === 'itens')   return listarItens(req, res, pool);
+      if (mode === 'analise')         return analisarLote(req, res, pool);
+      if (mode === 'itens')           return listarItens(req, res, pool);
+      if (mode === 'tipos-canonicos') return tiposCanonicos(req, res, pool);
       return listarLotes(req, res, pool);
     }
 
