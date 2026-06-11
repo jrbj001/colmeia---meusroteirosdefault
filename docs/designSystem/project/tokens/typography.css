@@ -1,0 +1,62 @@
+/* ============================================================
+   Colmeia — Typography tokens
+   ------------------------------------------------------------
+   Primary brand/UI font: Neue Montreal (→ Hanken Grotesk subst.)
+   for headings, navigation, table chrome and labels.
+   Secondary/body font: Inter.
+   Mono: technical/tabular data (IDs, coordinates, counts).
+   Small UI text carries ~0.5px letter-spacing; section labels
+   are UPPERCASE with wider tracking.
+   ============================================================ */
+
+:root {
+  /* ---- Families ---- */
+  --font-brand: "Neue Montreal", "Hanken Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-body:  "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* ---- Weights ---- */
+  --weight-regular: 400;
+  --weight-medium:  500;
+  --weight-semibold: 600;
+  --weight-bold:    700;
+
+  /* ---- Type scale (px) ---- */
+  --text-display:   28px;   /* dashboard hero numbers / KPI */
+  --text-h1:        20px;   /* page titles */
+  --text-h2:        18px;   /* section heads */
+  --text-h3:        16px;   /* card titles */
+  --text-base:      14px;   /* body / table cells */
+  --text-sm:        13px;   /* dense controls */
+  --text-xs:        12px;   /* labels, captions */
+  --text-2xs:       11px;   /* table header, micro-labels */
+  --text-3xs:       10px;   /* footer, legends */
+
+  /* ---- Line heights ---- */
+  --leading-tight:  1.2;
+  --leading-snug:   1.35;
+  --leading-normal: 1.5;
+
+  /* ---- Letter spacing ---- */
+  --tracking-ui:      0.5px;    /* small UI text / nav items */
+  --tracking-label:   0.6px;    /* uppercase section labels */
+  --tracking-wide:    0.8px;    /* table header uppercase */
+  --tracking-tight:  -0.2px;    /* large display numbers */
+
+  /* ---- Semantic roles ---- */
+  --type-page-title-font:    var(--font-brand);
+  --type-page-title-size:    var(--text-h1);
+  --type-page-title-weight:  var(--weight-bold);
+
+  --type-section-label-size:   var(--text-2xs);
+  --type-section-label-weight: var(--weight-bold);
+  --type-section-label-track:  var(--tracking-label);
+
+  --type-body-font:    var(--font-body);
+  --type-body-size:    var(--text-base);
+  --type-body-weight:  var(--weight-regular);
+
+  --type-table-header-size:   var(--text-2xs);
+  --type-table-header-weight: var(--weight-bold);
+  --type-table-header-track:  var(--tracking-wide);
+}

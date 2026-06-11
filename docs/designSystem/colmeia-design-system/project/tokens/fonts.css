@@ -1,0 +1,23 @@
+/* ============================================================
+   Colmeia — Webfonts
+   ------------------------------------------------------------
+   Brand/UI font is Neue Montreal (Regular/Medium/Bold), a neo-
+   grotesque. The original app loaded proprietary Neue Montreal
+   OTFs from Anima's S3 bucket — those binaries are not
+   redistributable, so this system SUBSTITUTES the closest free
+   neo-grotesque on Google Fonts: Hanken Grotesk.
+   Body/secondary font is Inter (used as-is by the app).
+   Technical/tabular data uses a system monospace stack.
+   ============================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap");
+
+/* Brand alias — map "Neue Montreal" to the substitute so existing
+   markup referencing the brand name still resolves. */
+@font-face {
+  font-family: "Neue Montreal";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: local("Hanken Grotesk"), local("HankenGrotesk-Regular");
+}

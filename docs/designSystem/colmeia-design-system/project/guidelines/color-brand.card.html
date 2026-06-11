@@ -1,0 +1,26 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Brand — Orange" subtitle="Primary #FF4600, hover #E33D00, wash #FFF1EB" -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { margin: 0; font-family: var(--font-body); background: var(--surface-card); }
+  .row { display: flex; gap: 14px; padding: 20px; }
+  .sw { flex: 1; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border-subtle); }
+  .chip { height: 64px; }
+  .meta { padding: 8px 10px; }
+  .name { font-size: 12px; font-weight: 600; color: var(--text-strong); }
+  .hex { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:var(--color-orange-500)"></div><div class="meta"><div class="name">Primary</div><div class="hex">#FF4600</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--color-orange-600)"></div><div class="meta"><div class="name">Hover / Pressed</div><div class="hex">#E33D00</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--color-orange-700)"></div><div class="meta"><div class="name">Deep accent</div><div class="hex">#C23400</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--color-orange-300)"></div><div class="meta"><div class="name">Gradient light</div><div class="hex">#FF8B5E</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--color-orange-50); border-bottom:1px solid var(--border-subtle)"></div><div class="meta"><div class="name">Wash</div><div class="hex">#FFF1EB</div></div></div>
+  </div>
+</body>
+</html>

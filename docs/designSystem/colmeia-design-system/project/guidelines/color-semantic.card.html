@@ -1,0 +1,47 @@
+<!-- @dsCard group="Colors" viewport="700x170" name="Semantic — status" subtitle="Success, warning, error, neutral & info pairs" -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { margin: 0; font-family: var(--font-body); background: var(--surface-card); }
+  .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; padding: 20px; }
+  .col { }
+  .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--radius-full); font-size: 12px; font-weight: 600; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .pair { display: flex; gap: 6px; margin-top: 10px; }
+  .chip { flex: 1; height: 28px; border-radius: var(--radius-sm); border: 1px solid rgba(0,0,0,0.05); }
+  .hex { font-family: var(--font-mono); font-size: 9px; color: var(--text-secondary); margin-top: 5px; }
+</style>
+</head>
+<body>
+  <div class="grid">
+    <div class="col">
+      <span class="badge" style="color:var(--color-success-text);background:var(--color-success-bg)"><span class="dot" style="background:var(--color-success-dot)"></span>Aprovado</span>
+      <div class="pair"><div class="chip" style="background:var(--color-success-text)"></div><div class="chip" style="background:var(--color-success-bg)"></div></div>
+      <div class="hex">#15803D / #DCFCE7</div>
+    </div>
+    <div class="col">
+      <span class="badge" style="color:var(--color-warning-text);background:var(--color-warning-bg)"><span class="dot" style="background:var(--color-warning-dot)"></span>Em análise</span>
+      <div class="pair"><div class="chip" style="background:var(--color-warning-text)"></div><div class="chip" style="background:var(--color-warning-bg)"></div></div>
+      <div class="hex">#B45309 / #FEF3C7</div>
+    </div>
+    <div class="col">
+      <span class="badge" style="color:var(--color-error-text);background:var(--color-error-bg)"><span class="dot" style="background:var(--color-error-strong)"></span>Rejeitado</span>
+      <div class="pair"><div class="chip" style="background:var(--color-error-text)"></div><div class="chip" style="background:var(--color-error-bg)"></div></div>
+      <div class="hex">#DC2626 / #FEE2E2</div>
+    </div>
+    <div class="col">
+      <span class="badge" style="color:var(--color-neutral-text);background:var(--color-neutral-bg)"><span class="dot" style="background:var(--color-neutral-dot)"></span>Pendente</span>
+      <div class="pair"><div class="chip" style="background:var(--color-neutral-text)"></div><div class="chip" style="background:var(--color-neutral-bg)"></div></div>
+      <div class="hex">#374151 / #F3F4F6</div>
+    </div>
+    <div class="col">
+      <span class="badge" style="color:var(--color-info-text);background:var(--color-info-bg)"><span class="dot" style="background:var(--color-info-text)"></span>Info</span>
+      <div class="pair"><div class="chip" style="background:var(--color-info-text)"></div><div class="chip" style="background:var(--color-info-bg)"></div></div>
+      <div class="hex">#1D4ED8 / #DBEAFE</div>
+    </div>
+  </div>
+</body>
+</html>

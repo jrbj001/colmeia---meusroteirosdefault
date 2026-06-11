@@ -1,0 +1,62 @@
+<!-- @dsCard group="Components" viewport="700x430" name="Forms" subtitle="Buttons, inputs, select, switch, checkbox" -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="../../styles.css" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>
+  body { margin: 0; font-family: var(--font-body); background: var(--surface-card); color: var(--text-body); }
+  .pad { padding: 24px; }
+  .grp { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; }
+  .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-secondary); font-weight: 700; margin: 0 0 9px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; max-width: 560px; }
+</style>
+</head>
+<body>
+  <div id="root" class="pad"></div>
+  <script type="text/babel">
+    const { Button, IconButton, Input, Select, Switch, Checkbox } = window.ColmeiaDesignSystem_6ed06a;
+    function Demo() {
+      const [on, setOn] = React.useState(true);
+      const [chk, setChk] = React.useState(true);
+      return (
+        <div>
+          <p className="lbl">Buttons</p>
+          <div className="grp">
+            <Button variant="primary">Criar roteiro</Button>
+            <Button variant="secondary">Cancelar</Button>
+            <Button variant="ghost">Limpar filtros</Button>
+            <Button variant="danger" iconLeft={<span className="material-symbols-outlined" style={{fontSize:18}}>delete</span>}>Excluir</Button>
+            <Button variant="primary" loading>Salvando</Button>
+            <Button variant="primary" disabled>Indisponível</Button>
+          </div>
+          <div className="grp">
+            <Button size="sm" variant="primary">Pequeno</Button>
+            <Button size="lg" variant="primary">Grande</Button>
+            <IconButton icon="pin_drop" label="Mapa" variant="outline" />
+            <IconButton icon="difference" label="Resultados" variant="outline" />
+            <IconButton icon="delete" tone="danger" label="Excluir" variant="outline" />
+          </div>
+          <div className="cols" style={{marginTop:6}}>
+            <Input label="Nome do roteiro" icon="search" placeholder="Buscar por nome..." />
+            <Select label="Praça" placeholder="Todas as praças" options={["São Paulo","Rio de Janeiro","Belo Horizonte"]} />
+            <Input label="E-mail" value="erro@" error="E-mail inválido" />
+            <Input label="Bloqueado" placeholder="Somente leitura" disabled />
+          </div>
+          <div className="grp" style={{marginTop:18}}>
+            <Switch checked={on} onChange={setOn} label="Liberar para agência" />
+            <Checkbox checked={chk} onChange={setChk} label="Selecionar todos" />
+            <Checkbox checked={false} onChange={()=>{}} label="Indoor" />
+          </div>
+        </div>
+      );
+    }
+    ReactDOM.createRoot(document.getElementById("root")).render(<Demo />);
+  </script>
+</body>
+</html>

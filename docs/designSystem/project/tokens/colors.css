@@ -1,0 +1,100 @@
+/* ============================================================
+   Colmeia — Color tokens
+   ------------------------------------------------------------
+   Source of truth: the live Colmeia UI (orange #FF4600 identity).
+   NOTE: the codebase's tailwind.css carries a leftover Anima
+   "brand-800/900" GREY token set — that is NOT canonical and is
+   intentionally excluded here. The orange identity wins.
+   The original UI also used #FF9800 (amber) in a few focus rings
+   and toggles; that is treated as legacy drift and unified onto
+   the brand orange below.
+   ============================================================ */
+
+:root {
+  /* ---- Brand (primitives) ---- */
+  --color-orange-50:  #FFF1EB;   /* tint wash / hover surfaces */
+  --color-orange-100: #FFE0D2;
+  --color-orange-300: #FF8B5E;   /* gradient light stop (avatars) */
+  --color-orange-500: #FF4600;   /* PRIMARY — brand orange */
+  --color-orange-600: #E33D00;   /* hover / pressed */
+  --color-orange-700: #C23400;   /* deep accent */
+
+  /* ---- Charcoal / ink ---- */
+  --color-ink-900:    #222222;   /* strongest headings */
+  --color-ink-800:    #3A3A3A;   /* core body text */
+  --color-ink-700:    #393939;   /* dark surfaces (table header) */
+  --color-ink-600:    #565656;
+
+  /* ---- Neutral ramp ---- */
+  --color-white:      #FFFFFF;
+  --color-gray-50:    #FAFAFA;   /* app canvas */
+  --color-gray-75:    #F8F8F8;   /* sidebar surface */
+  --color-gray-100:   #F7F7F7;   /* zebra row / panel */
+  --color-gray-150:   #ECECEC;   /* row hover */
+  --color-gray-200:   #EDEDED;   /* nav hover / soft divider */
+  --color-gray-300:   #D9D9D9;   /* input border */
+  --color-gray-400:   #C1C1C1;   /* structural divider / chrome border */
+  --color-gray-500:   #B0B0B0;   /* muted / footer text */
+  --color-gray-600:   #757575;   /* secondary text / inactive icon */
+
+  /* ---- Semantic: Success ---- */
+  --color-success-text:   #15803D;
+  --color-success-dot:    #16A34A;
+  --color-success-bg:     #DCFCE7;
+
+  /* ---- Semantic: Warning ---- */
+  --color-warning-text:   #B45309;
+  --color-warning-dot:    #D97706;
+  --color-warning-bg:     #FEF3C7;
+
+  /* ---- Semantic: Error / Danger ---- */
+  --color-error-text:     #DC2626;
+  --color-error-strong:   #B91C1C;   /* pressed danger button */
+  --color-error-bg:       #FEE2E2;
+
+  /* ---- Semantic: Neutral / Rejected ---- */
+  --color-neutral-text:   #374151;
+  --color-neutral-dot:    #6B7280;
+  --color-neutral-bg:     #F3F4F6;
+
+  /* ---- Semantic: Info ---- */
+  --color-info-text:      #1D4ED8;
+  --color-info-bg:        #DBEAFE;
+
+  /* ============================================================
+     SEMANTIC ALIASES — reference these in product code
+     ============================================================ */
+
+  /* Brand */
+  --brand-primary:        var(--color-orange-500);
+  --brand-primary-hover:  var(--color-orange-600);
+  --brand-primary-wash:   var(--color-orange-50);
+  --brand-on-primary:     var(--color-white);
+
+  /* Text */
+  --text-strong:          var(--color-ink-900);
+  --text-body:            var(--color-ink-800);
+  --text-secondary:       var(--color-gray-600);
+  --text-muted:           var(--color-gray-500);
+  --text-on-dark:         var(--color-white);
+  --text-link:            var(--color-orange-600);
+
+  /* Surfaces */
+  --surface-canvas:       var(--color-white);
+  --surface-app:          var(--color-gray-50);
+  --surface-sidebar:      var(--color-gray-75);
+  --surface-panel:        var(--color-gray-100);
+  --surface-card:         var(--color-white);
+  --surface-dark:         var(--color-ink-700);
+  --surface-row-alt:      var(--color-gray-100);
+  --surface-row-hover:    var(--color-gray-150);
+  --surface-nav-hover:    var(--color-gray-200);
+
+  /* Borders */
+  --border-subtle:        var(--color-gray-200);
+  --border-input:         var(--color-gray-300);
+  --border-structural:    var(--color-gray-400);
+
+  /* Focus */
+  --focus-ring:           var(--color-orange-500);
+}
