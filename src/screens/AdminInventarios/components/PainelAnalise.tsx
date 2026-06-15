@@ -71,7 +71,7 @@ export const PainelAnalise: React.FC<Props> = ({
 
   const salvarCorrecaoPraca = async (pracaNovo: string) => {
     const pracaCorreta = (pracaCorrecoes[pracaNovo] || '').trim();
-    if (!pracaCorreta || pracaCorreta === pracaNovo) return;
+    if (!pracaCorreta) return;
     setPracaSalvando((prev) => ({ ...prev, [pracaNovo]: true }));
     try {
       await api.post('/admin-inventario-analise', {
