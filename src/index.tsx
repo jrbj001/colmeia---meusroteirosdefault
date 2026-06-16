@@ -29,6 +29,7 @@ const AdminPerfis            = lazy(() => import("./screens/Admin").then(m => ({
 const AdminInventarios       = lazy(() => import("./screens/AdminInventarios/AdminInventarios").then(m => ({ default: m.AdminInventarios })));
 const BlueprintDiligencia    = lazy(() => import("./screens/BlueprintDiligencia").then(m => ({ default: m.BlueprintDiligencia })));
 const DesignSystem           = lazy(() => import("./screens/DesignSystem").then(m => ({ default: m.DesignSystem })));
+const MapaDoProduto          = lazy(() => import("./screens/MapaDoProduto").then(m => ({ default: m.MapaDoProduto })));
 const PaginaEmDesenvolvimento = lazy(() => import("./components/PaginaEmDesenvolvimento").then(m => ({ default: m.PaginaEmDesenvolvimento })));
 const CadastrarExibidor      = lazy(() => import("./screens/CadastrarExibidor/CadastrarExibidor").then(m => ({ default: m.CadastrarExibidor })));
 const GestaoExibidores       = lazy(() => import("./screens/GestaoExibidores/GestaoExibidores").then(m => ({ default: m.GestaoExibidores })));
@@ -209,6 +210,9 @@ root.render(
                 } />
                 <Route path="/admin/design-system" element={
                   <ProtectedRoute internalOnly adminOnly><DesignSystem /></ProtectedRoute>
+                } />
+                <Route path="/admin/mapa-do-produto" element={
+                  <ProtectedRoute internalOnly adminOnly><MapaDoProduto /></ProtectedRoute>
                 } />
 
                 <Route path="*" element={<div>Página não encontrada</div>} />
