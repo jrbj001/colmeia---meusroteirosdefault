@@ -39,7 +39,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
     location.pathname.startsWith('/admin/perfis');
   const isDocsAtivo =
     location.pathname.startsWith('/admin/blueprint') ||
-    location.pathname.startsWith('/admin/design-system');
+    location.pathname.startsWith('/admin/design-system') ||
+    location.pathname.startsWith('/admin/mapa-do-produto');
 
   // Abrir o submenu correspondente automaticamente ao navegar
   useEffect(() => {
@@ -481,6 +482,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
                       : "text-[#3a3a3a] hover:bg-[#ededed]"
                   }`}>
                     Design System
+                  </div>
+                </Link>
+                <Link to="/admin/mapa-do-produto" className="block">
+                  <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
+                    location.pathname === "/admin/mapa-do-produto"
+                      ? "text-[#ff4600] font-medium"
+                      : "text-[#3a3a3a] hover:bg-[#ededed]"
+                  }`}>
+                    Mapa do produto
                   </div>
                 </Link>
               </div>
