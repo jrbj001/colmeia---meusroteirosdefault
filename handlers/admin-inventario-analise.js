@@ -405,12 +405,14 @@ async function analisarLote(req, res, pool) {
         WHERE lote_fk = @lote_pk AND delete_bl = 0
         GROUP BY ISNULL(NULLIF(LTRIM(RTRIM(praca_st)),''),'(vazio)'), ISNULL(NULLIF(LTRIM(RTRIM(uf_st)),''),'')
       `);
+    // Compara contra o banco GLOBAL (todas as cidades canônicas da Colmeia),
+    // não apenas o legado deste exibidor — assim praças corretas mas novas
+    // para o exibidor não aparecem como "NOVA" após correção.
     const cidadesLegadoRes = await pool.request()
-      .input('exibidor_fk', sql.Int, exibidorFk)
       .query(`
         SELECT cidade_st AS cidade, estado_st AS uf, COUNT(1) AS qtd
         FROM [serv_product_be180].[bancoAtivosJoin_ft]
-        WHERE valid_bl = 1 AND exibidor_fk = @exibidor_fk
+        WHERE valid_bl = 1
           AND cidade_st IS NOT NULL AND LTRIM(RTRIM(cidade_st)) <> ''
         GROUP BY cidade_st, estado_st
       `);
@@ -861,6 +863,34 @@ async function listarItens(req, res, pool) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Lista tipos de mídia canônicos do banco de ativos (para dropdown de correção)
+// ───────────────────────────────────────────────────────────────────────────
+async function tiposCanonicos(req, res, pool) {
+  const result = await pool.request().query(`
+    SELECT DISTINCT
+      LTRIM(RTRIM(tipoMidia_st))     AS tipo,
+      LTRIM(RTRIM(environment_st))   AS ambiente,
+      LTRIM(RTRIM(media_format_st))  AS formato,
+      COUNT(1) OVER (PARTITION BY LTRIM(RTRIM(tipoMidia_st))) AS qtd
+    FROM [serv_product_be180].[bancoAtivosJoin_ft]
+    WHERE valid_bl = 1
+      AND tipoMidia_st IS NOT NULL
+      AND LTRIM(RTRIM(tipoMidia_st)) <> ''
+    ORDER BY tipo ASC
+  `);
+
+  const vistos = new Set();
+  const tipos = [];
+  for (const r of result.recordset) {
+    if (!vistos.has(r.tipo)) {
+      vistos.add(r.tipo);
+      tipos.push({ tipo: r.tipo, ambiente: r.ambiente || '', formato: r.formato || '', qtd: r.qtd });
+    }
+  }
+  return res.json({ success: true, data: tipos });
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Corrige praça de itens do lote (admin renomeia praca_novo → praca_correta)
 // ───────────────────────────────────────────────────────────────────────────
 async function corrigirPraca(req, res, pool) {
@@ -888,11 +918,12 @@ async function corrigirPraca(req, res, pool) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Corrige tipo de mídia — cadastra/atualiza regra de-para para um tipo do envio
+// Corrige tipo de mídia — cadastra/atualiza regra de-para e re-aplica nos itens
+// Colunas reais: sourceAmbiente_st / sourceFormato_st / sourceTipo_st
+//                mappedAmbiente_st / mappedFormato_st / mappedTipo_st
 // ───────────────────────────────────────────────────────────────────────────
 async function corrigirTipo(req, res, pool) {
   const lotePk         = Number(req.body?.lote_pk || 0);
-  const exibidorFk     = Number(req.body?.exibidor_fk || 0);
   const ambienteNovo   = String(req.body?.ambiente_novo  || '').trim();
   const formatoNovo    = String(req.body?.formato_novo   || '').trim();
   const tipoNovo       = String(req.body?.tipo_novo      || '').trim();
@@ -900,48 +931,54 @@ async function corrigirTipo(req, res, pool) {
   const mappedFormato  = String(req.body?.mapped_formato  || '').trim();
   const mappedTipo     = String(req.body?.mapped_tipo     || '').trim();
 
-  if (!lotePk || !exibidorFk) {
-    return res.status(400).json({ success: false, error: 'lote_pk e exibidor_fk são obrigatórios' });
+  if (!lotePk) {
+    return res.status(400).json({ success: false, error: 'lote_pk é obrigatório' });
   }
-  if (!mappedAmbiente || !mappedFormato || !mappedTipo) {
-    return res.status(400).json({ success: false, error: 'mapped_ambiente, mapped_formato e mapped_tipo são obrigatórios' });
+  if (!mappedTipo) {
+    return res.status(400).json({ success: false, error: 'mapped_tipo é obrigatório' });
   }
 
-  // Upsert da regra de-para para este exibidor
+  // Upsert da regra de-para — colunas corretas: sourceAmbiente_st, sourceFormato_st, sourceTipo_st
   await pool.request()
-    .input('exibidor_fk',     sql.Int,        exibidorFk)
-    .input('ambiente_st',     sql.NVarChar(200), ambienteNovo)
-    .input('formato_st',      sql.NVarChar(200), formatoNovo)
-    .input('tipo_st',         sql.NVarChar(200), tipoNovo)
-    .input('mapped_ambiente_st', sql.NVarChar(200), mappedAmbiente)
-    .input('mapped_formato_st',  sql.NVarChar(200), mappedFormato)
-    .input('mapped_tipo_st',     sql.NVarChar(200), mappedTipo)
+    .input('sourceAmbiente_st',  sql.NVarChar(150), ambienteNovo)
+    .input('sourceFormato_st',   sql.NVarChar(150), formatoNovo)
+    .input('sourceTipo_st',      sql.NVarChar(150), tipoNovo)
+    .input('mappedAmbiente_st',  sql.NVarChar(150), mappedAmbiente || ambienteNovo)
+    .input('mappedFormato_st',   sql.NVarChar(150), mappedFormato  || formatoNovo)
+    .input('mappedTipo_st',      sql.NVarChar(150), mappedTipo)
     .query(`
       MERGE [serv_product_be180].[exibidor_midia_depara_dm] AS target
-      USING (SELECT @exibidor_fk AS exibidor_fk, @ambiente_st AS ambiente_st, @formato_st AS formato_st, @tipo_st AS tipo_st) AS src
-        ON target.exibidor_fk = src.exibidor_fk
-           AND target.ambiente_st = src.ambiente_st
-           AND target.formato_st  = src.formato_st
-           AND target.tipo_st     = src.tipo_st
+      USING (
+        SELECT
+          @sourceAmbiente_st AS sourceAmbiente_st,
+          @sourceFormato_st  AS sourceFormato_st,
+          @sourceTipo_st     AS sourceTipo_st
+      ) AS src
+        ON LOWER(LTRIM(RTRIM(target.sourceAmbiente_st))) = LOWER(LTRIM(RTRIM(src.sourceAmbiente_st)))
+       AND LOWER(LTRIM(RTRIM(target.sourceFormato_st)))  = LOWER(LTRIM(RTRIM(src.sourceFormato_st)))
+       AND LOWER(LTRIM(RTRIM(target.sourceTipo_st)))     = LOWER(LTRIM(RTRIM(src.sourceTipo_st)))
       WHEN MATCHED THEN
         UPDATE SET
-          mapped_ambiente_st = @mapped_ambiente_st,
-          mapped_formato_st  = @mapped_formato_st,
-          mapped_tipo_st     = @mapped_tipo_st
+          mappedAmbiente_st = @mappedAmbiente_st,
+          mappedFormato_st  = @mappedFormato_st,
+          mappedTipo_st     = @mappedTipo_st
       WHEN NOT MATCHED THEN
-        INSERT (exibidor_fk, ambiente_st, formato_st, tipo_st, mapped_ambiente_st, mapped_formato_st, mapped_tipo_st)
-        VALUES (@exibidor_fk, @ambiente_st, @formato_st, @tipo_st, @mapped_ambiente_st, @mapped_formato_st, @mapped_tipo_st);
+        INSERT (sourceAmbiente_st, sourceFormato_st, sourceTipo_st,
+                mappedAmbiente_st, mappedFormato_st, mappedTipo_st)
+        VALUES (@sourceAmbiente_st, @sourceFormato_st, @sourceTipo_st,
+                @mappedAmbiente_st, @mappedFormato_st, @mappedTipo_st);
     `);
 
   // Re-aplica o mapeamento nos itens do lote afetados
+  // Colunas corretas na tabela de itens: ambiente_st, formato_midia_st, tipo_midia_st
   await pool.request()
-    .input('lote_pk',     sql.Int,        lotePk)
-    .input('ambiente_st', sql.NVarChar(200), ambienteNovo)
-    .input('formato_st',  sql.NVarChar(200), formatoNovo)
-    .input('tipo_st',     sql.NVarChar(200), tipoNovo)
-    .input('mapped_ambiente_st', sql.NVarChar(200), mappedAmbiente)
-    .input('mapped_formato_st',  sql.NVarChar(200), mappedFormato)
-    .input('mapped_tipo_st',     sql.NVarChar(200), mappedTipo)
+    .input('lote_pk',            sql.Int,           lotePk)
+    .input('ambiente_st',        sql.NVarChar(150), ambienteNovo)
+    .input('formato_midia_st',   sql.NVarChar(150), formatoNovo)
+    .input('tipo_midia_st',      sql.NVarChar(150), tipoNovo)
+    .input('mapped_ambiente_st', sql.NVarChar(150), mappedAmbiente || ambienteNovo)
+    .input('mapped_formato_st',  sql.NVarChar(150), mappedFormato  || formatoNovo)
+    .input('mapped_tipo_st',     sql.NVarChar(150), mappedTipo)
     .query(`
       UPDATE [serv_product_be180].[exibidor_inventario_item_dm]
       SET
@@ -949,11 +986,11 @@ async function corrigirTipo(req, res, pool) {
         mapped_formato_st  = @mapped_formato_st,
         mapped_tipo_st     = @mapped_tipo_st,
         mapped_bl          = 1
-      WHERE lote_fk    = @lote_pk
-        AND delete_bl  = 0
-        AND ambiente_st    = @ambiente_st
-        AND formato_midia_st = @formato_st
-        AND tipo_midia_st    = @tipo_st
+      WHERE lote_fk          = @lote_pk
+        AND delete_bl        = 0
+        AND LOWER(LTRIM(RTRIM(ambiente_st)))      = LOWER(LTRIM(RTRIM(@ambiente_st)))
+        AND LOWER(LTRIM(RTRIM(formato_midia_st))) = LOWER(LTRIM(RTRIM(@formato_midia_st)))
+        AND LOWER(LTRIM(RTRIM(tipo_midia_st)))    = LOWER(LTRIM(RTRIM(@tipo_midia_st)))
     `);
 
   return res.json({ success: true });
@@ -987,8 +1024,9 @@ module.exports = async (req, res) => {
 
     if (req.method === 'GET') {
       const mode = String(req.query.mode || 'lista');
-      if (mode === 'analise') return analisarLote(req, res, pool);
-      if (mode === 'itens')   return listarItens(req, res, pool);
+      if (mode === 'analise')         return analisarLote(req, res, pool);
+      if (mode === 'itens')           return listarItens(req, res, pool);
+      if (mode === 'tipos-canonicos') return tiposCanonicos(req, res, pool);
       return listarLotes(req, res, pool);
     }
 
