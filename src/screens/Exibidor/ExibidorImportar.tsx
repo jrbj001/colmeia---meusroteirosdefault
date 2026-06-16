@@ -136,7 +136,7 @@ export const ExibidorImportar: React.FC = () => {
       ]}
       actions={
         <a
-          href="/Template_Inventario exibidores_2026.xlsx"
+          href="/template_inventario_exibidores_2026.xlsx"
           download
           className="inline-flex items-center gap-2 h-10 px-5 rounded-lg border border-gray-200 hover:border-[#ff4600] hover:text-[#ff4600] text-sm font-medium text-gray-700 transition-colors"
         >
@@ -203,13 +203,13 @@ export const ExibidorImportar: React.FC = () => {
               <div>
                 <p className="text-sm font-semibold text-gray-900">Use o template oficial</p>
                 <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-                  Baixe o arquivo <span className="font-medium text-gray-700">Template_Inventario exibidores_2026.xlsx</span> e preencha a aba{' '}
+                  Baixe o arquivo <span className="font-medium text-gray-700">template_inventario_exibidores_2026.xlsx</span> e preencha a aba{' '}
                   <span className="font-medium text-gray-700">"Pontos de mídia"</span> com seus pontos antes de enviar.
                 </p>
               </div>
             </div>
             <a
-              href="/Template_Inventario exibidores_2026.xlsx"
+              href="/template_inventario_exibidores_2026.xlsx"
               download
               className="flex-shrink-0 inline-flex items-center gap-2 h-10 px-5 rounded-lg bg-[#ff4600] hover:bg-[#e33d00] text-white text-sm font-semibold transition-colors whitespace-nowrap"
             >

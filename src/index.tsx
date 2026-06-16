@@ -27,6 +27,8 @@ const RelatorioP1A           = lazy(() => import("./screens/RelatorioP1A").then(
 const AdminUsuarios          = lazy(() => import("./screens/Admin").then(m => ({ default: m.AdminUsuarios })));
 const AdminPerfis            = lazy(() => import("./screens/Admin").then(m => ({ default: m.AdminPerfis })));
 const AdminInventarios       = lazy(() => import("./screens/AdminInventarios/AdminInventarios").then(m => ({ default: m.AdminInventarios })));
+const BlueprintDiligencia    = lazy(() => import("./screens/BlueprintDiligencia").then(m => ({ default: m.BlueprintDiligencia })));
+const DesignSystem           = lazy(() => import("./screens/DesignSystem").then(m => ({ default: m.DesignSystem })));
 const PaginaEmDesenvolvimento = lazy(() => import("./components/PaginaEmDesenvolvimento").then(m => ({ default: m.PaginaEmDesenvolvimento })));
 const CadastrarExibidor      = lazy(() => import("./screens/CadastrarExibidor/CadastrarExibidor").then(m => ({ default: m.CadastrarExibidor })));
 const GestaoExibidores       = lazy(() => import("./screens/GestaoExibidores/GestaoExibidores").then(m => ({ default: m.GestaoExibidores })));
@@ -201,6 +203,12 @@ root.render(
                 } />
                 <Route path="/admin/inventarios-exibidor" element={
                   <ProtectedRoute internalOnly adminOnly><AdminInventarios /></ProtectedRoute>
+                } />
+                <Route path="/admin/blueprint" element={
+                  <ProtectedRoute internalOnly adminOnly><BlueprintDiligencia /></ProtectedRoute>
+                } />
+                <Route path="/admin/design-system" element={
+                  <ProtectedRoute internalOnly adminOnly><DesignSystem /></ProtectedRoute>
                 } />
 
                 <Route path="*" element={<div>Página não encontrada</div>} />

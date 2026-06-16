@@ -14,6 +14,16 @@ const fmt = (n: number | null | undefined) => {
 
 const pct = (a: number, b: number) => (b > 0 ? `${((a / b) * 100).toFixed(1)}%` : '—');
 
+// Normaliza para comparar praças (sem acento, minúsculo, sem sufixos entre parênteses)
+const normalizar = (s: string) =>
+  String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
 const dataFmt = (iso: string | null) => {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -69,17 +79,32 @@ export const PainelAnalise: React.FC<Props> = ({
   const [pracaSalvando, setPracaSalvando] = useState<Record<string, boolean>>({});
   const [pracaSalvas, setPracaSalvas] = useState<Record<string, boolean>>({});
 
-  const salvarCorrecaoPraca = async (pracaNovo: string) => {
+  const salvarCorrecaoPraca = async (pracaNovo: string, ufNovo?: string) => {
     const pracaCorreta = (pracaCorrecoes[pracaNovo] || '').trim();
     if (!pracaCorreta) return;
+
+    // Exige que a praça escolhida seja uma das praças padrão cadastradas na Colmeia.
+    // Prefere a cidade da mesma UF da linha quando houver homônimas.
+    const candidatos = cidadesCanon.filter((c) => normalizar(c.nome_cidade) === normalizar(pracaCorreta));
+    const canon =
+      (ufNovo && candidatos.find((c) => normalizar(c.nome_estado) === normalizar(ufNovo))) ||
+      candidatos[0];
+    if (!canon) {
+      alert('Selecione uma praça da lista padrão da Colmeia (use as sugestões do campo). Não é possível salvar uma praça fora do padrão.');
+      return;
+    }
+    // Grava sempre o nome canônico exato (corrige caixa/acentuação)
+    const nomeCanonico = canon.nome_cidade;
+
     setPracaSalvando((prev) => ({ ...prev, [pracaNovo]: true }));
     try {
       await api.post('/admin-inventario-analise', {
         op: 'corrigir-praca',
         lote_pk: lote.lote_pk,
         praca_novo: pracaNovo,
-        praca_correta: pracaCorreta,
+        praca_correta: nomeCanonico,
       });
+      setPracaCorrecoes((prev) => ({ ...prev, [pracaNovo]: nomeCanonico }));
       setPracaSalvas((prev) => ({ ...prev, [pracaNovo]: true }));
     } catch {
       alert('Erro ao salvar correção de praça. Tente novamente.');
@@ -301,7 +326,7 @@ export const PainelAnalise: React.FC<Props> = ({
           <SectionTitle
             eyebrow="Nomenclatura"
             titulo="Praças fora do padrão"
-            descricao="Praças do envio que diferem do nome canônico no banco. Corrija o nome para padronizar os itens deste lote."
+            descricao="Praças do envio que diferem do nome canônico no banco. Selecione a praça padrão correspondente (cadastrada na Colmeia) para padronizar os itens deste lote — só é possível salvar escolhendo uma praça da lista."
           />
           <SubCard>
             <table className="w-full text-[13px]">
@@ -363,7 +388,7 @@ export const PainelAnalise: React.FC<Props> = ({
                           <span className="text-[11px] text-green-600 font-semibold uppercase tracking-wide">Salvo</span>
                         ) : (
                           <button
-                            onClick={() => salvarCorrecaoPraca(p.praca_novo)}
+                            onClick={() => salvarCorrecaoPraca(p.praca_novo, p.uf_novo)}
                             disabled={salvando || !pracaCorrecoes[p.praca_novo]?.trim()}
                             className="px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-[#ff4600] text-white hover:bg-[#e03e00] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                           >

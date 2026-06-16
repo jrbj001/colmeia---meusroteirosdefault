@@ -50,7 +50,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
     }
 
     // Abrir submenu de admin automaticamente
-    const rotasAdmin = ['/admin/usuarios', '/admin/perfis', '/admin/inventarios-exibidor'];
+    const rotasAdmin = ['/admin/usuarios', '/admin/perfis', '/admin/inventarios-exibidor', '/admin/blueprint', '/admin/design-system'];
     if (rotasAdmin.some(rota => location.pathname.startsWith(rota))) {
       setAdminAberto(true);
     }
@@ -457,6 +457,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
                       : "text-[#3a3a3a] hover:bg-[#ededed]"
                   }`}>
                     Inventários de exibidores
+                  </div>
+                </Link>
+                <Link to="/admin/blueprint" className="block">
+                  <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
+                    location.pathname === "/admin/blueprint"
+                      ? "text-[#ff4600] font-medium"
+                      : "text-[#3a3a3a] hover:bg-[#ededed]"
+                  }`}>
+                    Blueprint / Diligência
+                  </div>
+                </Link>
+                <Link to="/admin/design-system" className="block">
+                  <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
+                    location.pathname === "/admin/design-system"
+                      ? "text-[#ff4600] font-medium"
+                      : "text-[#3a3a3a] hover:bg-[#ededed]"
+                  }`}>
+                    Design System
                   </div>
                 </Link>
               </div>
