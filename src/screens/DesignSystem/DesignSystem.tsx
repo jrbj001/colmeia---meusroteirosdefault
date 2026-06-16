@@ -90,16 +90,28 @@ const IconeAdmin = () => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
   </svg>
 );
+const IconeExibidores = () => (
+  <svg className={ICN} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17.25V21m6-3.75V21m-9 0h12M4 4h16a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1z" />
+  </svg>
+);
+const IconeDocumentacao = () => (
+  <svg className={ICN} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+  </svg>
+);
 
-/* Ordem real do menu lateral esquerdo. */
+/* Ordem real do menu lateral esquerdo (nova estrutura). */
 const MENU_LATERAL: { label: string; icone: React.ReactNode; fonte: string }[] = [
   { label: 'Home', icone: <IconeHome />, fonte: 'SVG inline' },
   { label: 'Meus roteiros', icone: <PinDrop className={ICN} />, fonte: 'PinDrop' },
   { label: 'Relatório P1A', icone: <IconeP1A />, fonte: 'SVG inline' },
   { label: 'Criar roteiro', icone: <AddBox className={ICN} color={ICN_COR} />, fonte: 'AddBox' },
   { label: 'Banco de ativos', icone: <FindInPage className={ICN} color={ICN_COR} />, fonte: 'FindInPage' },
+  { label: 'Exibidores', icone: <IconeExibidores />, fonte: 'SVG inline' },
   { label: 'Consulta endereço', icone: <Difference4 className={ICN} color={ICN_COR} />, fonte: 'Difference4' },
   { label: 'Administração', icone: <IconeAdmin />, fonte: 'SVG inline' },
+  { label: 'Documentação do sistema', icone: <IconeDocumentacao />, fonte: 'SVG inline' },
 ];
 
 /* ── Auxiliares ──────────────────────────────────────────────────────────── */
