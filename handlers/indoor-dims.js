@@ -22,9 +22,9 @@ module.exports = async (req, res) => {
     console.log('📐 [indoor-dims] Carregando dimensões indoor...');
     const pool = await getPool();
 
-    const [ambientes, tamanhos, visualizacoes, shoppings, cidades, deflatorDigital] = await Promise.all([
+    const [ambientes, tamanhos, visualizacoes, especificosRaw, cidades, deflatorDigital] = await Promise.all([
       safeQuery(pool,
-        `SELECT ambiente_st, CAST(ehShopping_bl AS INT) AS ehShopping_vl, ISNULL(tamanhoOverride_st,'') AS tamanhoOverride_st
+        `SELECT ambiente_st, ISNULL(tamanhoOverride_st,'') AS tamanhoOverride_st
          FROM ${S}.indoorAmbiente_dm ORDER BY ambiente_st`,
         'indoorAmbiente_dm'),
       safeQuery(pool,
@@ -34,8 +34,12 @@ module.exports = async (req, res) => {
         `SELECT visualizacao_st FROM ${S}.indoorVisualizacao_dm ORDER BY visualizacao_st`,
         'indoorVisualizacao_dm'),
       safeQuery(pool,
-        `SELECT shopping_st FROM ${S}.indoorShopping_dm ORDER BY shopping_st`,
-        'indoorShopping_dm'),
+        `SELECT ambiente_st, local_st, cidade_st, estado_st,
+                ISNULL(passantesSemana_vl, 0) AS passantesSemana_vl,
+                ISNULL(area_vl, 0) AS area_vl
+         FROM ${S}.indoorEspecifico_dm
+         ORDER BY ambiente_st, cidade_st, local_st`,
+        'indoorEspecifico_dm'),
       safeQuery(pool,
         `SELECT TOP 80 cidade_st FROM ${S}.cidadeClassIbgeKantar_dm_vw ORDER BY cityPopulationEstimatedIBGE DESC`,
         'cidadeClassIbgeKantar_dm_vw'),
@@ -44,19 +48,36 @@ module.exports = async (req, res) => {
         'indoorDeflatorDigital_dm'),
     ]);
 
-    console.log(`✅ [indoor-dims] ${ambientes.length} ambientes, ${tamanhos.length} tamanhos, ${shoppings.length} shoppings`);
+    // Agrupa venues por ambiente
+    const especificosMap = {};
+    for (const r of especificosRaw) {
+      const amb = r.ambiente_st;
+      if (!especificosMap[amb]) especificosMap[amb] = [];
+      especificosMap[amb].push({
+        local: r.local_st,
+        cidade: r.cidade_st,
+        estado: r.estado_st,
+        passantes: Number(r.passantesSemana_vl) || 0,
+        area: Number(r.area_vl) || 0,
+      });
+    }
+
+    // Ambientes que têm venues cadastrados
+    const ambientesComVenues = new Set(Object.keys(especificosMap));
+
+    console.log(`✅ [indoor-dims] ${ambientes.length} ambientes, ${tamanhos.length} tamanhos, ${especificosRaw.length} venues específicos`);
 
     res.json({
       success: true,
       data: {
         ambientes: ambientes.map((r) => ({
           nome: r.ambiente_st,
-          ehShopping: r.ehShopping_vl === 1,
+          hasEspecificos: ambientesComVenues.has(r.ambiente_st),
           tamanhoOverride: r.tamanhoOverride_st || '',
         })),
         tamanhos: tamanhos.map((r) => r.tamanho_st),
         visualizacoes: visualizacoes.map((r) => r.visualizacao_st),
-        shoppings: shoppings.map((r) => r.shopping_st),
+        especificos: especificosMap,
         cidades: cidades.map((r) => r.cidade_st),
         deflatorDigital: deflatorDigital.map((r) => ({
           min: Number(r.insercoesMin_vl),

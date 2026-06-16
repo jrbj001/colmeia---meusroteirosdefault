@@ -62,10 +62,11 @@ module.exports = async (req, res) => {
 
     const result = await pool
       .request()
-      .input('recordsJson',        sql.NVarChar(sql.MAX), JSON.stringify(records))
-      .input('planoMidiaGrupo_pk', sql.Int,               planoMidiaGrupo_pk)
-      .input('report_pk',          sql.Int,               planoMidiaGrupo_pk)
-      .input('semanas',            sql.Int,               numSemanas)
+      .input('recordsJson',        sql.NVarChar(sql.MAX),  JSON.stringify(records))
+      .input('planoMidiaGrupo_pk', sql.Int,                planoMidiaGrupo_pk)
+      .input('report_pk',          sql.Int,                planoMidiaGrupo_pk)
+      .input('semanas',            sql.Int,                numSemanas)
+      .input('praca_st',           sql.NVarChar(255),      praca)
       .execute(`[${S}].[sp_planoMidiaIndoorInsert]`);
 
     const row = result.recordset?.[0];
