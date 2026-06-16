@@ -1,23 +1,32 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export interface IndoorAmbienteDim {
   nome: string;
-  ehShopping: boolean;
+  hasEspecificos: boolean;
   tamanhoOverride: string;
+}
+
+export interface VenueEspecifico {
+  local: string;
+  cidade: string;
+  estado: string;
+  passantes: number;
+  area: number;
 }
 
 export interface IndoorDims {
   ambientes: IndoorAmbienteDim[];
   tamanhos: string[];
   visualizacoes: string[];
-  shoppings: string[];
+  /** Venues agrupados por ambiente: Record<ambiente, VenueEspecifico[]> */
+  especificos: Record<string, VenueEspecifico[]>;
   cidades: string[];
   deflatorDigital: { min: number; mult: number }[];
 }
 
 export interface IndoorLinha {
   ambiente: string;
-  shopping: string;
+  venueNome: string;
   tamanho: string;
   circulacao: string;
   tipo: string;
@@ -30,7 +39,7 @@ export interface IndoorLinha {
 
 export const emptyIndoorLinha = (): IndoorLinha => ({
   ambiente: '',
-  shopping: '',
+  venueNome: '',
   tamanho: '',
   circulacao: '',
   tipo: '',
@@ -41,28 +50,152 @@ export const emptyIndoorLinha = (): IndoorLinha => ({
   locs: Array.from({ length: 12 }, () => ''),
 });
 
+/* ─── VenueCombobox ─────────────────────────────────────────────── */
+
+interface VenueComboboxProps {
+  id: string;
+  venues: VenueEspecifico[];
+  value: string;
+  label: string;
+  placeholder: string;
+  onChange: (nome: string) => void;
+}
+
+function VenueCombobox({ id, venues, value, label, placeholder, onChange }: VenueComboboxProps) {
+  const [query, setQuery] = useState(value);
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Sync external value changes
+  useEffect(() => { setQuery(value); }, [value]);
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return venues.slice(0, 150);
+    return venues
+      .filter((v) => v.local.toLowerCase().includes(q) || v.cidade.toLowerCase().includes(q))
+      .slice(0, 120);
+  }, [query, venues]);
+
+  const fmt = (n: number) =>
+    n > 0 ? `${Math.round(n / 1000)}k` : null;
+
+  const handleSelect = (v: VenueEspecifico) => {
+    setQuery(v.local);
+    setOpen(false);
+    onChange(v.local);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setQuery(e.target.value);
+    setOpen(true);
+    if (!e.target.value) onChange('');
+  };
+
+  const lbl = 'block text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-0.5';
+
+  return (
+    <div ref={wrapRef} className="relative col-span-2 sm:col-span-1">
+      <label htmlFor={id} className={lbl}>{label}</label>
+      <input
+        id={id}
+        type="text"
+        autoComplete="off"
+        value={query}
+        placeholder={placeholder}
+        onFocus={() => setOpen(true)}
+        onChange={handleInputChange}
+        className="rounded border border-gray-200 bg-white px-2 py-1.5 text-sm text-[#3a3a3a] focus:border-[#ff4600] focus:outline-none focus:ring-1 focus:ring-[#ff4600]/20 w-full"
+      />
+
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full min-w-[320px] rounded-lg border border-gray-100 bg-white shadow-xl overflow-hidden">
+          <ul className="max-h-80 overflow-y-auto divide-y divide-gray-50 py-0.5">
+            {filtered.map((v) => {
+              const pass = fmt(v.passantes);
+              return (
+                <li
+                  key={v.local}
+                  onMouseDown={() => handleSelect(v)}
+                  className="flex items-center justify-between gap-3 px-3 py-2 cursor-pointer hover:bg-gray-50 group"
+                >
+                  <span className="text-sm text-[#3a3a3a] truncate group-hover:text-[#ff4600] transition-colors">
+                    {v.local}
+                  </span>
+                  <span className="shrink-0 text-[11px] text-gray-400 whitespace-nowrap">
+                    {v.cidade}/{v.estado}
+                    {pass && <> · <span className="text-gray-500 font-medium">{pass}</span></>}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          {venues.length > 120 && (
+            <div className="px-3 py-1.5 text-[10px] text-gray-400 border-t border-gray-50 bg-gray-50/50">
+              {venues.length} venues — digite para filtrar
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Estilos compartilhados ────────────────────────────────────── */
+
 const sel =
   'rounded border border-gray-200 bg-white px-2 py-1.5 text-sm text-[#3a3a3a] focus:border-[#ff4600] focus:outline-none focus:ring-1 focus:ring-[#ff4600]/20 disabled:bg-gray-50 disabled:text-gray-400 w-full';
 const num =
   'rounded border border-gray-200 bg-white px-2 py-1.5 text-sm text-[#3a3a3a] tabular-nums focus:border-[#ff4600] focus:outline-none focus:ring-1 focus:ring-[#ff4600]/20 w-full';
 const lbl = 'block text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-0.5';
 
+/* ─── AmbienteRowIndoor ─────────────────────────────────────────── */
+
 interface Props {
   idx: number;
   dims: IndoorDims;
   linha: IndoorLinha;
   semanas: number;
+  praca: string;
   onChange: (l: IndoorLinha) => void;
   onRemove: () => void;
 }
 
-export default function AmbienteRowIndoor({ idx, dims, linha, semanas, onChange, onRemove }: Props) {
+export default function AmbienteRowIndoor({ idx, dims, linha, semanas, praca, onChange, onRemove }: Props) {
   const [padrao, setPadrao] = useState('');
 
   const amb = dims.ambientes.find((a) => a.nome === linha.ambiente);
-  const isShop = !!amb?.ehShopping;
+  const hasEspecificos = !!amb?.hasEspecificos;
   const tamanhoFixed = amb?.tamanhoOverride || '';
   const isDigital = linha.tipo === 'Digital';
+
+  // Venues filtrados pela praça, com fallback para todos
+  const venuesDoAmbiente: VenueEspecifico[] = useMemo(() => {
+    if (!linha.ambiente || !hasEspecificos) return [];
+    const todos = dims.especificos[linha.ambiente] ?? [];
+    if (!praca) return todos;
+    const filtrados = todos.filter((v) =>
+      v.cidade.toLowerCase().includes(praca.toLowerCase()) ||
+      praca.toLowerCase().includes(v.cidade.toLowerCase())
+    );
+    return filtrados.length > 0 ? filtrados : todos;
+  }, [linha.ambiente, hasEspecificos, dims.especificos, praca]);
+
+  // Venue selecionado (para exibir info)
+  const venueSelecionado: VenueEspecifico | undefined = useMemo(() => {
+    if (!linha.venueNome || !hasEspecificos) return undefined;
+    return venuesDoAmbiente.find((v) => v.local === linha.venueNome)
+      ?? (dims.especificos[linha.ambiente] ?? []).find((v) => v.local === linha.venueNome);
+  }, [linha.venueNome, linha.ambiente, hasEspecificos, venuesDoAmbiente, dims.especificos]);
 
   const totalIns = (Number(linha.insercoesPorSlot) || 0) * (Number(linha.slots) || 0);
   const totalEfetivo = linha.totalInsOverride !== '' ? Number(linha.totalInsOverride) || 0 : totalIns;
@@ -83,9 +216,14 @@ export default function AmbienteRowIndoor({ idx, dims, linha, semanas, onChange,
     onChange({ ...linha, locs: arr });
   };
 
+  const handleVenueChange = (nomeVenue: string) => {
+    const venue = (dims.especificos[linha.ambiente] ?? []).find((v) => v.local === nomeVenue);
+    const passantesDoVenue = venue ? String(Math.round(venue.passantes)) : '';
+    onChange({ ...linha, venueNome: nomeVenue, passantes: passantesDoVenue });
+  };
+
   return (
     <div className="border border-gray-100 rounded-lg bg-white overflow-hidden">
-      {/* ── Linha principal de campos ── */}
       <div className="flex items-start gap-0">
         {/* Número do ambiente */}
         <div className="flex items-center justify-center w-9 shrink-0 pt-3 pb-2 bg-gray-50 border-r border-gray-100 self-stretch">
@@ -103,33 +241,26 @@ export default function AmbienteRowIndoor({ idx, dims, linha, semanas, onChange,
                 onChange={(e) => {
                   const nome = e.target.value;
                   const def = dims.ambientes.find((a) => a.nome === nome);
-                  onChange({ ...linha, ambiente: nome, tamanho: def?.tamanhoOverride ?? '', shopping: '' });
+                  onChange({ ...linha, ambiente: nome, tamanho: def?.tamanhoOverride ?? '', venueNome: '', passantes: '' });
                 }}
               >
                 <option value="">Selecione…</option>
                 {dims.ambientes.map((a) => (
-                  <option key={a.nome} value={a.nome}>
-                    {a.nome}{a.ehShopping ? ' · shopping' : ''}
-                  </option>
+                  <option key={a.nome} value={a.nome}>{a.nome}</option>
                 ))}
               </select>
             </div>
 
-            {/* Shopping ou Passantes */}
-            {isShop ? (
-              <div className="col-span-2 sm:col-span-1">
-                <label className={lbl}>Shopping</label>
-                <input
-                  className={num}
-                  list={`shoppings-${idx}`}
-                  value={linha.shopping}
-                  onChange={(e) => set('shopping', e.target.value)}
-                  placeholder="Nome do shopping"
-                />
-                <datalist id={`shoppings-${idx}`}>
-                  {dims.shoppings.map((s) => <option key={s} value={s} />)}
-                </datalist>
-              </div>
+            {/* Venue específico ou Passantes manual */}
+            {hasEspecificos ? (
+              <VenueCombobox
+                id={`venue-${idx}`}
+                venues={venuesDoAmbiente}
+                value={linha.venueNome}
+                label={linha.ambiente || 'Venue'}
+                placeholder={`Buscar ${linha.ambiente?.toLowerCase() || 'venue'}…`}
+                onChange={handleVenueChange}
+              />
             ) : (
               <div>
                 <label className={lbl}>Passantes/sem</label>
@@ -183,6 +314,27 @@ export default function AmbienteRowIndoor({ idx, dims, linha, semanas, onChange,
               </select>
             </div>
           </div>
+
+          {/* Info do venue selecionado */}
+          {venueSelecionado && (
+            <div className="mt-2 flex items-center gap-2 text-[11px] text-gray-400">
+              <span>{venueSelecionado.cidade}/{venueSelecionado.estado}</span>
+              {venueSelecionado.passantes > 0 && (
+                <>
+                  <span className="text-gray-200">·</span>
+                  <span className="font-medium text-gray-500">
+                    {Math.round(venueSelecionado.passantes).toLocaleString('pt-BR')} pass/sem
+                  </span>
+                </>
+              )}
+              {venueSelecionado.area > 0 && (
+                <>
+                  <span className="text-gray-200">·</span>
+                  <span>{Math.round(venueSelecionado.area).toLocaleString('pt-BR')} m²</span>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Campos exclusivos de Digital */}
           {isDigital && (

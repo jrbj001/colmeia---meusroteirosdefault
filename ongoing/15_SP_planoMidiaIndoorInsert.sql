@@ -16,7 +16,8 @@ CREATE OR ALTER PROCEDURE [serv_product_be180].[sp_planoMidiaIndoorInsert]
     @recordsJson        NVARCHAR(MAX),       -- array de linhas (1 por ambiente) — shape no doc integration/02
     @planoMidiaGrupo_pk INT,                 -- o roteiro
     @report_pk          INT = NULL,          -- D1: default = @planoMidiaGrupo_pk (1 report por roteiro)
-    @semanas            INT = 12             -- nº de semanas ativas (W1..N); semanas > N viram 0
+    @semanas            INT = 12,            -- nº de semanas ativas (W1..N); semanas > N viram 0
+    @praca_st           NVARCHAR(255) = NULL -- praça sendo (re)salva; NULL = limpa TODAS (legado)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -24,19 +25,26 @@ BEGIN
 
     IF @report_pk IS NULL SET @report_pk = @planoMidiaGrupo_pk;                 -- D1
     SET @semanas = CASE WHEN @semanas BETWEEN 1 AND 12 THEN @semanas ELSE 12 END;
+    -- Se não informado, extrai a praça do primeiro registro do JSON
+    IF @praca_st IS NULL
+        SET @praca_st = (SELECT TOP 1 JSON_VALUE([value], '$.praca_st') FROM OPENJSON(@recordsJson));
 
     DECLARE @linhas TABLE (pk INT, ord INT, localidades NVARCHAR(MAX));
 
     BEGIN TRAN;
 
-    -- (D6 idempotência) substitui o que já existe deste roteiro/report
+    -- (D6 idempotência) substitui APENAS os registros da praça atual neste roteiro/report
     DELETE w
       FROM [serv_product_be180].[planoMidiaIndoorSemana_ft] w
       JOIN [serv_product_be180].[planoMidiaIndoor_ft] l ON l.[pk] = w.[linha_pk]
-     WHERE l.[planoMidiaGrupo_pk] = @planoMidiaGrupo_pk AND l.[report_pk] = @report_pk;
+     WHERE l.[planoMidiaGrupo_pk] = @planoMidiaGrupo_pk
+       AND l.[report_pk] = @report_pk
+       AND l.[praca_st] = @praca_st;
 
     DELETE FROM [serv_product_be180].[planoMidiaIndoor_ft]
-     WHERE [planoMidiaGrupo_pk] = @planoMidiaGrupo_pk AND [report_pk] = @report_pk;
+     WHERE [planoMidiaGrupo_pk] = @planoMidiaGrupo_pk
+       AND [report_pk] = @report_pk
+       AND [praca_st] = @praca_st;
 
     -- 1) linhas de ambiente. MERGE (ON 1=0 -> sempre INSERT) para o OUTPUT capturar
     --    inserted.pk JUNTO com a ordem/localidades da origem (mapeamento ord<->pk set-based).

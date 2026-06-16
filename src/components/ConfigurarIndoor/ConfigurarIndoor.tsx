@@ -114,7 +114,7 @@ export default function ConfigurarIndoor({
         semanas,
         linhas: linhasValidas.map((l) => ({
           ambiente: l.ambiente.trim(),
-          shopping: l.shopping.trim() || null,
+          shopping: l.venueNome?.trim() || null,
           tamanho: l.tamanho.trim() || null,
           circulacao: l.circulacao.trim() || null,
           tipo: l.tipo || 'Estático',
@@ -349,6 +349,7 @@ export default function ConfigurarIndoor({
                 dims={dims}
                 linha={l}
                 semanas={semanas}
+                praca={pracaSelecionada}
                 onChange={(nl) => setLinhas((ls) => ls.map((x, j) => (j === i ? nl : x)))}
                 onRemove={() => setLinhas((ls) => ls.length > 1 ? ls.filter((_, j) => j !== i) : ls)}
               />
