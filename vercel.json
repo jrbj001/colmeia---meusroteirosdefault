@@ -37,6 +37,7 @@
     { "source": "/api/sp-plano-midia-insert", "destination": "/api/plano-midia?action=sp-insert" },
     { "source": "/api/sp-plano-midia-ooh-insert", "destination": "/api/plano-midia?action=sp-ooh-insert" },
     { "source": "/api/sp-plano-midia-from-import", "destination": "/api/plano-midia?action=sp-from-import" },
+    { "source": "/api/sp-plano-midia-indoor-backfill-pk", "destination": "/api/plano-midia?action=backfill-indoor-pk" },
 
     { "source": "/api/upload-roteiros", "destination": "/api/uploads?action=roteiros" },
     { "source": "/api/upload-roteiros-plano-midia", "destination": "/api/uploads?action=plano-midia" },

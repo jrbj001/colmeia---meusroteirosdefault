@@ -8,6 +8,7 @@ const handlers = {
   'sp-insert': require('../handlers/sp-plano-midia-insert'),
   'sp-ooh-insert': require('../handlers/sp-plano-midia-ooh-insert'),
   'sp-from-import': require('../handlers/sp-plano-midia-from-import'),
+  'backfill-indoor-pk': require('../handlers/sp-plano-midia-indoor-backfill-pk'),
 };
 
 module.exports = async (req, res) => {

@@ -723,6 +723,15 @@ export const CriarRoteiro: React.FC = () => {
       const linhas = Array.isArray(fromImportResponse.data?.data) ? fromImportResponse.data.data : [];
       const cidadesSemIbge = linhas.filter((row: any) => !row?.ibgeCode_vl);
 
+      // Backfill planoMidia_pk no indoor — fail-soft
+      console.log(`🔄 backfill indoor pk=${planoMidiaGrupo_pk}`);
+      try {
+        const bf = await axios.post('/sp-plano-midia-indoor-backfill-pk', { planoMidiaGrupo_pk });
+        console.log(`✅ backfill indoor: ${bf.data?.updatedSemanas ?? 0} semana(s), ${bf.data?.updatedLinhas ?? 0} linha(s)`);
+      } catch (e) {
+        console.warn('⚠️ backfill indoor falhou (não bloqueia)', e);
+      }
+
       // Stage 3: disparar processamento Databricks do roteiro simulado
       const now = new Date();
       const date_dt = now.toISOString().slice(0, 10);
@@ -1106,6 +1115,15 @@ export const CriarRoteiro: React.FC = () => {
       // Aguardar um pouco para garantir que o SQL Server commitou todos os dados
       await new Promise(resolve => setTimeout(resolve, 2000));
       
+      // ETAPA 3B: backfill planoMidia_pk no indoor (pai + filho) — fail-soft
+      console.log(`🔄 ETAPA 3B — backfill indoor pk=${planoMidiaGrupo_pk}`);
+      try {
+        const bf = await axios.post('/sp-plano-midia-indoor-backfill-pk', { planoMidiaGrupo_pk });
+        console.log(`✅ ETAPA 3B — backfill indoor: ${bf.data?.updatedSemanas ?? 0} semana(s), ${bf.data?.updatedLinhas ?? 0} linha(s)`);
+      } catch (e) {
+        console.warn('⚠️ ETAPA 3B — backfill indoor planoMidia_pk falhou (não bloqueia)', e);
+      }
+
       console.log('🔄 ETAPA 4: Executando processamento Databricks para o grupo...');
 
       // Iniciar Databricks
@@ -2354,6 +2372,15 @@ export const CriarRoteiro: React.FC = () => {
       const midiaPks = spResults.map((item: any) => item.new_pk);
 
       console.log('✅ ETAPA 4B CONCLUÍDA - Stored procedure executada');
+
+      // ETAPA 4B.1: backfill planoMidia_pk no indoor (pai + filho) — fail-soft
+      console.log(`🔄 ETAPA 4B.1 — backfill indoor pk=${uploadData.pk}`);
+      try {
+        const bf = await axios.post('/sp-plano-midia-indoor-backfill-pk', { planoMidiaGrupo_pk: uploadData.pk });
+        console.log(`✅ ETAPA 4B.1 — backfill indoor: ${bf.data?.updatedSemanas ?? 0} semana(s), ${bf.data?.updatedLinhas ?? 0} linha(s)`);
+      } catch (e) {
+        console.warn('⚠️ ETAPA 4B.1 — backfill indoor planoMidia_pk falhou (não bloqueia)', e);
+      }
 
       console.log('🔄 ETAPA 5: Executando procedure uploadRoteirosInventarioToBaseCalculadoraInsert...');
 
