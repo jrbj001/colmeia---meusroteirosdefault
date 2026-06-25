@@ -3,6 +3,7 @@ const handlers = {
   'consulta-endereco': require('../handlers/consulta-endereco'),
   'busca-coordenada': require('../handlers/busca-coordenada'),
   'user-profile': require('../handlers/user-profile'),
+  'blob-relatorio': require('../handlers/blob-relatorio-download'),
 };
 
 module.exports = async (req, res) => {

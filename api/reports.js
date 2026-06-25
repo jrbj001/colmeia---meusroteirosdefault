@@ -10,6 +10,8 @@ const handlers = {
   'matrix-data': require('../handlers/matrix-data-query'),
   'matrix-data-row': require('../handlers/matrix-data-row-query'),
   'grupo-sub-distinct': require('../handlers/grupo-sub-distinct'),
+  'indicadores-indoor': require('../handlers/indoor-resultado'),
+  'indicadores-consolidado': require('../handlers/consolidado-resultado'),
 };
 
 module.exports = async (req, res) => {

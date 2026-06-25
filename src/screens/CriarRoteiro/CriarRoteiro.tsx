@@ -108,6 +108,12 @@ export const CriarRoteiro: React.FC = () => {
   // Estados para dados de target
   const [dadosTarget, setDadosTarget] = useState<any[]>([]);
   const [totaisTarget, setTotaisTarget] = useState<any>(null);
+
+  // Estados para dados indoor e consolidado (VP + Indoor)
+  const [dadosIndoor, setDadosIndoor] = useState<any[]>([]);
+  const [totaisIndoor, setTotaisIndoor] = useState<any>(null);
+  const [dadosConsolidado, setDadosConsolidado] = useState<any[]>([]);
+  const [totaisConsolidado, setTotaisConsolidado] = useState<any>(null);
   const [dadosSemanaisTarget, setDadosSemanaisTarget] = useState<any[]>([]);
   const [dadosSemanaisTargetSummary, setDadosSemanaisTargetSummary] = useState<any[]>([]);
   const [carregandoSemanaisTarget, setCarregandoSemanaisTarget] = useState(false);
@@ -1848,7 +1854,9 @@ export const CriarRoteiro: React.FC = () => {
         axios.post('/report-indicadores-target', { report_pk: pkToUse }),
         axios.post('/report-indicadores-target-summary', { report_pk: pkToUse }),
         axios.post('/report-indicadores-week', { report_pk: pkToUse }),
-        axios.post('/report-indicadores-week-summary', { report_pk: pkToUse })
+        axios.post('/report-indicadores-week-summary', { report_pk: pkToUse }),
+        axios.post('/report-indicadores-indoor', { report_pk: pkToUse }),
+        axios.post('/report-indicadores-consolidado', { report_pk: pkToUse })
       ]);
 
       // Extrair respostas (ou null se falharam)
@@ -1858,7 +1866,9 @@ export const CriarRoteiro: React.FC = () => {
         responseTarget,
         summaryResponseTarget,
         responseSemanais,
-        summaryResponseSemanais
+        summaryResponseSemanais,
+        responseIndoor,
+        responseConsolidado
       ] = results.map(result => result.status === 'fulfilled' ? result.value : null);
 
       console.log('📊 Todas as requisições concluídas!');
@@ -1915,6 +1925,46 @@ export const CriarRoteiro: React.FC = () => {
       } else {
         console.log('ℹ️ Dados semanais não disponíveis (normal para roteiros simulados)');
       }
+
+      // Processar dados indoor
+      if (responseIndoor?.data?.success) {
+        setDadosIndoor(responseIndoor.data.data || []);
+        setTotaisIndoor(responseIndoor.data.totais || null);
+        console.log('✅ Dados indoor carregados:', (responseIndoor.data.data || []).length);
+      } else {
+        setDadosIndoor([]);
+        setTotaisIndoor(null);
+        console.log('ℹ️ Dados indoor não disponíveis (plano sem indoor)');
+      }
+
+      // Processar dados consolidado VP+Indoor
+      if (responseConsolidado?.data?.success) {
+        setDadosConsolidado(responseConsolidado.data.data || []);
+        setTotaisConsolidado(responseConsolidado.data.totais || null);
+        console.log('✅ Dados consolidado carregados:', (responseConsolidado.data.data || []).length);
+      } else {
+        setDadosConsolidado([]);
+        setTotaisConsolidado(null);
+        console.log('ℹ️ Dados consolidado não disponíveis');
+      }
+
+      // Verificar disponibilidade do relatório no Azure Blob com retry automático.
+      // O blob pode demorar alguns segundos após o processamento para aparecer no container.
+      const checkBlobDisponivel = async (pk: number, tentativa = 1, maxTentativas = 6, intervaloMs = 10000) => {
+        try {
+          const r = await axios.post('/blob-relatorio-download', { planoMidiaGrupo_pk: pk, checkOnly: true });
+          if (r.data?.exists === true) {
+            setBlobRelatorioDisponivel(true);
+          } else if (tentativa < maxTentativas) {
+            setTimeout(() => checkBlobDisponivel(pk, tentativa + 1, maxTentativas, intervaloMs), intervaloMs);
+          }
+        } catch {
+          if (tentativa < maxTentativas) {
+            setTimeout(() => checkBlobDisponivel(pk, tentativa + 1, maxTentativas, intervaloMs), intervaloMs);
+          }
+        }
+      };
+      checkBlobDisponivel(pkToUse);
 
       // Carregar dados semanais de target (não bloqueia)
       carregarDadosSemanaisTarget(pkToUse);
@@ -1996,7 +2046,32 @@ export const CriarRoteiro: React.FC = () => {
 
   // Função para baixar Excel do SharePoint
   const [downloadingExcel, setDownloadingExcel] = useState(false);
-  
+  const [downloadingBlob, setDownloadingBlob] = useState(false);
+  const [blobRelatorioDisponivel, setBlobRelatorioDisponivel] = useState(false);
+
+  const baixarRelatorioBlob = async () => {
+    try {
+      if (!planoMidiaGrupo_pk) { alert('⚠️ Salve o roteiro primeiro.'); return; }
+      setDownloadingBlob(true);
+      const response = await axios.post('/blob-relatorio-download',
+        { planoMidiaGrupo_pk }, { responseType: 'blob', timeout: 60000 });
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `relatorio_${planoMidiaGrupo_pk}_${new Date().toISOString().split('T')[0]}.xlsx`);
+      document.body.appendChild(link); link.click();
+      setTimeout(() => { document.body.removeChild(link); window.URL.revokeObjectURL(url); }, 100);
+      mostrarModal('Download concluído.', 'success', '✅ Download Concluído!');
+    } catch (error: any) {
+      let msg = '❌ Erro ao baixar o relatório (formato novo).\n\n';
+      if (error.response?.status === 404)
+        msg += `Nenhum relatório para o plano ${planoMidiaGrupo_pk} (gerado após o processamento — tente em instantes).`;
+      else msg += error.response?.data?.message || error.message || 'Erro desconhecido';
+      alert(msg);
+    } finally { setDownloadingBlob(false); }
+  };
+
   const baixarExcelSharePoint = async () => {
     console.log('🔵 FUNÇÃO CHAMADA: baixarExcelSharePoint');
     console.log('🔵 planoMidiaGrupo_pk atual:', planoMidiaGrupo_pk);
@@ -4801,6 +4876,93 @@ export const CriarRoteiro: React.FC = () => {
                       </div>
                     )}
 
+                    {/* Indoor — só exibe quando o plano tem indoor */}
+                    {tipoVisualizacao === 'geral' && dadosIndoor.length > 0 && (
+                      <div className="mt-8">
+                        <h4 className="text-sm font-semibold text-[#3a3a3a] mb-3">Indoor</h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse border border-gray-200">
+                            <thead>
+                              <tr className="bg-gray-50">
+                                <th className="border border-gray-200 px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">Praça</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Impactos</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Cobertura (pessoas)</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Cobertura (%)</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Frequência</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">GRP</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dadosIndoor.map((item, index) => (
+                                <tr key={index} className="hover:bg-gray-50">
+                                  <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">{item.cidade_st}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{Math.round(item.impactosTotal_vl || 0).toLocaleString('pt-BR')}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{Math.round(item.coberturaPessoasTotal_vl || 0).toLocaleString('pt-BR')}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{(item.coberturaProp_vl || 0).toFixed(1)}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{(item.frequencia_vl || 0).toFixed(1)}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{(item.grp_vl || 0).toFixed(3)}</td>
+                                </tr>
+                              ))}
+                              {totaisIndoor && (
+                                <tr className="bg-gray-50 font-semibold">
+                                  <td className="border border-gray-200 px-4 py-2 text-[#3a3a3a]">Total</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{Math.round(totaisIndoor.impactosTotal_vl || 0).toLocaleString('pt-BR')}</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{Math.round(totaisIndoor.coberturaPessoasTotal_vl || 0).toLocaleString('pt-BR')}</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{(totaisIndoor.coberturaProp_vl || 0).toFixed(1)}</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{(totaisIndoor.frequencia_vl || 0).toFixed(1)}</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{(totaisIndoor.grp_vl || 0).toFixed(3)}</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Total consolidado (VP + Indoor) — só exibe quando o plano tem indoor */}
+                    {tipoVisualizacao === 'geral' && dadosIndoor.length > 0 && dadosConsolidado.length > 0 && (
+                      <div className="mt-8">
+                        <h4 className="text-sm font-semibold text-[#3a3a3a] mb-3">Total consolidado (Vias Públicas + Indoor)</h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse border border-gray-200">
+                            <thead>
+                              <tr className="bg-gray-50">
+                                <th className="border border-gray-200 px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">Praça</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Impactos</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Cobertura (pessoas)</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Cobertura (%)</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Frequência</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">GRP</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dadosConsolidado.map((item, index) => (
+                                <tr key={index} className="hover:bg-gray-50">
+                                  <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">{item.cidade_st}{item.temIndoor_fl ? ' •' : ''}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{Math.round(item.impactosTotal_vl || 0).toLocaleString('pt-BR')}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{Math.round(item.coberturaPessoasTotal_vl || 0).toLocaleString('pt-BR')}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{(item.coberturaProp_vl || 0).toFixed(1)}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{(item.frequencia_vl || 0).toFixed(1)}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{(item.grp_vl || 0).toFixed(3)}</td>
+                                </tr>
+                              ))}
+                              {totaisConsolidado && (
+                                <tr className="bg-gray-50 font-semibold">
+                                  <td className="border border-gray-200 px-4 py-2 text-[#3a3a3a]">Total</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{Math.round(totaisConsolidado.impactosTotal_vl || 0).toLocaleString('pt-BR')}</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{Math.round(totaisConsolidado.coberturaPessoasTotal_vl || 0).toLocaleString('pt-BR')}</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{(totaisConsolidado.coberturaProp_vl || 0).toFixed(1)}</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{(totaisConsolidado.frequencia_vl || 0).toFixed(1)}</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{(totaisConsolidado.grp_vl || 0).toFixed(3)}</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-2">• praça com indoor somado</p>
+                      </div>
+                    )}
+
                     {/* Visão por Praça */}
                     {tipoVisualizacao === 'praca' && (
                       <div>
@@ -5017,6 +5179,34 @@ export const CriarRoteiro: React.FC = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                           </svg>
                           <span>Download Excel</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={baixarRelatorioBlob}
+                      disabled={downloadingBlob || !planoMidiaGrupo_pk || !blobRelatorioDisponivel}
+                      className={`px-6 py-3 rounded-lg transition-colors font-medium flex items-center gap-2 border ${
+                        downloadingBlob || !planoMidiaGrupo_pk || !blobRelatorioDisponivel
+                          ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                          : 'bg-white text-[#ff4600] border-[#ff4600] hover:bg-orange-50'
+                      }`}
+                      title={!blobRelatorioDisponivel ? 'Relatório ainda não disponível para este plano' : undefined}
+                    >
+                      {downloadingBlob ? (
+                        <>
+                          <svg className="animate-spin h-5 w-5 text-[#ff4600]" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          <span>Baixando…</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          </svg>
+                          <span>Relatório (formato novo)</span>
                         </>
                       )}
                     </button>

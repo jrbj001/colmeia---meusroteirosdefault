@@ -128,6 +128,10 @@
 
     { "source": "/api/ocorrencia-criar", "destination": "/api/ocorrencia?action=criar" },
 
+    { "source": "/api/blob-relatorio-download",          "destination": "/api/integracoes?action=blob-relatorio" },
+    { "source": "/api/report-indicadores-indoor",         "destination": "/api/reports?action=indicadores-indoor" },
+    { "source": "/api/report-indicadores-consolidado",    "destination": "/api/reports?action=indicadores-consolidado" },
+
     { "source": "/api/sharepoint-download", "destination": "/api/integracoes?action=sharepoint" },
     { "source": "/api/consulta-endereco", "destination": "/api/integracoes?action=consulta-endereco" },
     { "source": "/api/busca-coordenada", "destination": "/api/integracoes?action=busca-coordenada" },

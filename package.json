@@ -26,7 +26,8 @@
     "react-leaflet": "^4.2.1",
     "react-router-dom": "^6.8.1",
     "xlsx": "^0.18.5",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "@azure/storage-blob": "^12.33.0"
   },
   "devDependencies": {
     "@types/leaflet": "^1.9.20",
