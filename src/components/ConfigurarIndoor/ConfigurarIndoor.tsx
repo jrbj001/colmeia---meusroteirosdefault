@@ -24,6 +24,8 @@ interface Props {
   finalizandoRoteiro?: boolean;
   /** True quando as Vias Públicas já estão prontas para finalizar. */
   podeFinalizarRoteiro?: boolean;
+  /** Motivo específico pelo qual a finalização está bloqueada (quando podeFinalizarRoteiro=false). */
+  motivoBloqueioFinalizacao?: string;
 }
 
 interface PracaSalva {
@@ -48,6 +50,7 @@ export default function ConfigurarIndoor({
   onFinalizarRoteiro,
   finalizandoRoteiro = false,
   podeFinalizarRoteiro = false,
+  motivoBloqueioFinalizacao,
 }: Props) {
   const [dims, setDims] = useState<IndoorDims | null>(null);
   const [loadingDims, setLoadingDims] = useState(true);
@@ -278,7 +281,9 @@ export default function ConfigurarIndoor({
                   : `${pracasSalvas.length} de ${pracasDisponiveis.length} praça(s) configurada(s)`}
               </p>
               <p className="text-xs text-gray-400 mt-1">
-                Você pode finalizar o roteiro agora mesmo, sem voltar à Aba 4.
+                {onFinalizarRoteiro
+                  ? 'Você pode finalizar o roteiro agora mesmo, sem voltar à Aba 4.'
+                  : 'Volte para a Aba 4 (Vias Públicas) para finalizar o roteiro.'}
               </p>
             </div>
 
@@ -318,7 +323,8 @@ export default function ConfigurarIndoor({
                   )}
                   {!podeFinalizarRoteiro && !finalizandoRoteiro && (
                     <p className="text-[11px] text-amber-600 text-center max-w-xs">
-                      Configure e carregue as Vias Públicas (Aba 4) antes de finalizar o roteiro.
+                      {motivoBloqueioFinalizacao ||
+                        'Complete as etapas anteriores do roteiro antes de finalizar.'}
                     </p>
                   )}
                 </>
@@ -334,7 +340,7 @@ export default function ConfigurarIndoor({
                     : 'w-full max-w-xs rounded-lg bg-[#ff4600] px-6 py-2.5 text-sm font-semibold text-white hover:brightness-95 transition-all'
                 } disabled:opacity-40 disabled:cursor-not-allowed`}
               >
-                {onFinalizarRoteiro ? '← Voltar para Aba 4 (Vias Públicas)' : 'Voltar para Aba 4 e finalizar roteiro'}
+                {onFinalizarRoteiro ? '← Revisar Vias Públicas' : 'Voltar para Aba 4 e finalizar roteiro'}
               </button>
 
               {pracasSalvas.length < pracasDisponiveis.length && !finalizandoRoteiro && (
