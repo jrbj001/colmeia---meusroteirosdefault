@@ -18,6 +18,12 @@ interface Props {
   cidadesSalvas: Cidade[];
   quantidadeSemanas: number;
   onVoltarAba4: () => void;
+  /** Dispara a finalização completa do roteiro (mesma lógica da Aba 4). */
+  onFinalizarRoteiro?: () => void;
+  /** True enquanto a finalização do roteiro está em andamento. */
+  finalizandoRoteiro?: boolean;
+  /** True quando as Vias Públicas já estão prontas para finalizar. */
+  podeFinalizarRoteiro?: boolean;
 }
 
 interface PracaSalva {
@@ -39,6 +45,9 @@ export default function ConfigurarIndoor({
   cidadesSalvas,
   quantidadeSemanas,
   onVoltarAba4,
+  onFinalizarRoteiro,
+  finalizandoRoteiro = false,
+  podeFinalizarRoteiro = false,
 }: Props) {
   const [dims, setDims] = useState<IndoorDims | null>(null);
   const [loadingDims, setLoadingDims] = useState(true);
@@ -269,7 +278,7 @@ export default function ConfigurarIndoor({
                   : `${pracasSalvas.length} de ${pracasDisponiveis.length} praça(s) configurada(s)`}
               </p>
               <p className="text-xs text-gray-400 mt-1">
-                A finalização do roteiro acontece na Aba 4. Clique abaixo para continuar.
+                Você pode finalizar o roteiro agora mesmo, sem voltar à Aba 4.
               </p>
             </div>
 
@@ -285,14 +294,50 @@ export default function ConfigurarIndoor({
             )}
 
             <div className="flex flex-col items-center gap-2 w-full pt-2">
+              {onFinalizarRoteiro && (
+                <>
+                  <button
+                    type="button"
+                    onClick={onFinalizarRoteiro}
+                    disabled={!podeFinalizarRoteiro || finalizandoRoteiro}
+                    className="w-full max-w-xs rounded-lg bg-[#ff4600] px-6 py-2.5 text-sm font-semibold text-white hover:brightness-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {finalizandoRoteiro ? (
+                      <>
+                        <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Finalizando roteiro…
+                      </>
+                    ) : (
+                      'Finalizar roteiro e ver resultados'
+                    )}
+                  </button>
+                  {finalizandoRoteiro && (
+                    <p className="text-[11px] text-gray-400 text-center max-w-xs">
+                      Isso pode levar até 2 minutos. Você será levado aos resultados automaticamente.
+                    </p>
+                  )}
+                  {!podeFinalizarRoteiro && !finalizandoRoteiro && (
+                    <p className="text-[11px] text-amber-600 text-center max-w-xs">
+                      Configure e carregue as Vias Públicas (Aba 4) antes de finalizar o roteiro.
+                    </p>
+                  )}
+                </>
+              )}
+
               <button
                 type="button"
                 onClick={onVoltarAba4}
-                className="w-full max-w-xs rounded-lg bg-[#ff4600] px-6 py-2.5 text-sm font-semibold text-white hover:brightness-95 transition-all"
+                disabled={finalizandoRoteiro}
+                className={`text-xs ${
+                  onFinalizarRoteiro
+                    ? 'text-gray-400 hover:text-[#3a3a3a]'
+                    : 'w-full max-w-xs rounded-lg bg-[#ff4600] px-6 py-2.5 text-sm font-semibold text-white hover:brightness-95 transition-all'
+                } disabled:opacity-40 disabled:cursor-not-allowed`}
               >
-                Voltar para Aba 4 e finalizar roteiro
+                {onFinalizarRoteiro ? '← Voltar para Aba 4 (Vias Públicas)' : 'Voltar para Aba 4 e finalizar roteiro'}
               </button>
-              {pracasSalvas.length < pracasDisponiveis.length && (
+
+              {pracasSalvas.length < pracasDisponiveis.length && !finalizandoRoteiro && (
                 <button
                   type="button"
                   onClick={() => setStepIdx(pracasDisponiveis.findIndex((p) => !pracasSalvas.some((ps) => ps.praca === p)))}
