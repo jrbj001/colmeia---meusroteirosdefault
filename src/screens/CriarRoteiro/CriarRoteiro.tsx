@@ -2688,6 +2688,51 @@ export const CriarRoteiro: React.FC = () => {
     }
   };
 
+  // ── Finalização unificada (Vias Públicas + Indoor opcional) ──────────────
+  // A finalização (com processamento pesado no backend) muda conforme o fluxo:
+  //   • Simulado manual  → dados em `tabelaSimulado`  → salvarRoteiroSimulado()
+  //   • Completo/Importar → dados em `roteirosCarregados` → salvarAba4()
+  // Os helpers abaixo centralizam essa decisão para que os CTAs da Aba 4 e o
+  // botão de finalizar dentro do Indoor (Aba 5) usem a função e a validação
+  // corretas, evitando o bug de "finalizar pela indoor" no fluxo simulado.
+  const isFluxoSimuladoManual = tipoRoteiro === 'simulado' && modoSimulado === 'manual';
+
+  const viasPublicasPreenchidas = isFluxoSimuladoManual
+    ? cidadesSalvas.length > 0 &&
+      Object.keys(tabelaSimulado).length > 0 &&
+      cidadesSalvas.every((p) => {
+        const t = tabelaSimulado[getCidadeIdKey(p)];
+        return Array.isArray(t) && t.length > 0;
+      })
+    : roteirosCarregados.length > 0;
+
+  const finalizarRoteiroAtivo = () => {
+    if (isFluxoSimuladoManual) {
+      salvarRoteiroSimulado();
+    } else {
+      salvarAba4();
+    }
+  };
+
+  const podeFinalizarRoteiro =
+    !!planoMidiaGrupo_pk &&
+    !!targetSalvoLocal?.salvo &&
+    planoMidia_pks.length > 0 &&
+    viasPublicasPreenchidas &&
+    validarConsistenciaCidades().valido;
+
+  const motivoBloqueioFinalizacao = !planoMidiaGrupo_pk
+    ? 'Complete os dados básicos na Aba 1 antes de finalizar.'
+    : !targetSalvoLocal?.salvo
+    ? 'Salve o público-alvo na Aba 2 antes de finalizar.'
+    : planoMidia_pks.length === 0
+    ? 'Configure as praças na Aba 3 antes de finalizar.'
+    : !viasPublicasPreenchidas
+    ? 'Preencha as Vias Públicas (Aba 4) de todas as praças antes de finalizar.'
+    : !validarConsistenciaCidades().valido
+    ? 'As praças das Vias Públicas (Aba 4) não batem com as cidades da Aba 3. Revise antes de finalizar.'
+    : undefined;
+
   // Função para gerar o string do plano mídia grupo
   // Função para converter nome da agência em ID
   const getAgenciaIdByNome = (nomeAgencia: string): number | null => {
@@ -3122,6 +3167,7 @@ export const CriarRoteiro: React.FC = () => {
                 >
                   <span className={`font-bold text-sm mr-2 ${abaAtiva === 5 ? 'text-[#ff4600]' : aba5Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>05</span>
                   <span className={`font-medium ${abaAtiva === 5 ? 'text-[#ff4600]' : aba5Preenchida ? 'text-[#3a3a3a]' : 'text-gray-300'}`}>Definir indoor</span>
+                  <span className="ml-1.5 text-[10px] font-normal text-gray-400 italic">(opcional)</span>
                   {aba5Preenchida && abaAtiva !== 5 && <span className="ml-1.5 text-green-500 text-xs">✓</span>}
                   {abaAtiva === 5 && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#ff4600]"></div>}
                 </div>
@@ -4219,31 +4265,54 @@ export const CriarRoteiro: React.FC = () => {
                         )}
 
                         {/* Botão Salvar para Roteiro Simulado */}
-                        {Object.keys(tabelaSimulado).length > 0 && (
-                          <div className="mb-8 flex justify-center">
-                            <button
-                              type="button"
-                              onClick={salvarRoteiroSimulado}
-                              className={`w-[200px] h-[50px] flex items-center justify-center gap-2 rounded-lg border transition-colors text-sm font-medium ${
-                                roteiroSimuladoSalvo
-                                  ? 'bg-gray-100 text-gray-500 border-gray-200 cursor-default'
-                                  : salvandoAba4
-                                  ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
-                                  : 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600'
-                              }`}
-                              disabled={salvandoAba4 || roteiroSimuladoSalvo}
-                            >
-                              {salvandoAba4 ? (
-                                <>
-                                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
-                                  <span>Salvando...</span>
-                                </>
-                              ) : roteiroSimuladoSalvo ? (
-                                <span>✓ Salvo</span>
-                              ) : (
-                                <span>Salvar roteiro</span>
-                              )}
-                            </button>
+                        {Object.keys(tabelaSimulado).length > 0 && !modoVisualizacao && (
+                          <div className="mb-8 mt-12">
+                            <p className="text-xs text-gray-400 mb-3 max-w-2xl">
+                              Escolha como concluir: <span className="font-semibold text-[#3a3a3a]">"Finalizar só Vias Públicas"</span> gera
+                              os resultados agora, sem indoor. Se o roteiro tiver mídia indoor, clique em
+                              {' '}<span className="font-semibold text-[#3a3a3a]">"Salvar e adicionar mídia indoor"</span> — suas Vias Públicas
+                              ficam guardadas e a finalização acontece na etapa de Indoor.
+                            </p>
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={finalizarRoteiroAtivo}
+                                disabled={salvandoAba4 || roteiroSimuladoSalvo || !podeFinalizarRoteiro}
+                                className={`min-w-[220px] h-[50px] px-6 flex items-center justify-center gap-2 rounded-lg border transition-colors text-sm font-medium ${
+                                  roteiroSimuladoSalvo
+                                    ? 'bg-gray-100 text-gray-500 border-gray-200 cursor-default'
+                                    : salvandoAba4 || !podeFinalizarRoteiro
+                                    ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
+                                    : 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600'
+                                }`}
+                                title={!podeFinalizarRoteiro ? motivoBloqueioFinalizacao : undefined}
+                              >
+                                {salvandoAba4 ? (
+                                  <>
+                                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                                    <span>Finalizando...</span>
+                                  </>
+                                ) : roteiroSimuladoSalvo ? (
+                                  <span>✓ Roteiro finalizado</span>
+                                ) : (
+                                  <span>Finalizar só Vias Públicas</span>
+                                )}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setAbaAtiva(5)}
+                                disabled={salvandoAba4 || roteiroSimuladoSalvo || !podeFinalizarRoteiro}
+                                className={`min-w-[220px] h-[50px] px-6 rounded-lg border transition-colors text-sm font-medium flex items-center justify-center gap-2 ${
+                                  salvandoAba4 || roteiroSimuladoSalvo || !podeFinalizarRoteiro
+                                    ? 'bg-white text-[#b3b3b3] border-[#e0e0e0] cursor-not-allowed'
+                                    : 'bg-white text-[#ff4600] border-[#ff4600] hover:bg-orange-50'
+                                }`}
+                                title={!podeFinalizarRoteiro ? motivoBloqueioFinalizacao : undefined}
+                              >
+                                Salvar e adicionar mídia indoor →
+                              </button>
+                            </div>
                           </div>
                         )}
                         </>
@@ -4552,50 +4621,54 @@ export const CriarRoteiro: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Botão Salvar */}
-                    {!modoVisualizacao && (
-                      <div className="mt-16 flex justify-start">
-                        <button
-                          type="button"
-                          onClick={salvarAba4}
-                          disabled={(() => {
-                            const validacao = validarConsistenciaCidades();
-                            return salvandoAba4 || 
-                                   !planoMidiaGrupo_pk || 
-                                   !targetSalvoLocal?.salvo || 
-                                   planoMidia_pks.length === 0 || 
-                                   roteirosCarregados.length === 0 ||
-                                   !validacao.valido;
-                          })()}
-                          className={`w-[200px] h-[50px] rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base font-medium ${
-                            (() => {
-                              const validacao = validarConsistenciaCidades();
-                              const isDisabled = salvandoAba4 || 
-                                               !planoMidiaGrupo_pk || 
-                                               !targetSalvoLocal?.salvo || 
-                                               planoMidia_pks.length === 0 || 
-                                               roteirosCarregados.length === 0 ||
-                                               !validacao.valido;
-                              
-                              if (isDisabled) {
-                                return 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed';
-                              } else if (uploadRoteiros_pks.length > 0 && !roteirosMudaram()) {
-                                return 'bg-green-500 text-white border-green-500 hover:bg-green-600';
-                              } else {
-                                return 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600';
-                              }
-                            })()
-                          }`}
-                        >
-                          {salvandoAba4 ? (
-                            <div className="flex items-center justify-center">
-                              <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                              Salvando {roteirosCarregados.length} roteiros...
-                            </div>
-                          ) : uploadRoteiros_pks.length > 0 && !roteirosMudaram() ? '✓ Salvo' : 'Salvar'}
-                        </button>
-                      </div>
-                    )}
+                    {/* Ações da Aba 4 — Finalizar ou seguir para Indoor */}
+                    {!modoVisualizacao && (() => {
+                      const isDisabled = salvandoAba4 || !podeFinalizarRoteiro;
+                      return (
+                        <div className="mt-16">
+                          <p className="text-xs text-gray-400 mb-3 max-w-2xl">
+                            Escolha como concluir: <span className="font-semibold text-[#3a3a3a]">"Finalizar só Vias Públicas"</span> gera
+                            os resultados agora, sem indoor. Se o roteiro tiver mídia indoor, clique em
+                            {' '}<span className="font-semibold text-[#3a3a3a]">"Salvar e adicionar mídia indoor"</span> — suas Vias Públicas
+                            ficam guardadas e a finalização acontece na etapa de Indoor.
+                          </p>
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={finalizarRoteiroAtivo}
+                              disabled={isDisabled}
+                              title={!podeFinalizarRoteiro ? motivoBloqueioFinalizacao : undefined}
+                              className={`min-w-[220px] h-[50px] px-6 rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base font-medium ${
+                                isDisabled
+                                  ? 'bg-[#d9d9d9] text-[#b3b3b3] border-[#b3b3b3] cursor-not-allowed'
+                                  : 'bg-[#ff4600] text-white border-[#ff4600] hover:bg-orange-600'
+                              }`}
+                            >
+                              {salvandoAba4 ? (
+                                <div className="flex items-center justify-center">
+                                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                                  Finalizando {roteirosCarregados.length} roteiros...
+                                </div>
+                              ) : 'Finalizar só Vias Públicas'}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setAbaAtiva(5)}
+                              disabled={isDisabled}
+                              title={!podeFinalizarRoteiro ? motivoBloqueioFinalizacao : undefined}
+                              className={`min-w-[220px] h-[50px] px-6 rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 text-base font-medium flex items-center justify-center gap-2 ${
+                                isDisabled
+                                  ? 'bg-white text-[#b3b3b3] border-[#e0e0e0] cursor-not-allowed'
+                                  : 'bg-white text-[#ff4600] border-[#ff4600] hover:bg-orange-50'
+                              }`}
+                            >
+                              Salvar e adicionar mídia indoor →
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                       </>
                     )}
                   </form>
@@ -4625,16 +4698,11 @@ export const CriarRoteiro: React.FC = () => {
                     }}
                     onFinalizarRoteiro={() => {
                       setAba5Preenchida(true);
-                      salvarAba4();
+                      finalizarRoteiroAtivo();
                     }}
                     finalizandoRoteiro={salvandoAba4}
-                    podeFinalizarRoteiro={
-                      !!planoMidiaGrupo_pk &&
-                      !!targetSalvoLocal?.salvo &&
-                      planoMidia_pks.length > 0 &&
-                      roteirosCarregados.length > 0 &&
-                      validarConsistenciaCidades().valido
-                    }
+                    podeFinalizarRoteiro={podeFinalizarRoteiro}
+                    motivoBloqueioFinalizacao={motivoBloqueioFinalizacao}
                   />
 
                   <div className="mt-6 pt-4 border-t border-gray-200">
