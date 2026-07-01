@@ -4611,7 +4611,7 @@ export const CriarRoteiro: React.FC = () => {
                     </h3>
                     <p className="text-sm text-gray-500 mt-1">
                       Etapa opcional. Configure e salve os ambientes indoor do seu roteiro.
-                      A finalização do roteiro acontece na Aba 4 (Vias Públicas).
+                      Ao final você pode finalizar o roteiro por aqui mesmo, sem voltar à Aba 4.
                     </p>
                   </div>
 
@@ -4623,6 +4623,18 @@ export const CriarRoteiro: React.FC = () => {
                       setAba5Preenchida(true);
                       setAbaAtiva(4);
                     }}
+                    onFinalizarRoteiro={() => {
+                      setAba5Preenchida(true);
+                      salvarAba4();
+                    }}
+                    finalizandoRoteiro={salvandoAba4}
+                    podeFinalizarRoteiro={
+                      !!planoMidiaGrupo_pk &&
+                      !!targetSalvoLocal?.salvo &&
+                      planoMidia_pks.length > 0 &&
+                      roteirosCarregados.length > 0 &&
+                      validarConsistenciaCidades().valido
+                    }
                   />
 
                   <div className="mt-6 pt-4 border-t border-gray-200">
