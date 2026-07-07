@@ -5,6 +5,7 @@ import { Auth0Provider } from "@auth0/auth0-react";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute/ProtectedRoute";
 import { OcorrenciaWidget } from "./components/OcorrenciaWidget/OcorrenciaWidget";
+import { ErrorBoundary } from "./components/ErrorBoundary/ErrorBoundary";
 import '../tailwind.css';
 import 'leaflet/dist/leaflet.css';
 
@@ -66,7 +67,16 @@ function AppGuard({ children }: { children: React.ReactNode }) {
 // Redireciona exibidores para /exibidor/dashboard; demais usuários ficam no HomeDashboard
 function HomeGuard() {
   const { isExibidor, isLoading } = useAuth();
-  if (isLoading) return null; // ProtectedRoute já cuida do spinner
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-gray-200 border-t-[#ff4600] rounded-full animate-spin" />
+          <p className="text-sm text-gray-500">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
   if (isExibidor) return <Navigate to="/exibidor/dashboard" replace />;
   return <HomeDashboard />;
 }
@@ -90,6 +100,7 @@ root.render(
       <AuthProvider>
         <BrowserRouter>
           <AppGuard>
+            <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/login"    element={<Login />} />
@@ -222,6 +233,7 @@ root.render(
                 <Route path="*" element={<div>Página não encontrada</div>} />
               </Routes>
             </Suspense>
+            </ErrorBoundary>
           </AppGuard>
         </BrowserRouter>
       </AuthProvider>
