@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import api from '../../config/axios';
 
 interface Props {
@@ -28,6 +28,21 @@ interface Detalhe {
 }
 
 type Aba = 'dados' | 'dominios' | 'usuarios' | 'legado';
+
+interface PreviewMerge {
+  origem_nome: string;
+  destino_nome: string;
+  qtd_ativos_legado: number;
+  qtd_usuarios: number;
+  qtd_lotes: number;
+  qtd_itens_inventario: number;
+}
+
+interface ExibidorOpcao {
+  exibidor_pk: number;
+  nome_st: string;
+  nome_fantasia_st: string | null;
+}
 
 /** Campos editáveis no formulário Dados (mesma lista que o backend aceita em op:'editar'). */
 const CAMPOS_EDITAVEIS = [
@@ -78,6 +93,25 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
   const [form, setForm] = useState<FormDados>({});
   const [salvando, setSalvando] = useState(false);
   const [sucesso, setSucesso] = useState<string | null>(null);
+
+  // ── Zona de Perigo ────────────────────────────────────────────────────────
+  // Exclusão
+  const [modalExcluir, setModalExcluir]     = useState(false);
+  const [confirmNome, setConfirmNome]       = useState('');
+  const [excluindo, setExcluindo]           = useState(false);
+  const [erroExcluir, setErroExcluir]       = useState<string | null>(null);
+
+  // Merge / Incorporar
+  const [modalMerge, setModalMerge]         = useState(false);
+  const [mergeStep, setMergeStep]           = useState<'busca' | 'preview' | 'confirm'>('busca');
+  const [mergeBusca, setMergeBusca]         = useState('');
+  const [mergeOpcoes, setMergeOpcoes]       = useState<ExibidorOpcao[]>([]);
+  const [mergeDestino, setMergeDestino]     = useState<ExibidorOpcao | null>(null);
+  const [mergePreview, setMergePreview]     = useState<PreviewMerge | null>(null);
+  const [mergeConfirmNome, setMergeConfirmNome] = useState('');
+  const [mergeLoading, setMergeLoading]     = useState(false);
+  const [erroMerge, setErroMerge]           = useState<string | null>(null);
+  const mergeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -199,6 +233,89 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
     }
   };
 
+  // ── Handlers Zona de Perigo ───────────────────────────────────────────────
+  const confirmarExclusao = async () => {
+    setExcluindo(true);
+    setErroExcluir(null);
+    try {
+      await api.delete(`/referencia?action=exibidor-gestao&id=${exibidor_pk}`);
+      setModalExcluir(false);
+      onChanged();
+      onClose();
+    } catch (err: any) {
+      setErroExcluir(err?.response?.data?.error || err?.message || 'Erro ao excluir');
+    } finally {
+      setExcluindo(false);
+    }
+  };
+
+  const buscarExibidores = (q: string) => {
+    if (mergeTimer.current) clearTimeout(mergeTimer.current);
+    if (!q.trim()) { setMergeOpcoes([]); return; }
+    mergeTimer.current = setTimeout(async () => {
+      try {
+        const { data: r } = await api.get(`/referencia?action=exibidor-gestao&search=${encodeURIComponent(q)}`);
+        setMergeOpcoes(
+          (r?.exibidores || r || [])
+            .filter((x: any) => x.exibidor_pk !== exibidor_pk)
+            .slice(0, 8)
+        );
+      } catch { /* silencioso */ }
+    }, 350);
+  };
+
+  const selecionarDestino = async (opcao: ExibidorOpcao) => {
+    setMergeDestino(opcao);
+    setMergeStep('preview');
+    setMergeLoading(true);
+    setErroMerge(null);
+    try {
+      const { data: r } = await api.get(
+        `/referencia?action=exibidor-gestao&mode=preview-merge&origem=${exibidor_pk}&destino=${opcao.exibidor_pk}`
+      );
+      setMergePreview(r?.preview || null);
+    } catch (err: any) {
+      setErroMerge(err?.response?.data?.error || err?.message || 'Erro ao carregar preview');
+    } finally {
+      setMergeLoading(false);
+    }
+  };
+
+  const confirmarMerge = async () => {
+    if (!mergeDestino) return;
+    setMergeLoading(true);
+    setErroMerge(null);
+    try {
+      const { data: r } = await api.post('/referencia?action=exibidor-gestao', {
+        op: 'merge',
+        origem_pk: exibidor_pk,
+        destino_pk: mergeDestino.exibidor_pk,
+      });
+      if (r?.success) {
+        setModalMerge(false);
+        onChanged();
+        onClose();
+      } else {
+        setErroMerge(r?.error || 'Erro ao incorporar');
+      }
+    } catch (err: any) {
+      setErroMerge(err?.response?.data?.error || err?.message || 'Erro ao incorporar');
+    } finally {
+      setMergeLoading(false);
+    }
+  };
+
+  const abrirModalMerge = () => {
+    setModalMerge(true);
+    setMergeStep('busca');
+    setMergeBusca('');
+    setMergeOpcoes([]);
+    setMergeDestino(null);
+    setMergePreview(null);
+    setMergeConfirmNome('');
+    setErroMerge(null);
+  };
+
   if (loading || !data) {
     return (
       <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-end">
@@ -210,6 +327,7 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
   const e = data.exibidor;
 
   return (
+    <>
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-end" onClick={onClose}>
       <div
         className="bg-white w-[760px] max-w-full h-full flex flex-col shadow-2xl"
@@ -422,6 +540,30 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
                   {sucesso}
                 </div>
               ) : null}
+
+              {/* Zona de Perigo */}
+              <div className="mt-8 border border-[#fca5a5] rounded-xl p-4 bg-[#fff5f5]">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#b91c1c] mb-1">
+                  Zona de perigo
+                </p>
+                <p className="text-xs text-[#6b7280] mb-4">
+                  Ações irreversíveis. Tenha certeza antes de prosseguir.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={abrirModalMerge}
+                    className="flex-1 h-[38px] rounded-lg border border-[#f87171] bg-white text-[#b91c1c] text-sm font-medium hover:bg-[#fef2f2] transition-colors"
+                  >
+                    Incorporar em outro exibidor
+                  </button>
+                  <button
+                    onClick={() => { setModalExcluir(true); setConfirmNome(''); setErroExcluir(null); }}
+                    className="flex-1 h-[38px] rounded-lg bg-[#b91c1c] text-white text-sm font-medium hover:bg-[#991b1b] transition-colors"
+                  >
+                    Excluir exibidor
+                  </button>
+                </div>
+              </div>
             </div>
           ) : null}
 
@@ -584,6 +726,224 @@ export const DrawerDetalheExibidor: React.FC<Props> = ({ exibidor_pk, onClose, o
         ) : null}
       </div>
     </div>
+
+    {/* ── Modal: Excluir exibidor ─────────────────────────────────────────── */}
+    {modalExcluir ? (
+      <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-[#fef2f2] flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5 text-[#b91c1c]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-[#111]">Excluir exibidor</h3>
+              <p className="text-xs text-[#6b7280]">Esta ação é irreversível.</p>
+            </div>
+          </div>
+
+          <p className="text-sm text-[#374151] mb-4">
+            O exibidor será marcado como excluído e seus domínios serão desativados.
+            Os ativos do banco legado serão desvinculados.
+          </p>
+
+          <p className="text-xs text-[#6b7280] mb-1">
+            Para confirmar, digite o nome do exibidor:
+            <span className="font-semibold text-[#111] ml-1">{e.nome_st}</span>
+          </p>
+          <input
+            type="text"
+            value={confirmNome}
+            onChange={(ev) => setConfirmNome(ev.target.value)}
+            placeholder="Nome do exibidor"
+            className="w-full h-[38px] px-3 text-sm border border-[#d9d9d9] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#b91c1c] mb-4"
+          />
+
+          {erroExcluir ? (
+            <div className="p-3 rounded-lg bg-[#fff5f5] border border-[#f4caca] text-sm text-[#7f1d1d] mb-4">
+              {erroExcluir}
+            </div>
+          ) : null}
+
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={() => setModalExcluir(false)}
+              disabled={excluindo}
+              className="h-[38px] px-4 text-sm rounded-lg border border-[#d9d9d9] bg-white text-[#374151] hover:bg-[#f3f4f6] disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={confirmarExclusao}
+              disabled={confirmNome.trim() !== e.nome_st?.trim() || excluindo}
+              className="h-[38px] px-4 text-sm font-medium rounded-lg bg-[#b91c1c] text-white hover:bg-[#991b1b] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {excluindo ? 'Excluindo…' : 'Excluir definitivamente'}
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+
+    {/* ── Modal: Incorporar em outro exibidor ─────────────────────────────── */}
+    {modalMerge ? (
+      <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+        <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
+          {/* Cabeçalho */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-[#fff7ed] flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5 text-[#b45309]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12M8 12h12M8 17h12M3 7h.01M3 12h.01M3 17h.01" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-[#111]">Incorporar em outro exibidor</h3>
+              <p className="text-xs text-[#6b7280]">Todos os dados serão migrados para o exibidor de destino.</p>
+            </div>
+          </div>
+
+          {/* Passo 1: busca */}
+          {mergeStep === 'busca' ? (
+            <>
+              <p className="text-sm text-[#374151] mb-3">
+                Busque o exibidor que irá <strong>receber</strong> os dados de{' '}
+                <span className="font-semibold">{e.nome_st}</span>:
+              </p>
+              <input
+                type="text"
+                value={mergeBusca}
+                onChange={(ev) => { setMergeBusca(ev.target.value); buscarExibidores(ev.target.value); }}
+                placeholder="Buscar por nome…"
+                className="w-full h-[38px] px-3 text-sm border border-[#d9d9d9] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ff4600] mb-3"
+                autoFocus
+              />
+              {mergeOpcoes.length > 0 ? (
+                <ul className="border border-[#e5e7eb] rounded-lg divide-y divide-[#f3f4f6] max-h-52 overflow-y-auto">
+                  {mergeOpcoes.map((op) => (
+                    <li key={op.exibidor_pk}>
+                      <button
+                        onClick={() => selecionarDestino(op)}
+                        className="w-full text-left px-4 py-2.5 hover:bg-[#f9fafb] transition-colors"
+                      >
+                        <p className="text-sm font-medium text-[#111]">{op.nome_st}</p>
+                        {op.nome_fantasia_st && op.nome_fantasia_st !== op.nome_st ? (
+                          <p className="text-xs text-[#6b7280]">{op.nome_fantasia_st}</p>
+                        ) : null}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : mergeBusca.trim() ? (
+                <p className="text-xs text-[#9ca3af] text-center py-4">Nenhum exibidor encontrado.</p>
+              ) : null}
+            </>
+          ) : null}
+
+          {/* Passo 2: preview */}
+          {mergeStep === 'preview' ? (
+            <>
+              {mergeLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-[#f3f4f6] border-t-[#ff4600] rounded-full animate-spin" />
+                </div>
+              ) : mergePreview ? (
+                <>
+                  <p className="text-sm text-[#374151] mb-4">
+                    Os itens abaixo serão migrados de{' '}
+                    <span className="font-semibold">{mergePreview.origem_nome}</span> para{' '}
+                    <span className="font-semibold">{mergePreview.destino_nome}</span>:
+                  </p>
+                  <div className="grid grid-cols-2 gap-3 mb-5">
+                    {[
+                      { label: 'Ativos no legado', valor: mergePreview.qtd_ativos_legado },
+                      { label: 'Usuários', valor: mergePreview.qtd_usuarios },
+                      { label: 'Lotes de inventário', valor: mergePreview.qtd_lotes },
+                      { label: 'Itens de inventário', valor: mergePreview.qtd_itens_inventario },
+                    ].map((item) => (
+                      <div key={item.label} className="bg-[#f9fafb] border border-[#e5e7eb] rounded-lg px-4 py-3">
+                        <p className="text-2xl font-bold text-[#111]">{item.valor.toLocaleString('pt-BR')}</p>
+                        <p className="text-xs text-[#6b7280] mt-0.5">{item.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => setMergeStep('busca')}
+                      className="h-[38px] px-4 text-sm rounded-lg border border-[#d9d9d9] bg-white text-[#374151] hover:bg-[#f3f4f6]"
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      onClick={() => { setMergeStep('confirm'); setMergeConfirmNome(''); }}
+                      className="h-[38px] px-4 text-sm font-medium rounded-lg bg-[#b45309] text-white hover:bg-[#92400e]"
+                    >
+                      Prosseguir
+                    </button>
+                  </div>
+                </>
+              ) : null}
+            </>
+          ) : null}
+
+          {/* Passo 3: confirmação final */}
+          {mergeStep === 'confirm' ? (
+            <>
+              <p className="text-sm text-[#374151] mb-4">
+                Esta ação é <strong>irreversível</strong>. O exibidor{' '}
+                <span className="font-semibold">{e.nome_st}</span> será excluído após a migração.
+              </p>
+              <p className="text-xs text-[#6b7280] mb-1">
+                Para confirmar, digite o nome do exibidor de origem:
+                <span className="font-semibold text-[#111] ml-1">{e.nome_st}</span>
+              </p>
+              <input
+                type="text"
+                value={mergeConfirmNome}
+                onChange={(ev) => setMergeConfirmNome(ev.target.value)}
+                placeholder="Nome do exibidor"
+                className="w-full h-[38px] px-3 text-sm border border-[#d9d9d9] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#b45309] mb-4"
+                autoFocus
+              />
+
+              {erroMerge ? (
+                <div className="p-3 rounded-lg bg-[#fff7ed] border border-[#fed7aa] text-sm text-[#92400e] mb-4">
+                  {erroMerge}
+                </div>
+              ) : null}
+
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => setMergeStep('preview')}
+                  disabled={mergeLoading}
+                  className="h-[38px] px-4 text-sm rounded-lg border border-[#d9d9d9] bg-white text-[#374151] hover:bg-[#f3f4f6] disabled:opacity-50"
+                >
+                  Voltar
+                </button>
+                <button
+                  onClick={confirmarMerge}
+                  disabled={mergeConfirmNome.trim() !== e.nome_st?.trim() || mergeLoading}
+                  className="h-[38px] px-4 text-sm font-medium rounded-lg bg-[#b45309] text-white hover:bg-[#92400e] disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {mergeLoading ? 'Incorporando…' : 'Confirmar incorporação'}
+                </button>
+              </div>
+            </>
+          ) : null}
+
+          {/* Botão fechar (canto) */}
+          {!mergeLoading ? (
+            <button
+              onClick={() => setModalMerge(false)}
+              className="absolute top-4 right-4 text-[#9ca3af] hover:text-[#374151] text-xl leading-none"
+            >
+              ×
+            </button>
+          ) : null}
+        </div>
+      </div>
+    ) : null}
+    </>
   );
 };
 
