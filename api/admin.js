@@ -8,6 +8,7 @@ const handlers = {
   'verificar-acesso': require('../handlers/verificar-acesso'),
   'inventario-analise': require('../handlers/admin-inventario-analise'),
   'exibidores-dashboard': require('../handlers/exibidores-dashboard'),
+  'pracas-admin': require('../handlers/pracas-admin'),
 };
 
 module.exports = async (req, res) => {
