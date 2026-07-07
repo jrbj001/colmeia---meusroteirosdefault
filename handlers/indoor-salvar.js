@@ -69,7 +69,6 @@ module.exports = async (req, res) => {
       .input('planoMidiaGrupo_pk', sql.Int,                planoMidiaGrupo_pk)
       .input('report_pk',          sql.Int,                planoMidiaGrupo_pk)
       .input('semanas',            sql.Int,                numSemanas)
-      .input('praca_st',           sql.NVarChar(255),      praca)
       .execute(`[${S}].[sp_planoMidiaIndoorInsert]`);
 
     const row = result.recordset?.[0];
