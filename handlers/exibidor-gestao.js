@@ -563,6 +563,92 @@ async function softDelete(req, res, pool) {
   return res.status(200).json({ success: true });
 }
 
+/**
+ * Preview do merge: retorna quantidades que serão migradas de origem → destino.
+ * GET ?mode=preview-merge&origem=N&destino=M
+ */
+async function previewMerge(req, res, pool) {
+  const origem  = Number(req.query.origem  || 0);
+  const destino = Number(req.query.destino || 0);
+  if (!origem || !destino) return res.status(400).json({ success: false, error: 'origem e destino são obrigatórios' });
+  if (origem === destino)  return res.status(400).json({ success: false, error: 'origem e destino não podem ser o mesmo exibidor' });
+
+  const result = await pool.request()
+    .input('origem',  sql.Int, origem)
+    .input('destino', sql.Int, destino)
+    .query(`
+      SELECT
+        (SELECT nome_st FROM [serv_product_be180].[exibidor_dm] WHERE exibidor_pk = @origem)  AS origem_nome,
+        (SELECT nome_st FROM [serv_product_be180].[exibidor_dm] WHERE exibidor_pk = @destino) AS destino_nome,
+        (SELECT COUNT(1) FROM [serv_product_be180].[bancoAtivosJoin_ft]
+          WHERE exibidor_fk = @origem)                                                        AS qtd_ativos_legado,
+        (SELECT COUNT(1) FROM [serv_product_be180].[usuario_dm]
+          WHERE exibidor_fk = @origem AND ativo_bl = 1)                                       AS qtd_usuarios,
+        (SELECT COUNT(1) FROM [serv_product_be180].[exibidor_inventario_upload_lote_dm]
+          WHERE exibidor_fk = @origem)                                                        AS qtd_lotes,
+        (SELECT COUNT(1) FROM [serv_product_be180].[exibidor_inventario_item_dm] i
+          JOIN [serv_product_be180].[exibidor_inventario_upload_lote_dm] l
+            ON l.lote_pk = i.lote_fk
+          WHERE l.exibidor_fk = @origem AND i.delete_bl = 0)                                  AS qtd_itens_inventario
+    `);
+
+  return res.json({ success: true, preview: result.recordset[0] });
+}
+
+/**
+ * Merge: transfere todos os dados de origem → destino, depois soft-deleta origem.
+ * POST body: { op: 'merge', origem_pk: N, destino_pk: M }
+ */
+async function mergeExibidor(req, res, pool) {
+  const origem  = Number(req.body?.origem_pk  || 0);
+  const destino = Number(req.body?.destino_pk || 0);
+  if (!origem || !destino) return res.status(400).json({ success: false, error: 'origem_pk e destino_pk são obrigatórios' });
+  if (origem === destino)  return res.status(400).json({ success: false, error: 'origem e destino não podem ser o mesmo exibidor' });
+
+  // Confirma que ambos existem e não estão deletados
+  const check = await pool.request()
+    .input('origem',  sql.Int, origem)
+    .input('destino', sql.Int, destino)
+    .query(`
+      SELECT exibidor_pk, nome_st, delete_bl FROM [serv_product_be180].[exibidor_dm]
+      WHERE exibidor_pk IN (@origem, @destino)
+    `);
+  if (check.recordset.length < 2) return res.status(404).json({ success: false, error: 'Um ou ambos os exibidores não foram encontrados' });
+  const deletado = check.recordset.find(r => r.delete_bl);
+  if (deletado) return res.status(400).json({ success: false, error: `O exibidor "${deletado.nome_st}" já foi excluído` });
+
+  await pool.request()
+    .input('origem',  sql.Int, origem)
+    .input('destino', sql.Int, destino)
+    .query(`
+      -- 1. Migra ativos do banco legado
+      UPDATE [serv_product_be180].[bancoAtivosJoin_ft]
+        SET exibidor_fk = @destino
+        WHERE exibidor_fk = @origem;
+
+      -- 2. Migra usuários
+      UPDATE [serv_product_be180].[usuario_dm]
+        SET exibidor_fk = @destino
+        WHERE exibidor_fk = @origem;
+
+      -- 3. Migra lotes de inventário
+      UPDATE [serv_product_be180].[exibidor_inventario_upload_lote_dm]
+        SET exibidor_fk = @destino
+        WHERE exibidor_fk = @origem;
+
+      -- 4. Soft-delete da origem (domínios + exibidor)
+      UPDATE [serv_product_be180].[exibidor_dominio_dm]
+        SET delete_bl = 1, dataAtualizacao_dh = SYSDATETIME()
+        WHERE exibidor_fk = @origem;
+
+      UPDATE [serv_product_be180].[exibidor_dm]
+        SET delete_bl = 1, active_bl = 0, dataAtualizacao_dh = SYSDATETIME()
+        WHERE exibidor_pk = @origem;
+    `);
+
+  return res.status(200).json({ success: true });
+}
+
 module.exports = async (req, res) => {
   try {
     const pool = await getPool();
@@ -571,6 +657,7 @@ module.exports = async (req, res) => {
       const mode = String(req.query.mode || 'list');
       if (mode === 'detalhe') return detalhe(req, res, pool);
       if (mode === 'detalhe-pendente') return detalhePendente(req, res, pool);
+      if (mode === 'preview-merge') return previewMerge(req, res, pool);
       return listarUnificado(req, res, pool);
     }
 
@@ -581,6 +668,7 @@ module.exports = async (req, res) => {
       if (op === 'editar') return editar(req, res, pool);
       if (op === 'add-dominio') return addDominio(req, res, pool);
       if (op === 'remove-dominio') return removeDominio(req, res, pool);
+      if (op === 'merge') return mergeExibidor(req, res, pool);
       return res.status(400).json({ success: false, error: 'Operação POST inválida' });
     }
 
