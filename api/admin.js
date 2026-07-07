@@ -7,6 +7,7 @@ const handlers = {
   'areas': require('../handlers/areas'),
   'verificar-acesso': require('../handlers/verificar-acesso'),
   'inventario-analise': require('../handlers/admin-inventario-analise'),
+  'exibidores-dashboard': require('../handlers/exibidores-dashboard'),
 };
 
 module.exports = async (req, res) => {

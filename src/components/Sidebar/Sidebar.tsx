@@ -33,7 +33,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
   const isExibidoresAtivo =
     location.pathname.startsWith('/banco-de-ativos/cadastrar/exibidor') ||
     location.pathname.startsWith('/banco-de-ativos/exibidores') ||
-    location.pathname.startsWith('/admin/inventarios-exibidor');
+    location.pathname.startsWith('/admin/inventarios-exibidor') ||
+    location.pathname.startsWith('/admin/exibidores-dashboard');
   const isAdminAtivo =
     location.pathname.startsWith('/admin/usuarios') ||
     location.pathname.startsWith('/admin/perfis');
@@ -336,6 +337,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
 
             {exibidoresAberto && (
               <div className="ml-4 mt-2 space-y-0.5">
+                {isAdmin && (
+                  <Link to="/admin/exibidores-dashboard" className="block">
+                    <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
+                      location.pathname.startsWith("/admin/exibidores-dashboard")
+                        ? "text-[#ff4600] font-medium"
+                        : "text-[#3a3a3a] hover:bg-[#ededed]"
+                    }`}>
+                      Dashboard
+                    </div>
+                  </Link>
+                )}
                 <Link to="/banco-de-ativos/cadastrar/exibidor" className="block">
                   <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
                     location.pathname.startsWith("/banco-de-ativos/cadastrar/exibidor")
