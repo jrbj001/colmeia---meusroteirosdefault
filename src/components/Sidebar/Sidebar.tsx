@@ -445,6 +445,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
                     Gerenciar Perfis
                   </div>
                 </Link>
+                <Link to="/admin/pracas" className="block">
+                  <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
+                    location.pathname.startsWith("/admin/pracas")
+                      ? "text-[#ff4600] font-medium"
+                      : "text-[#3a3a3a] hover:bg-[#ededed]"
+                  }`}>
+                    Praças canônicas
+                  </div>
+                </Link>
               </div>
             )}
           </div>

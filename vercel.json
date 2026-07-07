@@ -126,6 +126,7 @@
     { "source": "/api/verificar-acesso", "destination": "/api/admin?action=verificar-acesso" },
     { "source": "/api/admin-inventario-analise", "destination": "/api/admin?action=inventario-analise" },
     { "source": "/api/exibidores-dashboard", "destination": "/api/admin?action=exibidores-dashboard" },
+    { "source": "/api/pracas-admin", "destination": "/api/admin?action=pracas-admin" },
 
     { "source": "/api/ocorrencia-criar", "destination": "/api/ocorrencia?action=criar" },
 
