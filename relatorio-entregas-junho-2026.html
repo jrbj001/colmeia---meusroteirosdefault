@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Colmeia — Relatório de Entregas · Jun/Jul 2026</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #1a1a1a;
+    background: #f7f7f5;
+  }
+
+  .page {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 56px 48px 80px;
+    background: #fff;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  .report-header {
+    border-bottom: 2px solid #1a1a1a;
+    padding-bottom: 20px;
+    margin-bottom: 36px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .report-header h1 {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  .report-header .meta {
+    text-align: right;
+    color: #666;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .report-header .meta strong {
+    color: #1a1a1a;
+    font-weight: 600;
+  }
+
+  /* ── Summary strip ── */
+  .summary-strip {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 1px;
+    background: #e0e0e0;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 40px;
+  }
+  .stat-cell {
+    background: #fff;
+    padding: 16px 14px;
+    text-align: center;
+  }
+  .stat-cell .val {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1a1a1a;
+    display: block;
+    line-height: 1.2;
+  }
+  .stat-cell .lbl {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-top: 4px;
+    display: block;
+  }
+
+  /* ── Sections ── */
+  .section { margin-bottom: 44px; }
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #888;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #ebebeb;
+  }
+
+  /* ── Effort card ── */
+  .effort-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  .effort-block {
+    background: #f7f7f5;
+    border-radius: 8px;
+    padding: 20px 24px;
+  }
+  .effort-block h3 {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #888;
+    margin-bottom: 14px;
+  }
+  .effort-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid #e8e8e6;
+  }
+  .effort-row:last-child { border-bottom: none; }
+  .effort-row .key { color: #555; font-size: 13px; }
+  .effort-row .val { font-weight: 600; font-size: 13px; color: #1a1a1a; }
+
+  .bar-row { margin-bottom: 10px; }
+  .bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 5px;
+  }
+  .bar-track {
+    height: 6px;
+    background: #e8e8e6;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: #1a1a1a;
+  }
+  .bar-fill.muted { background: #bbb; }
+
+  /* ── Module list ── */
+  .module-item {
+    padding: 18px 0;
+    border-bottom: 1px solid #ebebeb;
+  }
+  .module-item:last-child { border-bottom: none; }
+  .module-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 7px;
+  }
+  .module-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a1a1a;
+  }
+  .module-tags {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-shrink: 0;
+    margin-left: 16px;
+  }
+  .tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid;
+  }
+  .tag.entregue { color: #166534; background: #dcfce7; border-color: #bbf7d0; }
+  .tag.feature  { color: #1e40af; background: #dbeafe; border-color: #bfdbfe; }
+  .tag.infra    { color: #6b7280; background: #f3f4f6; border-color: #e5e7eb; }
+  .tag.commits  { color: #555;    background: #f5f5f3; border-color: #e0e0de; }
+  .module-desc {
+    font-size: 13px;
+    color: #555;
+    line-height: 1.6;
+  }
+
+  /* ── PRs table ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  thead th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #888;
+    border-bottom: 1px solid #ddd;
+  }
+  tbody td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    color: #333;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: #fafaf8; }
+  .pr-id { font-family: monospace; font-size: 12px; color: #888; }
+  .pr-branch { font-family: monospace; font-size: 12px; color: #1a1a1a; }
+  .pr-date { color: #888; }
+
+  /* ── Footer ── */
+  .report-footer {
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid #ebebeb;
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #aaa;
+  }
+
+  /* ── Print ── */
+  @media print {
+    body { background: #fff; }
+    .page { padding: 32px 40px; box-shadow: none; }
+    .module-item { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <header class="report-header">
+    <div>
+      <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Be Mediatech OOH</div>
+      <h1>Colmeia — Relatório de Entregas</h1>
+    </div>
+    <div class="meta">
+      <strong>07 Jun → 07 Jul 2026</strong><br>
+      Fonte: git log · colmeia repo<br>
+      Gerado em 07/07/2026
+    </div>
+  </header>
+
+  <!-- Summary strip -->
+  <div class="summary-strip">
+    <div class="stat-cell"><span class="val">42</span><span class="lbl">Commits</span></div>
+    <div class="stat-cell"><span class="val">13</span><span class="lbl">Pull Requests</span></div>
+    <div class="stat-cell"><span class="val">20</span><span class="lbl">Features</span></div>
+    <div class="stat-cell"><span class="val">9</span><span class="lbl">Correções</span></div>
+    <div class="stat-cell"><span class="val">124</span><span class="lbl">Arquivos</span></div>
+    <div class="stat-cell"><span class="val">+11.998</span><span class="lbl">Linhas</span></div>
+  </div>
+
+  <!-- Esforço -->
+  <div class="section">
+    <div class="section-title">Estimativa de esforço</div>
+    <div class="effort-grid">
+      <div class="effort-block">
+        <h3>Métricas do período</h3>
+        <div class="effort-row"><span class="key">Horas de produto (git)</span><span class="val">~240 h</span></div>
+        <div class="effort-row"><span class="key">Migração novo backend</span><span class="val">80 h</span></div>
+        <div class="effort-row" style="border-top:1px solid #ccc;margin-top:4px;padding-top:10px"><span class="key" style="font-weight:600;color:#1a1a1a">Total do período</span><span class="val" style="font-size:16px">~320 h</span></div>
+        <div class="effort-row"><span class="key">Duração</span><span class="val">4 semanas</span></div>
+        <div class="effort-row"><span class="key">Ritmo médio</span><span class="val">~80 h/sem</span></div>
+        <div class="effort-row"><span class="key">Pessoa-mês equivalente</span><span class="val">~2,0</span></div>
+      </div>
+      <div class="effort-block">
+        <h3>Distribuição de commits</h3>
+        <div class="bar-row">
+          <div class="bar-label"><span>feat (novas funcionalidades)</span><span>69%</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:69%"></div></div>
+        </div>
+        <div class="bar-row" style="margin-top:10px">
+          <div class="bar-label"><span>fix (correções)</span><span>31%</span></div>
+          <div class="bar-track"><div class="bar-fill muted" style="width:31%"></div></div>
+        </div>
+        <div style="margin-top:20px;font-size:11px;color:#aaa;line-height:1.6">
+          Estimativa baseada em 11.998 linhas inseridas, complexidade das funcionalidades e heurísticas de mercado (10–18 LOC/h TypeScript/React em produção). Variação ±20%.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Módulos entregues -->
+  <div class="section">
+    <div class="section-title">Módulos e funcionalidades entregues</div>
+
+    <div class="module-item">
+      <div class="module-header">
+        <span class="module-name">1. Mídia Indoor — Fluxo Completo (Aba 4 e 5)</span>
+        <div class="module-tags">
+          <span class="tag feature">feature</span>
+          <span class="tag commits">9 commits</span>
+          <span class="tag entregue">Entregue</span>
+        </div>
+      </div>
+      <p class="module-desc">
+        Principal entrega do período. Wizard stepper com persistência de estado entre abas, lazy-mount, indicadores visuais de conclusão nos tabs, navegação automática para a próxima aba após salvar, abas pendentes em cinza para reforçar o fluxo linear. Backfill de <code>planoMidia_pk</code> após finalização e CTAs mode-aware que distinguem o fluxo simulado do fluxo manual. Estrutura migrada para <code>indoorEspecifico_dm</code>.
+      </p>
+    </div>
+
+    <div class="module-item">
+      <div class="module-header">
+        <span class="module-name">2. Admin — Inventário Exibidor</span>
+        <div class="module-tags">
+          <span class="tag feature">feature</span>
+          <span class="tag commits">5 commits</span>
+          <span class="tag entregue">Entregue</span>
+        </div>
+      </div>
+      <p class="module-desc">
+        Dropdowns canônicos para correção de praças e tipos de mídia. Validação de praça canônica com blueprint, null-safety em lotes sem dados de reconciliação, correção do schema de-para e fix do download de template. Seções desnecessárias removidas da tela de admin de exibidores.
+      </p>
+    </div>
+
+    <div class="module-item">
+      <div class="module-header">
+        <span class="module-name">3. Design System</span>
+        <div class="module-tags">
+          <span class="tag feature">feature</span>
+          <span class="tag commits">4 commits</span>
+          <span class="tag entregue">Entregue</span>
+        </div>
+      </div>
+      <p class="module-desc">
+        Publicação do Design System oficial do Colmeia. Componentes navegação: <code>Topbar</code>, <code>Tabs</code>, <code>Sidebar</code>. Formulários: <code>Button</code>, <code>Input</code>, <code>Select</code>, <code>Switch</code>, <code>Checkbox</code>, <code>IconButton</code>. Feedback: <code>Badge</code>, <code>Modal</code>, <code>Spinner</code>, <code>Skeleton</code>, <code>Toast</code>, <code>StatusBadge</code>, <code>ConfirmDialog</code>, <code>Pagination</code>.
+      </p>
+    </div>
+
+    <div class="module-item">
+      <div class="module-header">
+        <span class="module-name">4. Aba de Resultados (Aba 6) — Azure Blob</span>
+        <div class="module-tags">
+          <span class="tag feature">feature</span>
+          <span class="tag commits">2 commits</span>
+          <span class="tag entregue">Entregue</span>
+        </div>
+      </div>
+      <p class="module-desc">
+        Download dos resultados pós-processamento via Azure Blob Storage. Tabelas Indoor e Consolidado exibidas na Aba 6. Botão de download SharePoint bloqueado durante o período de carência pós-processamento (evita downloads de arquivos incompletos).
+      </p>
+    </div>
+
+    <div class="module-item">
+      <div class="module-header">
+        <span class="module-name">5. Sidebar / Menu Lateral</span>
+        <div class="module-tags">
+          <span class="tag feature">feature</span>
+          <span class="tag commits">2 commits</span>
+          <span class="tag entregue">Entregue</span>
+        </div>
+      </div>
+      <p class="module-desc">
+        Reestruturação completa do menu lateral com atualização do Design System. Navegação revisada para consistência com o restante da aplicação.
+      </p>
+    </div>
+
+    <div class="module-item">
+      <div class="module-header">
+        <span class="module-name">6. Meus Roteiros — Coluna de Status</span>
+        <div class="module-tags">
+          <span class="tag feature">feature</span>
+          <span class="tag commits">3 commits</span>
+          <span class="tag entregue">Entregue</span>
+        </div>
+      </div>
+      <p class="module-desc">
+        Nova coluna STATUS de negócio na listagem de roteiros. Badge redesenhado como flat tag com borda colorida (sem pill redondo). Header e células da coluna centralizados.
+      </p>
+    </div>
+
+    <div class="module-item">
+      <div class="module-header">
+        <span class="module-name">7. Widget Global de Ocorrências</span>
+        <div class="module-tags">
+          <span class="tag feature">feature</span>
+          <span class="tag commits">2 commits</span>
+          <span class="tag entregue">Entregue</span>
+        </div>
+      </div>
+      <p class="module-desc">
+        Widget flutuante de registro de ocorrências disponível em todas as telas, integrado diretamente ao Notion. Permite que usuários reportem bugs e sugestões sem sair da aplicação. Ícone revisado para bandeira.
+      </p>
+    </div>
+
+    <div class="module-item">
+      <div class="module-header">
+        <span class="module-name">8. Criar Roteiro — UX Flow Linear</span>
+        <div class="module-tags">
+          <span class="tag feature">feature</span>
+          <span class="tag commits">4 commits</span>
+          <span class="tag entregue">Entregue</span>
+        </div>
+      </div>
+      <p class="module-desc">
+        Tipo de roteiro obrigatório na Aba 1. Navegação automática para a próxima aba após salvar. Abas pendentes exibidas em cinza claro para guiar o usuário. Loading ao gerar tabelas simuladas por praça na Aba 4.
+      </p>
+    </div>
+
+    <div class="module-item">
+      <div class="module-header">
+        <span class="module-name">9. Migração para Novo Backend</span>
+        <div class="module-tags">
+          <span class="tag infra">infra</span>
+          <span class="tag commits">80 h</span>
+          <span class="tag entregue">Entregue</span>
+        </div>
+      </div>
+      <p class="module-desc">
+        Migração completa da camada de backend para a nova arquitetura. Trabalho de infraestrutura sem commits diretos visíveis no histórico de produto — refatoração interna, reestruturação de serviços e estabilização do ambiente.
+      </p>
+    </div>
+
+    <div class="module-item">
+      <div class="module-header">
+        <span class="module-name">10. Mapa do Produto (Docs)</span>
+        <div class="module-tags">
+          <span class="tag infra">infra</span>
+          <span class="tag commits">1 commit</span>
+          <span class="tag entregue">Entregue</span>
+        </div>
+      </div>
+      <p class="module-desc">
+        Adição do Mapa do Produto como rota e tela na aplicação.
+      </p>
+    </div>
+  </div>
+
+  <!-- PRs -->
+  <div class="section">
+    <div class="section-title">Pull Requests mergeados (13 no período)</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:60px">PR</th>
+          <th>Branch</th>
+          <th style="width:80px; text-align:right">Data</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="pr-id">#61</td><td class="pr-branch">feat/bos-storage-resultados-indoor</td><td class="pr-date" style="text-align:right">25/06</td></tr>
+        <tr><td class="pr-id">#60</td><td class="pr-branch">fix/indoor</td><td class="pr-date" style="text-align:right">23/06</td></tr>
+        <tr><td class="pr-id">#59</td><td class="pr-branch">feat/finalizar-indoor</td><td class="pr-date" style="text-align:right">16/06</td></tr>
+        <tr><td class="pr-id">#58</td><td class="pr-branch">fix/correcoes-menu-lateral-esquerdo</td><td class="pr-date" style="text-align:right">16/06</td></tr>
+        <tr><td class="pr-id">#57</td><td class="pr-branch">fix/correcoes-menu-lateral-esquerdo</td><td class="pr-date" style="text-align:right">16/06</td></tr>
+        <tr><td class="pr-id">#56</td><td class="pr-branch">fix/admin-inventario-exibidores</td><td class="pr-date" style="text-align:right">16/06</td></tr>
+        <tr><td class="pr-id">#55</td><td class="pr-branch">feat/ajuste-admin-exibidor</td><td class="pr-date" style="text-align:right">10/06</td></tr>
+        <tr><td class="pr-id">#54</td><td class="pr-branch">feat/status-meus-roteiros</td><td class="pr-date" style="text-align:right">09/06</td></tr>
+        <tr><td class="pr-id">#53</td><td class="pr-branch">feat/status-meus-roteiros</td><td class="pr-date" style="text-align:right">09/06</td></tr>
+        <tr><td class="pr-id">#52</td><td class="pr-branch">feat/ajustes-finais</td><td class="pr-date" style="text-align:right">09/06</td></tr>
+        <tr><td class="pr-id">#51</td><td class="pr-branch">feat/registro-ocorrencia</td><td class="pr-date" style="text-align:right">09/06</td></tr>
+        <tr><td class="pr-id">#50</td><td class="pr-branch">feat/registro-ocorrencia</td><td class="pr-date" style="text-align:right">09/06</td></tr>
+        <tr><td class="pr-id">#49</td><td class="pr-branch">feat/midia-indoor</td><td class="pr-date" style="text-align:right">09/06</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Footer -->
+  <footer class="report-footer">
+    <span>Colmeia — Be Mediatech OOH</span>
+    <span>Fonte: git log · colmeia---meusroteirosdefault · 07 Jun → 07 Jul 2026</span>
+  </footer>
+
+</div>
+</body>
+</html>
