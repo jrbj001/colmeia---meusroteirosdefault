@@ -112,18 +112,19 @@ export const AdminPracas: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white flex font-sans">
+    <div className="min-h-screen bg-[#fafafa] flex font-sans">
       <Sidebar menuReduzido={menuReduzido} setMenuReduzido={setMenuReduzido} />
+
       <div className={`fixed top-0 z-40 h-screen w-px bg-[#c1c1c1] ${menuReduzido ? 'left-20' : 'left-64'}`} />
-      <div className={`flex-1 transition-all duration-300 min-h-screen ${menuReduzido ? 'ml-20' : 'ml-64'} flex flex-col`}>
-        <Topbar menuReduzido={menuReduzido} breadcrumb={{ items: [
-          { label: 'Admin' },
-          { label: 'Praças canônicas' },
-        ]}} />
+
+      <div className={`flex-1 transition-all duration-300 min-h-screen w-full ${menuReduzido ? 'ml-20' : 'ml-64'} flex flex-col`}>
+        <Topbar menuReduzido={menuReduzido} />
+
         <div className={`fixed top-[72px] z-30 h-[1px] bg-[#c1c1c1] ${menuReduzido ? 'left-20 w-[calc(100%-5rem)]' : 'left-64 w-[calc(100%-16rem)]'}`} />
 
-        <div className="flex-1 pt-24 pb-32 px-8 overflow-auto">
-          <div className="max-w-6xl mx-auto space-y-8">
+        <div className="flex-1 pt-24 pb-32 overflow-auto">
+        <main className="w-full px-10 xl:px-14 2xl:px-20">
+          <div className="space-y-8">
 
             {/* Cabeçalho */}
             <div>
@@ -347,6 +348,7 @@ export const AdminPracas: React.FC = () => {
             )}
 
           </div>
+        </main>
         </div>
       </div>
     </div>
