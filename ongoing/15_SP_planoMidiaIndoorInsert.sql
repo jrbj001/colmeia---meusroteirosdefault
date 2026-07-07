@@ -29,7 +29,7 @@ BEGIN
     IF @praca_st IS NULL
         SET @praca_st = (SELECT TOP 1 JSON_VALUE([value], '$.praca_st') FROM OPENJSON(@recordsJson));
 
-    DECLARE @linhas TABLE (pk INT, ord INT, localidades NVARCHAR(MAX));
+    DECLARE @linhas TABLE (pk INT, ord INT, localidades NVARCHAR(MAX), faces NVARCHAR(MAX));
 
     BEGIN TRAN;
 
@@ -47,14 +47,14 @@ BEGIN
        AND [praca_st] = @praca_st;
 
     -- 1) linhas de ambiente. MERGE (ON 1=0 -> sempre INSERT) para o OUTPUT capturar
-    --    inserted.pk JUNTO com a ordem/localidades da origem (mapeamento ord<->pk set-based).
+    --    inserted.pk JUNTO com a ordem/localidades/faces da origem (mapeamento ord<->pk set-based).
     MERGE INTO [serv_product_be180].[planoMidiaIndoor_ft] AS tgt
     USING (
         SELECT
             j.[key] AS ord,
             x.[praca_st], x.[ambiente_st], x.[indoorEspecifico_st], x.[tamanhoFormato_st],
             x.[circulacao_st], x.[tipo_st], x.[passantesManual_vl], x.[insercoesPorSlot_vl],
-            x.[slots_vl], x.[localidades]
+            x.[slots_vl], x.[localidades], x.[faces]
         FROM OPENJSON(@recordsJson) j
         CROSS APPLY OPENJSON(j.[value]) WITH (
             praca_st            NVARCHAR(255) '$.praca_st',
@@ -66,7 +66,8 @@ BEGIN
             passantesManual_vl  FLOAT         '$.passantesManual_vl',
             insercoesPorSlot_vl INT           '$.insercoesPorSlot_vl',
             slots_vl            INT           '$.slots_vl',
-            localidades         NVARCHAR(MAX) '$.localidades' AS JSON
+            localidades         NVARCHAR(MAX) '$.localidades' AS JSON,
+            faces               NVARCHAR(MAX) '$.faces'       AS JSON
         ) x
     ) AS src
     ON (1 = 0)
@@ -78,14 +79,19 @@ BEGIN
                 NULLIF(src.[indoorEspecifico_st], N''), src.[tamanhoFormato_st], src.[circulacao_st],
                 ISNULL(NULLIF(src.[tipo_st], N''), N'Estático'), src.[passantesManual_vl],
                 src.[insercoesPorSlot_vl], src.[slots_vl])
-    OUTPUT inserted.[pk], src.ord, src.[localidades] INTO @linhas([pk], [ord], [localidades]);
+    OUTPUT inserted.[pk], src.ord, src.[localidades], src.[faces]
+      INTO @linhas([pk], [ord], [localidades], [faces]);
 
-    -- 2) localidades por semana (W1..12) por linha; semanas > @semanas viram 0
-    INSERT INTO [serv_product_be180].[planoMidiaIndoorSemana_ft] ([linha_pk], [semana_vl], [localidades_vl])
+    -- 2) localidades + faces por semana (W1..12) por linha; semanas > @semanas viram 0/1
+    INSERT INTO [serv_product_be180].[planoMidiaIndoorSemana_ft]
+           ([linha_pk], [semana_vl], [localidades_vl], [faces_vl])
     SELECT L.[pk], n.semana,
            CASE WHEN n.semana <= @semanas
                 THEN ISNULL(TRY_CONVERT(INT, JSON_VALUE(L.[localidades], CONCAT('$[', n.semana - 1, ']'))), 0)
-                ELSE 0 END
+                ELSE 0 END,
+           CASE WHEN n.semana <= @semanas
+                THEN ISNULL(TRY_CONVERT(INT, JSON_VALUE(L.[faces], CONCAT('$[', n.semana - 1, ']'))), 1)
+                ELSE 1 END
     FROM @linhas L
     CROSS JOIN (VALUES (1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12)) n(semana);
 
