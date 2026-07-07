@@ -134,6 +134,7 @@ export default function ConfigurarIndoor({
           insercoesPorSlot: l.insercoesPorSlot !== '' ? Number(l.insercoesPorSlot) : null,
           slots: l.slots !== '' ? Number(l.slots) : null,
           localidades: l.locs.map((v) => Number(v) || 0),
+          faces:       l.faces.map((v) => Number(v) || 1),
         })),
       };
 

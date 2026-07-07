@@ -58,6 +58,9 @@ module.exports = async (req, res) => {
       localidades:         Array.isArray(l.localidades)
         ? l.localidades.map((v) => Number(v) || 0)
         : Array(12).fill(0),
+      faces:               Array.isArray(l.faces)
+        ? l.faces.map((v) => Number(v) || 1)
+        : Array(12).fill(1),
     }));
 
     const result = await pool
