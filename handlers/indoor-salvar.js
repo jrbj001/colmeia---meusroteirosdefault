@@ -58,6 +58,9 @@ module.exports = async (req, res) => {
       localidades:         Array.isArray(l.localidades)
         ? l.localidades.map((v) => Number(v) || 0)
         : Array(12).fill(0),
+      faces:               Array.isArray(l.faces)
+        ? l.faces.map((v) => Number(v) || 1)
+        : Array(12).fill(1),
     }));
 
     const result = await pool
@@ -66,7 +69,6 @@ module.exports = async (req, res) => {
       .input('planoMidiaGrupo_pk', sql.Int,                planoMidiaGrupo_pk)
       .input('report_pk',          sql.Int,                planoMidiaGrupo_pk)
       .input('semanas',            sql.Int,                numSemanas)
-      .input('praca_st',           sql.NVarChar(255),      praca)
       .execute(`[${S}].[sp_planoMidiaIndoorInsert]`);
 
     const row = result.recordset?.[0];

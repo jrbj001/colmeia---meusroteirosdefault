@@ -35,6 +35,7 @@ export interface IndoorLinha {
   slots: string;
   totalInsOverride: string;
   locs: string[];
+  faces: string[];
 }
 
 export const emptyIndoorLinha = (): IndoorLinha => ({
@@ -47,7 +48,8 @@ export const emptyIndoorLinha = (): IndoorLinha => ({
   insercoesPorSlot: '',
   slots: '',
   totalInsOverride: '',
-  locs: Array.from({ length: 12 }, () => ''),
+  locs:  Array.from({ length: 12 }, () => ''),
+  faces: Array.from({ length: 12 }, () => '1'),
 });
 
 /* ─── VenueCombobox ─────────────────────────────────────────────── */
@@ -171,7 +173,8 @@ interface Props {
 }
 
 export default function AmbienteRowIndoor({ idx, dims, linha, semanas, praca, onChange, onRemove }: Props) {
-  const [padrao, setPadrao] = useState('');
+  const [padrao, setPadrao]           = useState('');
+  const [padraoFaces, setPadraoFaces] = useState('1');
 
   const amb = dims.ambientes.find((a) => a.nome === linha.ambiente);
   const hasEspecificos = !!amb?.hasEspecificos;
@@ -214,6 +217,16 @@ export default function AmbienteRowIndoor({ idx, dims, linha, semanas, praca, on
     const arr = [...linha.locs];
     for (let i = 0; i < semanas; i++) arr[i] = padrao;
     onChange({ ...linha, locs: arr });
+  };
+  const setFace = (w: number, v: string) => {
+    const arr = [...linha.faces];
+    arr[w] = v;
+    onChange({ ...linha, faces: arr });
+  };
+  const aplicarPadraoFaces = () => {
+    const arr = [...linha.faces];
+    for (let i = 0; i < semanas; i++) arr[i] = padraoFaces;
+    onChange({ ...linha, faces: arr });
   };
 
   const handleVenueChange = (nomeVenue: string) => {
@@ -399,7 +412,7 @@ export default function AmbienteRowIndoor({ idx, dims, linha, semanas, praca, on
           {/* Localidades por semana */}
           <div className="mt-3 pt-3 border-t border-gray-100">
             <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
-              <span className={lbl + ' mb-0'}>Localidades/semana (faces) · W1–W{semanas}</span>
+              <span className={lbl + ' mb-0'}>Localidades/semana · W1–W{semanas}</span>
               <div className="flex items-center gap-1.5">
                 <input
                   type="number"
@@ -425,6 +438,42 @@ export default function AmbienteRowIndoor({ idx, dims, linha, semanas, praca, on
                     type="number"
                     value={linha.locs[w] ?? ''}
                     onChange={(e) => setLoc(w, e.target.value)}
+                    className="w-full rounded border border-gray-200 px-0.5 py-1 text-xs text-center tabular-nums focus:border-[#ff4600] focus:outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Faces por semana */}
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
+              <span className={lbl + ' mb-0'}>Faces/semana · W1–W{semanas}</span>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  value={padraoFaces}
+                  onChange={(e) => setPadraoFaces(e.target.value)}
+                  placeholder="1"
+                  className="w-20 rounded border border-gray-200 px-2 py-1 text-xs text-center tabular-nums focus:border-[#ff4600] focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={aplicarPadraoFaces}
+                  className="rounded border border-gray-200 text-gray-500 px-2 py-1 text-xs hover:border-[#ff4600] hover:text-[#ff4600]"
+                >
+                  Aplicar
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {Array.from({ length: semanas }, (_, w) => (
+                <div key={w} className="w-[46px]">
+                  <div className="text-[9px] text-gray-400 text-center mb-0.5">W{w + 1}</div>
+                  <input
+                    type="number"
+                    value={linha.faces[w] ?? '1'}
+                    onChange={(e) => setFace(w, e.target.value)}
                     className="w-full rounded border border-gray-200 px-0.5 py-1 text-xs text-center tabular-nums focus:border-[#ff4600] focus:outline-none"
                   />
                 </div>
