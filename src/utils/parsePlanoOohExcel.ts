@@ -325,7 +325,17 @@ export async function parsePlanoOohExcel(file: File): Promise<ParsePlanoOohResul
 
   if (rows.length === 0) throw new Error('Nenhuma linha de dados encontrada na aba OOH.');
 
-  const pracasUnicas = [...new Set(rows.map((r) => r.praca_st as string).filter(Boolean))].sort();
+  const normPraca = (s: string) =>
+    s.toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const seenPracas = new Set<string>();
+  const pracasUnicas: string[] = [];
+  for (const r of rows) {
+    const p = r.praca_st as string | undefined;
+    if (!p?.trim()) continue;
+    const key = normPraca(p.trim());
+    if (!seenPracas.has(key)) { seenPracas.add(key); pracasUnicas.push(p.trim()); }
+  }
+  pracasUnicas.sort();
   const dates = rows.map((r) => r.inicio_dt as string).filter(Boolean).sort();
   const campanhas = [...new Set(rows.map((r) => r.campanha_st as string).filter(Boolean))];
 

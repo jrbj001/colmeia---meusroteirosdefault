@@ -5,9 +5,11 @@ const { sql, getPool } = require('./db');
  *
  * Retorna lista canônica de praças para uso em dropdowns.
  * Fonte: UNION de:
- *  1. [cidadeIbge_dm]        — todos os 5570 municípios brasileiros (IBGE)
- *  2. [bancoAtivosJoin_ft]   — cidades do banco de ativos legado (fallback/complemento)
- *  3. [praca_canonica_dm]    — praças customizadas cadastradas pelo admin (se a tabela existir)
+ *  1. [bancoAtivosJoin_ft]   — cidades do banco de ativos legado OOH (nomes com acentos corretos)
+ *  2. [praca_canonica_dm]    — praças customizadas cadastradas pelo admin (se a tabela existir)
+ *
+ * Nota: [cidadeIbge_dm] foi removido temporariamente pois a tabela foi importada sem acentos.
+ * Reativar após re-importação com encoding correto (nvarchar + UTF-8/Latin1).
  *
  * Query param: search (opcional) — filtra por nome ou UF
  */
@@ -34,31 +36,38 @@ module.exports = async (req, res) => {
       WHERE s.name = 'serv_product_be180' AND t.name = 'praca_canonica_dm'
     `);
 
+    // Praças customizadas têm maior prioridade (0), depois legado OOH (1, com acentos corretos).
+    // IBGE foi removido por ter dados sem acento — re-importar com nvarchar/encoding correto
+    // antes de reativar.
+    // ROW_NUMBER com COLLATE CI_AI elimina duplicatas por acento/case dentro do legado.
     const customUnion = hasCustom.recordset.length
-      ? `UNION
-         SELECT UPPER(LTRIM(RTRIM(nome_st))) AS nome_cidade, UPPER(LTRIM(RTRIM(uf_st))) AS nome_estado
+      ? `UNION ALL
+         SELECT UPPER(LTRIM(RTRIM(nome_st))) AS nome_cidade, UPPER(LTRIM(RTRIM(uf_st))) AS nome_estado, 0 AS prioridade
          FROM [serv_product_be180].[praca_canonica_dm]
          WHERE delete_bl = 0`
       : '';
 
     const result = await req_.query(`
-      SELECT DISTINCT nome_cidade, nome_estado
+      SELECT nome_cidade, nome_estado
       FROM (
-        -- 1. IBGE (fonte principal — todos os municípios brasileiros)
-        SELECT UPPER(LTRIM(RTRIM(cidade_st))) AS nome_cidade, UPPER(LTRIM(RTRIM(estado_st))) AS nome_estado
-        FROM [serv_product_be180].[cidadeIbge_dm]
-        WHERE cidade_st IS NOT NULL
+        SELECT
+          nome_cidade,
+          nome_estado,
+          ROW_NUMBER() OVER (
+            PARTITION BY nome_cidade COLLATE Latin1_General_CI_AI
+            ORDER BY prioridade ASC
+          ) AS rn
+        FROM (
+          -- 1. Banco de ativos legado OOH (nomes corretos com acentos: "SÃO PAULO", "BARRA DA TIJUCA/RECREIO" etc.)
+          SELECT UPPER(LTRIM(RTRIM(cidade_st))) AS nome_cidade, UPPER(LTRIM(RTRIM(estado_st))) AS nome_estado, 1 AS prioridade
+          FROM [serv_product_be180].[bancoAtivosJoin_ft]
+          WHERE valid_bl = 1 AND cidade_st IS NOT NULL
 
-        UNION
-
-        -- 2. Banco de ativos legado (complementa praças com nomes customizados como "BARRA DA TIJUCA/RECREIO")
-        SELECT UPPER(LTRIM(RTRIM(cidade_st))) AS nome_cidade, UPPER(LTRIM(RTRIM(estado_st))) AS nome_estado
-        FROM [serv_product_be180].[bancoAtivosJoin_ft]
-        WHERE valid_bl = 1 AND cidade_st IS NOT NULL
-
-        ${customUnion}
-      ) AS unificado
-      WHERE nome_cidade IS NOT NULL AND nome_cidade <> ''
+          ${customUnion}
+        ) AS todas
+        WHERE nome_cidade IS NOT NULL AND nome_cidade <> ''
+      ) AS ranked
+      WHERE rn = 1
       ${searchFilter}
       ORDER BY nome_cidade
     `);

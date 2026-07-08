@@ -485,8 +485,17 @@ export const CriarRoteiro: React.FC = () => {
       try {
         setLoadingCidades(true);
         const response = await axios.get('/cidades-praca');
-        setCidades(response.data);
-        setCidadesFiltradas(response.data);
+        const normStr = (s: string) =>
+          (s || '').toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+        const seen = new Set<string>();
+        const cidadesDedup = (response.data as Cidade[]).filter((c) => {
+          const key = `${normStr(c.nome_cidade)}|${normStr(c.nome_estado)}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setCidades(cidadesDedup);
+        setCidadesFiltradas(cidadesDedup);
       } catch (error) {
         console.error('Erro ao carregar cidades:', error);
       } finally {
@@ -507,16 +516,9 @@ export const CriarRoteiro: React.FC = () => {
   }, []);
 
   const getCidadeIdKey = React.useCallback((cidade: Cidade) => {
-    const rawId = cidade?.id_cidade;
-    if (rawId !== undefined && rawId !== null && String(rawId).trim() !== '') {
-      return String(rawId).trim();
-    }
-    return `${cidade.nome_cidade}|${cidade.nome_estado}`
-      .toUpperCase()
-      .trim()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/\s+/g, ' ');
+    const norm = (s: string) =>
+      (s || '').toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+    return `${norm(cidade.nome_cidade)}|${norm(cidade.nome_estado)}`;
   }, []);
 
   // Filtrar cidades baseado na busca
@@ -661,9 +663,16 @@ export const CriarRoteiro: React.FC = () => {
     if (!pendingPracaNomes.length || !cidades.length) return;
     const normalizeName = (s: string) =>
       s.toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const seen = new Set<string>();
     const detectadas = pendingPracaNomes
       .map((nome) => cidades.find((c) => normalizeName(c.nome_cidade) === normalizeName(nome)))
-      .filter((c): c is typeof cidades[0] => c !== undefined);
+      .filter((c): c is typeof cidades[0] => c !== undefined)
+      .filter((c) => {
+        const key = `${normalizeName(c.nome_cidade)}|${normalizeName(c.nome_estado || '')}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     if (detectadas.length > 0) {
       setCidadesSelecionadas(detectadas);
       setCidadesSalvas(detectadas);
@@ -681,9 +690,16 @@ export const CriarRoteiro: React.FC = () => {
     }
     const normalizeName = (s: string) =>
       s.toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const seen = new Set<string>();
     const detectadas = pracaNomes
       .map((nome) => cidades.find((c) => normalizeName(c.nome_cidade) === normalizeName(nome)))
-      .filter((c): c is typeof cidades[0] => c !== undefined);
+      .filter((c): c is typeof cidades[0] => c !== undefined)
+      .filter((c) => {
+        const key = `${normalizeName(c.nome_cidade)}|${normalizeName(c.nome_estado || '')}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     if (detectadas.length > 0) {
       setCidadesSelecionadas(detectadas);
       setCidadesSalvas(detectadas);
