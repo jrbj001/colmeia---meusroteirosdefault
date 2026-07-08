@@ -54,12 +54,17 @@ export const ImportarPlanoMidia: React.FC<ImportarPlanoMidiaProps> = ({
   const willSkipCount = useMemo(() => parsedRows.length - willInsertCount, [parsedRows, willInsertCount]);
 
   const pracasUnicas = useMemo(() => {
-    const set = new Set<string>();
+    const normPraca = (s: string) =>
+      s.toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const seen = new Set<string>();
+    const lista: string[] = [];
     parsedRows.forEach((r) => {
       const p = r.praca_st as string | undefined;
-      if (p?.trim()) set.add(p.trim());
+      if (!p?.trim()) return;
+      const key = normPraca(p.trim());
+      if (!seen.has(key)) { seen.add(key); lista.push(p.trim()); }
     });
-    return [...set].sort();
+    return lista.sort();
   }, [parsedRows]);
 
   const previewRows = useMemo(() => parsedRows.slice(0, 5), [parsedRows]);
