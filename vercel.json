@@ -134,6 +134,8 @@
     { "source": "/api/blob-relatorio-download",          "destination": "/api/integracoes?action=blob-relatorio" },
     { "source": "/api/report-indicadores-indoor",         "destination": "/api/reports?action=indicadores-indoor" },
     { "source": "/api/report-indicadores-consolidado",    "destination": "/api/reports?action=indicadores-consolidado" },
+    { "source": "/api/report-indicadores-indoor-target",      "destination": "/api/reports?action=indicadores-indoor-target" },
+    { "source": "/api/report-indicadores-consolidado-target", "destination": "/api/reports?action=indicadores-consolidado-target" },
 
     { "source": "/api/sharepoint-download", "destination": "/api/integracoes?action=sharepoint" },
     { "source": "/api/consulta-endereco", "destination": "/api/integracoes?action=consulta-endereco" },

@@ -12,6 +12,8 @@ const handlers = {
   'grupo-sub-distinct': require('../handlers/grupo-sub-distinct'),
   'indicadores-indoor': require('../handlers/indoor-resultado'),
   'indicadores-consolidado': require('../handlers/consolidado-resultado'),
+  'indicadores-indoor-target': require('../handlers/indoor-target-resultado'),
+  'indicadores-consolidado-target': require('../handlers/consolidado-target-resultado'),
 };
 
 module.exports = async (req, res) => {
