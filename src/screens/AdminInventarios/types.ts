@@ -103,7 +103,9 @@ export interface ComparativoTipo {
   tipo_novo: string;
   qtd_novo: number;
   mapeados_novo: number;
-  sugestao_legado: { tipo: string; qtd: number } | null;
+  // Sugestão vinda do cadastro (catálogo de tipos usado por todos os exibidores no banco de
+  // ativos atual) — não é restrita ao histórico deste exibidor.
+  sugestao_cadastro: { tipo: string; qtd: number } | null;
 }
 
 export interface PracaReconciliacao {
