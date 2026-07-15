@@ -396,7 +396,7 @@ async function analisarLote(req, res, pool) {
     });
 
     // 8c. Reconciliação de praças: para cada praça do novo que não bate exatamente,
-    // encontrar a cidade do legado mais parecida (substring match, sem acento)
+    // encontrar a cidade canônica mais parecida (substring match, sem acento).
     const pracasNovasRes = await pool.request()
       .input('lote_pk', sql.Int, lotePk)
       .query(`
@@ -408,17 +408,7 @@ async function analisarLote(req, res, pool) {
         WHERE lote_fk = @lote_pk AND delete_bl = 0
         GROUP BY ISNULL(NULLIF(LTRIM(RTRIM(praca_st)),''),'(vazio)'), ISNULL(NULLIF(LTRIM(RTRIM(uf_st)),''),'')
       `);
-    // Compara contra o banco GLOBAL (todas as cidades canônicas da Colmeia),
-    // não apenas o legado deste exibidor — assim praças corretas mas novas
-    // para o exibidor não aparecem como "NOVA" após correção.
-    const cidadesLegadoRes = await pool.request()
-      .query(`
-        SELECT cidade_st AS cidade, estado_st AS uf, COUNT(1) AS qtd
-        FROM [serv_product_be180].[bancoAtivosJoin_ft]
-        WHERE valid_bl = 1
-          AND cidade_st IS NOT NULL AND LTRIM(RTRIM(cidade_st)) <> ''
-        GROUP BY cidade_st, estado_st
-      `);
+
     const normStr = (s) =>
       String(s || '')
         .normalize('NFD')
@@ -429,25 +419,68 @@ async function analisarLote(req, res, pool) {
         .replace(/\s+/g, ' ')
         .trim();
 
-    const cidadesLegado = cidadesLegadoRes.recordset.map((c) => ({ ...c, _norm: normStr(c.cidade) }));
+    // Fonte canônica para validar praças: agora inclui a base OFICIAL do IBGE (5.570
+    // municípios do Brasil), não apenas o legado (bancoAtivosJoin_ft). O legado só contém
+    // cidades onde ALGUM exibidor já teve ponto cadastrado antes — cidades legítimas que
+    // nunca apareceram em um envio (ex.: "Catanduva/SP") eram marcadas como "fora do padrão"
+    // só por essa ausência. Prioridade de exibição quando há duplicidade entre fontes:
+    // praças customizadas (admin) > legado (nomes com acento correto) > IBGE (sem acento).
+    const [cidadesLegadoRes, cidadesIbgeRes, hasCustomRes] = await Promise.all([
+      pool.request().query(`
+        SELECT cidade_st AS cidade, estado_st AS uf, COUNT(1) AS qtd
+        FROM [serv_product_be180].[bancoAtivosJoin_ft]
+        WHERE valid_bl = 1
+          AND cidade_st IS NOT NULL AND LTRIM(RTRIM(cidade_st)) <> ''
+        GROUP BY cidade_st, estado_st
+      `),
+      pool.request().query(`
+        SELECT cidade_st AS cidade, estado_st AS uf
+        FROM [serv_product_be180].[cidadeIbge_dm]
+        WHERE cidade_st IS NOT NULL AND LTRIM(RTRIM(cidade_st)) <> ''
+      `),
+      pool.request().query(`
+        SELECT 1 AS ok FROM sys.tables t
+        JOIN sys.schemas s ON s.schema_id = t.schema_id
+        WHERE s.name = 'serv_product_be180' AND t.name = 'praca_canonica_dm'
+      `),
+    ]);
+    const cidadesCustomRes = hasCustomRes.recordset.length
+      ? await pool.request().query(`
+          SELECT nome_st AS cidade, uf_st AS uf
+          FROM [serv_product_be180].[praca_canonica_dm]
+          WHERE delete_bl = 0
+        `)
+      : { recordset: [] };
+
+    const cidadesCanonicas = [
+      ...cidadesCustomRes.recordset.map((c) => ({ cidade: c.cidade, uf: c.uf, qtd: 0, fonte: 'custom' })),
+      ...cidadesLegadoRes.recordset.map((c) => ({ ...c, fonte: 'legado' })),
+      ...cidadesIbgeRes.recordset.map((c) => ({ cidade: c.cidade, uf: c.uf, qtd: 0, fonte: 'ibge' })),
+    ].map((c) => ({ ...c, _norm: normStr(c.cidade) }));
 
     pracasReconciliacao = pracasNovasRes.recordset
       .map((p) => {
         const pn = normStr(p.praca);
-        const exato = cidadesLegado.find((c) => c._norm === pn);
+        const exato = cidadesCanonicas.find((c) => c._norm === pn);
         if (exato) {
-          return { praca_novo: p.praca, uf_novo: p.uf, qtd_novo: p.qtd, status: 'match', cidade_legado: exato.cidade, qtd_legado: exato.qtd };
+          return {
+            praca_novo: p.praca, uf_novo: p.uf, qtd_novo: p.qtd, status: 'match',
+            cidade_legado: exato.cidade, qtd_legado: exato.qtd, fonte_sugestao: exato.fonte,
+          };
         }
         // tenta parecida (uma contém a outra)
-        const parecida = cidadesLegado.find((c) => {
+        const parecida = cidadesCanonicas.find((c) => {
           if (!c._norm || !pn) return false;
           if (c.uf && p.uf && c.uf !== p.uf) return false;
           return c._norm.includes(pn) || pn.includes(c._norm);
         });
         if (parecida) {
-          return { praca_novo: p.praca, uf_novo: p.uf, qtd_novo: p.qtd, status: 'parecida', cidade_legado: parecida.cidade, qtd_legado: parecida.qtd };
+          return {
+            praca_novo: p.praca, uf_novo: p.uf, qtd_novo: p.qtd, status: 'parecida',
+            cidade_legado: parecida.cidade, qtd_legado: parecida.qtd, fonte_sugestao: parecida.fonte,
+          };
         }
-        return { praca_novo: p.praca, uf_novo: p.uf, qtd_novo: p.qtd, status: 'nova', cidade_legado: null, qtd_legado: null };
+        return { praca_novo: p.praca, uf_novo: p.uf, qtd_novo: p.qtd, status: 'nova', cidade_legado: null, qtd_legado: null, fonte_sugestao: null };
       })
       .sort((a, b) => {
         const ord = { parecida: 0, nova: 1, match: 2 };
@@ -595,8 +628,8 @@ async function analisarLote(req, res, pool) {
   if (pracasParecidas.length > 0) {
     diagnosticos.push({
       tipo: 'atencao',
-      titulo: `${pracasParecidas.length} praças com nomenclatura diferente do legado`,
-      causa: 'Algumas praças do envio parecem se referir a cidades já existentes no legado, mas com nome ligeiramente diferente (ex: "Brasília Relógio" vs "Brasília", "Rio de Janeiro (Banca)" vs "Rio de Janeiro"). Isso impede a contagem correta de cobertura geográfica.',
+      titulo: `${pracasParecidas.length} praças com nomenclatura diferente do padrão`,
+      causa: 'Algumas praças do envio parecem se referir a cidades já existentes no cadastro (legado ou IBGE), mas com nome ligeiramente diferente (ex: "Brasília Relógio" vs "Brasília", "Rio de Janeiro (Banca)" vs "Rio de Janeiro"). Isso impede a contagem correta de cobertura geográfica.',
       acao: 'Decidir com o exibidor: ou padronizar para o nome canônico (cidade) ou registrar como subdivisões intencionais (subpraça). Ver tabela "Reconciliação de praças" abaixo.',
       responsavel: 'BE180',
       bloqueia: false,

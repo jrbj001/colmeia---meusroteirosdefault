@@ -115,6 +115,9 @@ export interface PracaReconciliacao {
   status: 'match' | 'parecida' | 'nova';
   cidade_legado: string | null;
   qtd_legado: number | null;
+  // Origem da sugestão: praça customizada (admin), legado (banco de ativos) ou IBGE
+  // (base oficial de municípios do Brasil, usada quando a cidade nunca apareceu no legado).
+  fonte_sugestao?: 'custom' | 'legado' | 'ibge' | null;
 }
 
 export interface ItemInventario {
