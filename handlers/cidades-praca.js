@@ -26,7 +26,7 @@ module.exports = async (req, res) => {
     let searchFilter = '';
     if (search) {
       req_.input('search', sql.NVarChar, `%${search}%`);
-      searchFilter = 'AND (nome_cidade LIKE @search OR nome_estado LIKE @search)';
+      searchFilter = "AND (nome_cidade COLLATE Latin1_General_CI_AI LIKE @search OR nome_estado COLLATE Latin1_General_CI_AI LIKE @search)";
     }
 
     // Verifica se tabela de praças customizadas existe

@@ -10,11 +10,11 @@ module.exports = async (req, res) => {
     let where = `WHERE valid_bl = 1 AND district IS NOT NULL AND LTRIM(RTRIM(district)) <> ''`;
     if (praca) {
       request.input('praca', sql.NVarChar, `%${praca}%`);
-      where += ' AND cidade_st LIKE @praca';
+      where += ' AND cidade_st COLLATE Latin1_General_CI_AI LIKE @praca';
     }
     if (search) {
       request.input('search', sql.NVarChar, `%${search}%`);
-      where += ' AND district LIKE @search';
+      where += ' AND district COLLATE Latin1_General_CI_AI LIKE @search';
     }
 
     const result = await request.query(`
