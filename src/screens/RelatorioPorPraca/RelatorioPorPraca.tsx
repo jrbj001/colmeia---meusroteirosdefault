@@ -28,6 +28,13 @@ interface Cidade {
   nome_estado: string;
 }
 
+function normalizeText(value: string): string {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
 export const RelatorioPorPraca: React.FC = () => {
   const [menuReduzido, setMenuReduzido] = useState(false);
   const [cidadeSelecionada, setCidadeSelecionada] = useState<string>("");
@@ -66,12 +73,35 @@ export const RelatorioPorPraca: React.FC = () => {
     }
   }, [showDropdown]);
 
+  const ordenarPorRelevancia = (lista: Cidade[], termoNorm: string) => {
+    if (!termoNorm) return lista;
+    return [...lista].sort((a, b) => {
+      const aStarts = normalizeText(a.nome_cidade).startsWith(termoNorm) ? 0 : 1;
+      const bStarts = normalizeText(b.nome_cidade).startsWith(termoNorm) ? 0 : 1;
+      if (aStarts !== bStarts) return aStarts - bStarts;
+      return a.nome_cidade.localeCompare(b.nome_cidade, 'pt-BR');
+    });
+  };
+
+  const aplicarFiltroCidades = (lista: Cidade[], termo: string) => {
+    if (!termo.trim()) return lista;
+    const termoNorm = normalizeText(termo);
+    const filtradas = lista.filter(
+      (cidade) =>
+        normalizeText(cidade.nome_cidade).includes(termoNorm) ||
+        normalizeText(cidade.nome_estado).includes(termoNorm)
+    );
+    return ordenarPorRelevancia(filtradas, termoNorm);
+  };
+
   const carregarCidades = async () => {
     try {
       setLoadingCidades(true);
       const response = await api.get('/cidades-praca');
       setCidades(response.data);
-      setCidadesFiltradas(response.data);
+      // Reaplica o termo já digitado (se houver) em vez de sobrescrever com a lista completa —
+      // evita que a resposta assíncrona "apague" o filtro do que o usuário já tinha buscado.
+      setCidadesFiltradas(aplicarFiltroCidades(response.data, cidadeSelecionada));
     } catch (err: any) {
       console.error('Erro ao carregar cidades:', err);
     } finally {
@@ -80,18 +110,7 @@ export const RelatorioPorPraca: React.FC = () => {
   };
 
   const filtrarCidades = (termo: string) => {
-    if (!termo.trim()) {
-      setCidadesFiltradas(cidades);
-      return;
-    }
-
-    const termoLower = termo.toLowerCase();
-    const filtradas = cidades.filter(
-      (cidade) =>
-        cidade.nome_cidade.toLowerCase().includes(termoLower) ||
-        cidade.nome_estado.toLowerCase().includes(termoLower)
-    );
-    setCidadesFiltradas(filtradas);
+    setCidadesFiltradas(aplicarFiltroCidades(cidades, termo));
   };
 
   const handleSelecionarCidade = (cidade: Cidade) => {
