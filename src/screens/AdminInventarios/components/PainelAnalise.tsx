@@ -326,7 +326,7 @@ export const PainelAnalise: React.FC<Props> = ({
           <SectionTitle
             eyebrow="Nomenclatura"
             titulo="Praças fora do padrão"
-            descricao="Praças do envio que diferem do nome canônico no banco. Selecione a praça padrão correspondente (cadastrada na Colmeia) para padronizar os itens deste lote — só é possível salvar escolhendo uma praça da lista."
+            descricao="Praças do envio que diferem do nome canônico no banco (legado) ou na base oficial de municípios do IBGE. Selecione a praça padrão correspondente (cadastrada na Colmeia) para padronizar os itens deste lote — só é possível salvar escolhendo uma praça da lista."
           />
           <SubCard>
             <table className="w-full text-[13px]">
@@ -345,6 +345,11 @@ export const PainelAnalise: React.FC<Props> = ({
                   const cfg =
                     p.status === 'parecida' ? { label: 'Parecida', color: '#b45309', bg: '#fef3c7' }
                     :                          { label: 'Nova',      color: '#1d4ed8', bg: '#dbeafe' };
+                  const fonteLabel =
+                    p.fonte_sugestao === 'ibge'   ? 'via IBGE'
+                    : p.fonte_sugestao === 'legado' ? 'via legado'
+                    : p.fonte_sugestao === 'custom' ? 'via cadastro manual'
+                    : null;
                   const salvando = pracaSalvando[p.praca_novo];
                   const salva    = pracaSalvas[p.praca_novo];
                   return (
@@ -380,6 +385,9 @@ export const PainelAnalise: React.FC<Props> = ({
                                 </option>
                               ))}
                             </datalist>
+                            {fonteLabel && (
+                              <p className="text-[10px] text-gray-400 mt-1 px-0.5">Sugestão {fonteLabel}</p>
+                            )}
                           </>
                         )}
                       </td>
