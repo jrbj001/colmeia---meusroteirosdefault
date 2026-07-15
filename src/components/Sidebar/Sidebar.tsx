@@ -29,7 +29,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
   const isBancoAtivo =
     location.pathname === '/banco-de-ativos' ||
     location.pathname.startsWith('/banco-de-ativos/relatorio-por-praca') ||
-    location.pathname.startsWith('/banco-de-ativos/relatorio-por-exibidor');
+    location.pathname.startsWith('/banco-de-ativos/relatorio-por-exibidor') ||
+    location.pathname.startsWith('/banco-de-ativos/consultar');
   const isExibidoresAtivo =
     location.pathname.startsWith('/banco-de-ativos/cadastrar/exibidor') ||
     location.pathname.startsWith('/banco-de-ativos/exibidores') ||
@@ -292,6 +293,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ menuReduzido, setMenuReduzido 
                           : "text-[#3a3a3a] hover:bg-[#ededed]"
                       }`}>
                         Por exibidor
+                      </div>
+                    </Link>
+                  </div>
+                </div>
+
+                {/* CONSULTAR & EXPORTAR */}
+                <div>
+                  <div className="text-xs font-bold text-[#757575] uppercase tracking-wider mb-2 px-2">
+                    CONSULTAR & EXPORTAR
+                  </div>
+                  <div className="space-y-0.5">
+                    <Link to="/banco-de-ativos/consultar/pontos-midia" className="block">
+                      <div className={`px-2 py-1.5 rounded transition-colors duration-200 text-sm ${
+                        location.pathname === "/banco-de-ativos/consultar/pontos-midia"
+                          ? "text-[#ff4600] font-medium"
+                          : "text-[#3a3a3a] hover:bg-[#ededed]"
+                      }`}>
+                        Pontos de mídia
                       </div>
                     </Link>
                   </div>

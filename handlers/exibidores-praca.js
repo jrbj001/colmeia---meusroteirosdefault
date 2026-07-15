@@ -14,11 +14,11 @@ module.exports = async (req, res) => {
     let where = 'WHERE valid_bl = 1 AND exibidor_st IS NOT NULL';
     if (search) {
       request.input('search', sql.NVarChar, `%${search}%`);
-      where += ' AND exibidor_st LIKE @search';
+      where += ' AND exibidor_st COLLATE Latin1_General_CI_AI LIKE @search';
     }
     if (praca) {
       request.input('praca', sql.NVarChar, `%${praca}%`);
-      where += ' AND cidade_st LIKE @praca';
+      where += ' AND cidade_st COLLATE Latin1_General_CI_AI LIKE @praca';
     }
 
     const result = await request.query(`

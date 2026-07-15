@@ -35,8 +35,8 @@ async function listarUnificado(req, res, pool) {
   const search = String(req.query.search || '').trim();
 
   const sandboxFilter = incluirSandbox ? '' : 'AND e.sandbox_bl = 0';
-  const searchFilter = search ? `AND (e.nome_st LIKE @search OR e.nome_fantasia_st LIKE @search OR e.codigo_st LIKE @search)` : '';
-  const searchFilterLegado = search ? `AND b.exibidor_st LIKE @search` : '';
+  const searchFilter = search ? `AND (e.nome_st COLLATE Latin1_General_CI_AI LIKE @search OR e.nome_fantasia_st COLLATE Latin1_General_CI_AI LIKE @search OR e.codigo_st COLLATE Latin1_General_CI_AI LIKE @search)` : '';
+  const searchFilterLegado = search ? `AND b.exibidor_st COLLATE Latin1_General_CI_AI LIKE @search` : '';
 
   const reqDb = pool.request();
   if (search) reqDb.input('search', sql.NVarChar, `%${search}%`);

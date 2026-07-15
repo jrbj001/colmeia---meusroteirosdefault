@@ -28,15 +28,15 @@ module.exports = async (req, res) => {
 
     if (cidade) {
       request.input('cidade', sql.NVarChar, `%${cidade.trim()}%`);
-      filters.push('cidade_st LIKE @cidade');
+      filters.push('cidade_st COLLATE Latin1_General_CI_AI LIKE @cidade');
     }
     if (exibidor) {
       request.input('exibidor', sql.NVarChar, `%${exibidor.trim()}%`);
-      filters.push('exibidor_st LIKE @exibidor');
+      filters.push('exibidor_st COLLATE Latin1_General_CI_AI LIKE @exibidor');
     }
     if (bairro) {
       request.input('bairro', sql.NVarChar, `%${bairro.trim()}%`);
-      filters.push('district LIKE @bairro');
+      filters.push('district COLLATE Latin1_General_CI_AI LIKE @bairro');
     }
 
     const where = filters.map(f => `(${f})`).join(' AND ');

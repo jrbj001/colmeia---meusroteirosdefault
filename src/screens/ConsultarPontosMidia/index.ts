@@ -1,0 +1,1 @@
+export { ConsultarPontosMidia } from './ConsultarPontosMidia';

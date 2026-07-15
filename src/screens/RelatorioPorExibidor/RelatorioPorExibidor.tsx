@@ -29,6 +29,13 @@ interface Exibidor {
   codigo_exibidor: string;
 }
 
+function normalizeText(value: string): string {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
 export const RelatorioPorExibidor: React.FC = () => {
   const [menuReduzido, setMenuReduzido] = useState(false);
   const [exibidorSelecionado, setExibidorSelecionado] = useState<string>("");
@@ -64,12 +71,35 @@ export const RelatorioPorExibidor: React.FC = () => {
     }
   }, [showDropdown]);
 
+  const ordenarPorRelevancia = (lista: Exibidor[], termoNorm: string) => {
+    if (!termoNorm) return lista;
+    return [...lista].sort((a, b) => {
+      const aStarts = normalizeText(a.nome_exibidor).startsWith(termoNorm) ? 0 : 1;
+      const bStarts = normalizeText(b.nome_exibidor).startsWith(termoNorm) ? 0 : 1;
+      if (aStarts !== bStarts) return aStarts - bStarts;
+      return a.nome_exibidor.localeCompare(b.nome_exibidor, 'pt-BR');
+    });
+  };
+
+  const aplicarFiltroExibidores = (lista: Exibidor[], termo: string) => {
+    if (!termo.trim()) return lista;
+    const termoNorm = normalizeText(termo);
+    const filtrados = lista.filter(
+      (exibidor) =>
+        normalizeText(exibidor.nome_exibidor).includes(termoNorm) ||
+        normalizeText(exibidor.codigo_exibidor).includes(termoNorm)
+    );
+    return ordenarPorRelevancia(filtrados, termoNorm);
+  };
+
   const carregarExibidores = async () => {
     try {
       setLoadingExibidores(true);
       const response = await api.get('/exibidores-praca');
       setExibidores(response.data);
-      setExibidoresFiltrados(response.data);
+      // Reaplica o termo já digitado (se houver) em vez de sobrescrever com a lista completa —
+      // evita que a resposta assíncrona "apague" o filtro do que o usuário já tinha buscado.
+      setExibidoresFiltrados(aplicarFiltroExibidores(response.data, exibidorSelecionado));
     } catch (err: any) {
       console.error('Erro ao carregar exibidores:', err);
     } finally {
@@ -78,18 +108,7 @@ export const RelatorioPorExibidor: React.FC = () => {
   };
 
   const filtrarExibidores = (termo: string) => {
-    if (!termo.trim()) {
-      setExibidoresFiltrados(exibidores);
-      return;
-    }
-
-    const termoLower = termo.toLowerCase();
-    const filtrados = exibidores.filter(
-      (exibidor) =>
-        exibidor.nome_exibidor.toLowerCase().includes(termoLower) ||
-        exibidor.codigo_exibidor.toLowerCase().includes(termoLower)
-    );
-    setExibidoresFiltrados(filtrados);
+    setExibidoresFiltrados(aplicarFiltroExibidores(exibidores, termo));
   };
 
   const handleSelecionarExibidor = (exibidor: Exibidor) => {

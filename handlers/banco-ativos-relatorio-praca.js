@@ -27,7 +27,7 @@ module.exports = async (req, res) => {
             SELECT TOP 1 social_class_geo
             FROM [serv_product_be180].[bancoAtivosJoin_ft] sub
             WHERE sub.valid_bl = 1
-              AND sub.cidade_st LIKE @cidade
+              AND sub.cidade_st COLLATE Latin1_General_CI_AI LIKE @cidade
               AND sub.exibidor_st = base.exibidor_st
               AND sub.social_class_geo IS NOT NULL
             GROUP BY social_class_geo
@@ -35,7 +35,7 @@ module.exports = async (req, res) => {
           )                                                                AS classe_social_predominante
         FROM [serv_product_be180].[bancoAtivosJoin_ft] base
         WHERE valid_bl = 1
-          AND cidade_st LIKE @cidade
+          AND cidade_st COLLATE Latin1_General_CI_AI LIKE @cidade
         GROUP BY exibidor_st
         ORDER BY total DESC
       `);

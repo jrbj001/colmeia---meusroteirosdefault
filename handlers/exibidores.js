@@ -13,7 +13,7 @@ module.exports = async (req, res) => {
     let where = 'WHERE valid_bl = 1 AND exibidor_st IS NOT NULL AND LTRIM(RTRIM(exibidor_st)) <> \'\'';
     if (search) {
       request.input('search', sql.NVarChar, `%${search}%`);
-      where += ' AND exibidor_st LIKE @search';
+      where += ' AND exibidor_st COLLATE Latin1_General_CI_AI LIKE @search';
     }
 
     const result = await request.query(`

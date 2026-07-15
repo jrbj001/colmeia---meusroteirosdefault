@@ -86,6 +86,7 @@
     { "source": "/banco-ativos-relatorio-praca",       "destination": "/api/banco-ativos?action=relatorio-praca" },
     { "source": "/api/banco-ativos-relatorio-exibidor","destination": "/api/banco-ativos?action=relatorio-exibidor" },
     { "source": "/banco-ativos-relatorio-exibidor",    "destination": "/api/banco-ativos?action=relatorio-exibidor" },
+    { "source": "/api/banco-ativos-delete-pontos",     "destination": "/api/banco-ativos?action=delete-pontos" },
 
     { "source": "/api/relatorio-p1a-options",      "destination": "/api/relatorio-p1a?action=options"      },
     { "source": "/api/relatorio-p1a-refresh",      "destination": "/api/relatorio-p1a?action=refresh"      },
