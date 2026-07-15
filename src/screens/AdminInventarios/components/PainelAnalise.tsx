@@ -118,7 +118,7 @@ export const PainelAnalise: React.FC<Props> = ({
   const sugestaoTipo = React.useMemo(() => {
     const m: Record<string, string> = {};
     (comparativo_tipos ?? []).forEach((c) => {
-      if (c.sugestao_legado?.tipo) m[c.tipo_novo] = c.sugestao_legado.tipo;
+      if (c.sugestao_cadastro?.tipo) m[c.tipo_novo] = c.sugestao_cadastro.tipo;
     });
     return m;
   }, [comparativo_tipos]);
@@ -429,8 +429,8 @@ export const PainelAnalise: React.FC<Props> = ({
         <section>
           <SectionTitle
             eyebrow="Mapeamento de tipos"
-            titulo="Tipos do envio vs banco atual"
-            descricao="Para cada tipo de mídia trazido no envio, comparamos com o tipo equivalente no banco de ativos atual. A coluna “Sugestão” é uma heurística por palavras-chave para acelerar o cadastro de regras de-para."
+            titulo="Tipos do envio vs cadastro"
+            descricao="Para cada tipo de mídia trazido no envio, comparamos com o tipo equivalente no cadastro do banco de ativos atual (catálogo usado por todos os exibidores — não apenas o histórico deste exibidor). A coluna “Sugestão” é uma heurística por palavras-chave para acelerar o cadastro de regras de-para."
           />
           <SubCard>
             <table className="w-full text-[13px]">
@@ -444,10 +444,10 @@ export const PainelAnalise: React.FC<Props> = ({
                   </th>
                   <th className="px-3 text-center text-gray-300">→</th>
                   <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold">
-                    Sugestão (banco atual)
+                    Sugestão (cadastro)
                   </th>
                   <th className="text-right px-5 py-3 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-bold w-32">
-                    Pontos no legado
+                    Pontos no cadastro
                   </th>
                 </tr>
               </thead>
@@ -458,8 +458,8 @@ export const PainelAnalise: React.FC<Props> = ({
                     <td className="px-5 py-3 text-right text-gray-600 font-mono">{fmt(c.qtd_novo)}</td>
                     <td className="px-3 text-center text-gray-300">→</td>
                     <td className="px-5 py-3">
-                      {c.sugestao_legado ? (
-                        <span className="text-gray-700">{c.sugestao_legado.tipo}</span>
+                      {c.sugestao_cadastro ? (
+                        <span className="text-gray-700">{c.sugestao_cadastro.tipo}</span>
                       ) : (
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider text-[#b91c1c] bg-red-50">
                           Sem equivalente — tipo novo
@@ -467,7 +467,7 @@ export const PainelAnalise: React.FC<Props> = ({
                       )}
                     </td>
                     <td className="px-5 py-3 text-right text-gray-500 font-mono">
-                      {c.sugestao_legado ? fmt(c.sugestao_legado.qtd) : '—'}
+                      {c.sugestao_cadastro ? fmt(c.sugestao_cadastro.qtd) : '—'}
                     </td>
                   </tr>
                 ))}

@@ -349,20 +349,23 @@ async function analisarLote(req, res, pool) {
       cidades_faltantes: faltaRes.recordset,
     };
 
-    // 8b. Tipos de mídia no legado (para comparativo lado a lado)
-    const tiposLegadoRes = await pool.request()
-      .input('exibidor_fk', sql.Int, exibidorFk)
-      .query(`
-        SELECT TOP 30 tipoMidia_st AS tipo, COUNT(1) AS qtd
-        FROM [serv_product_be180].[bancoAtivosJoin_ft]
-        WHERE valid_bl = 1 AND exibidor_fk = @exibidor_fk
-          AND tipoMidia_st IS NOT NULL AND LTRIM(RTRIM(tipoMidia_st)) <> ''
-        GROUP BY tipoMidia_st
-        ORDER BY qtd DESC
-      `);
-    const tiposLegado = tiposLegadoRes.recordset;
+    // 8b. Tipos de mídia já cadastrados no banco de ativos atual (para comparativo lado a lado).
+    // IMPORTANTE: não filtra por exibidor_fk — o tipo importado deve ser comparado ao cadastro
+    // (catálogo de tipos usado por todos os exibidores), não apenas ao histórico deste exibidor.
+    // Se comparássemos só com o legado dele, um exibidor sem pontos anteriores (ou novo) teria
+    // 100% dos tipos marcados como "sem equivalente — tipo novo", mesmo que sejam tipos padrão
+    // (ex.: "Frontlight", "Painel de LED") já usados por outros exibidores no cadastro.
+    const tiposCadastroRes = await pool.request().query(`
+      SELECT tipoMidia_st AS tipo, COUNT(1) AS qtd
+      FROM [serv_product_be180].[bancoAtivosJoin_ft]
+      WHERE valid_bl = 1
+        AND tipoMidia_st IS NOT NULL AND LTRIM(RTRIM(tipoMidia_st)) <> ''
+      GROUP BY tipoMidia_st
+      ORDER BY qtd DESC
+    `);
+    const tiposCadastro = tiposCadastroRes.recordset;
 
-    // Heurística: para cada tipo do novo, encontrar o tipo do legado mais similar
+    // Heurística: para cada tipo do novo, encontrar o tipo do cadastro mais similar
     // (matching por palavras-chave normalizadas — tira acento, baixa caixa, splita por espaço/-)
     const norm = (s) =>
       String(s || '')
@@ -375,11 +378,11 @@ async function analisarLote(req, res, pool) {
 
     comparativoTipos = tiposRes.recordset.map((novo) => {
       const tokensNovo = new Set(norm(novo.tipo));
-      const candidatos = tiposLegado
-        .map((leg) => {
-          const tokensLeg = norm(leg.tipo);
-          const matches = tokensLeg.filter((t) => tokensNovo.has(t)).length;
-          return { tipo: leg.tipo, qtd: leg.qtd, score: matches };
+      const candidatos = tiposCadastro
+        .map((cad) => {
+          const tokensCad = norm(cad.tipo);
+          const matches = tokensCad.filter((t) => tokensNovo.has(t)).length;
+          return { tipo: cad.tipo, qtd: cad.qtd, score: matches };
         })
         .filter((c) => c.score > 0)
         .sort((a, b) => b.score - a.score || b.qtd - a.qtd);
@@ -388,7 +391,7 @@ async function analisarLote(req, res, pool) {
         tipo_novo: novo.tipo,
         qtd_novo: novo.qtd,
         mapeados_novo: novo.mapeados,
-        sugestao_legado: sugestao ? { tipo: sugestao.tipo, qtd: sugestao.qtd } : null,
+        sugestao_cadastro: sugestao ? { tipo: sugestao.tipo, qtd: sugestao.qtd } : null,
       };
     });
 
