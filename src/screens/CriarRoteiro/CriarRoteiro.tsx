@@ -114,6 +114,12 @@ export const CriarRoteiro: React.FC = () => {
   const [totaisIndoor, setTotaisIndoor] = useState<any>(null);
   const [dadosConsolidado, setDadosConsolidado] = useState<any[]>([]);
   const [totaisConsolidado, setTotaisConsolidado] = useState<any>(null);
+
+  // Estados para dados indoor e consolidado na perspectiva do target do roteiro
+  const [dadosIndoorTarget, setDadosIndoorTarget] = useState<any[]>([]);
+  const [totaisIndoorTarget, setTotaisIndoorTarget] = useState<any>(null);
+  const [dadosConsolidadoTarget, setDadosConsolidadoTarget] = useState<any[]>([]);
+  const [totaisConsolidadoTarget, setTotaisConsolidadoTarget] = useState<any>(null);
   const [dadosSemanaisTarget, setDadosSemanaisTarget] = useState<any[]>([]);
   const [dadosSemanaisTargetSummary, setDadosSemanaisTargetSummary] = useState<any[]>([]);
   const [carregandoSemanaisTarget, setCarregandoSemanaisTarget] = useState(false);
@@ -1872,7 +1878,9 @@ export const CriarRoteiro: React.FC = () => {
         axios.post('/report-indicadores-week', { report_pk: pkToUse }),
         axios.post('/report-indicadores-week-summary', { report_pk: pkToUse }),
         axios.post('/report-indicadores-indoor', { report_pk: pkToUse }),
-        axios.post('/report-indicadores-consolidado', { report_pk: pkToUse })
+        axios.post('/report-indicadores-consolidado', { report_pk: pkToUse }),
+        axios.post('/report-indicadores-indoor-target', { report_pk: pkToUse }),
+        axios.post('/report-indicadores-consolidado-target', { report_pk: pkToUse })
       ]);
 
       // Extrair respostas (ou null se falharam)
@@ -1884,7 +1892,9 @@ export const CriarRoteiro: React.FC = () => {
         responseSemanais,
         summaryResponseSemanais,
         responseIndoor,
-        responseConsolidado
+        responseConsolidado,
+        responseIndoorTarget,
+        responseConsolidadoTarget
       ] = results.map(result => result.status === 'fulfilled' ? result.value : null);
 
       console.log('📊 Todas as requisições concluídas!');
@@ -1962,6 +1972,28 @@ export const CriarRoteiro: React.FC = () => {
         setDadosConsolidado([]);
         setTotaisConsolidado(null);
         console.log('ℹ️ Dados consolidado não disponíveis');
+      }
+
+      // Processar dados indoor na perspectiva do target
+      if (responseIndoorTarget?.data?.success) {
+        setDadosIndoorTarget(responseIndoorTarget.data.data || []);
+        setTotaisIndoorTarget(responseIndoorTarget.data.totais || null);
+        console.log('✅ Dados indoor no target carregados:', (responseIndoorTarget.data.data || []).length);
+      } else {
+        setDadosIndoorTarget([]);
+        setTotaisIndoorTarget(null);
+        console.log('ℹ️ Dados indoor no target não disponíveis (plano sem indoor ou view ainda sem dados)');
+      }
+
+      // Processar dados consolidado VP+Indoor na perspectiva do target
+      if (responseConsolidadoTarget?.data?.success) {
+        setDadosConsolidadoTarget(responseConsolidadoTarget.data.data || []);
+        setTotaisConsolidadoTarget(responseConsolidadoTarget.data.totais || null);
+        console.log('✅ Dados consolidado no target carregados:', (responseConsolidadoTarget.data.data || []).length);
+      } else {
+        setDadosConsolidadoTarget([]);
+        setTotaisConsolidadoTarget(null);
+        console.log('ℹ️ Dados consolidado no target não disponíveis');
       }
 
       // Verificar disponibilidade do relatório no Azure Blob com retry automático.
@@ -5015,6 +5047,49 @@ export const CriarRoteiro: React.FC = () => {
                       </div>
                     )}
 
+                    {/* Indoor no target — só exibe quando houver dados de indoor na perspectiva do target */}
+                    {tipoVisualizacao === 'geral' && dadosIndoorTarget.length > 0 && (
+                      <div className="mt-8">
+                        <h4 className="text-sm font-semibold text-[#3a3a3a] mb-3">Indoor no target</h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse border border-gray-200">
+                            <thead>
+                              <tr className="bg-gray-50">
+                                <th className="border border-gray-200 px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">Praça</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Impactos</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Cobertura (pessoas)</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Cobertura (%)</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Frequência</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">GRP</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dadosIndoorTarget.map((item, index) => (
+                                <tr key={index} className="hover:bg-gray-50">
+                                  <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">{item.cidade_st}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{Math.round(item.impactosTotal_vl || 0).toLocaleString('pt-BR')}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{Math.round(item.coberturaPessoasTotal_vl || 0).toLocaleString('pt-BR')}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{(item.coberturaProp_vl || 0).toFixed(1)}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{(item.frequencia_vl || 0).toFixed(1)}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{(item.grp_vl || 0).toFixed(3)}</td>
+                                </tr>
+                              ))}
+                              {totaisIndoorTarget && (
+                                <tr className="bg-gray-50 font-semibold">
+                                  <td className="border border-gray-200 px-4 py-2 text-[#3a3a3a]">Total</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{Math.round(totaisIndoorTarget.impactosTotal_vl || 0).toLocaleString('pt-BR')}</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{Math.round(totaisIndoorTarget.coberturaPessoasTotal_vl || 0).toLocaleString('pt-BR')}</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{(totaisIndoorTarget.coberturaProp_vl || 0).toFixed(1)}</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{(totaisIndoorTarget.frequencia_vl || 0).toFixed(1)}</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{(totaisIndoorTarget.grp_vl || 0).toFixed(3)}</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Total consolidado (VP + Indoor) — só exibe quando o plano tem indoor */}
                     {tipoVisualizacao === 'geral' && dadosIndoor.length > 0 && dadosConsolidado.length > 0 && (
                       <div className="mt-8">
@@ -5050,6 +5125,50 @@ export const CriarRoteiro: React.FC = () => {
                                   <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{(totaisConsolidado.coberturaProp_vl || 0).toFixed(1)}</td>
                                   <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{(totaisConsolidado.frequencia_vl || 0).toFixed(1)}</td>
                                   <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{(totaisConsolidado.grp_vl || 0).toFixed(3)}</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-2">• praça com indoor somado</p>
+                      </div>
+                    )}
+
+                    {/* Total consolidado no target (VP + Indoor) — só exibe quando houver dados na perspectiva do target */}
+                    {tipoVisualizacao === 'geral' && dadosIndoorTarget.length > 0 && dadosConsolidadoTarget.length > 0 && (
+                      <div className="mt-8">
+                        <h4 className="text-sm font-semibold text-[#3a3a3a] mb-3">Total consolidado no target (Vias Públicas + Indoor)</h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse border border-gray-200">
+                            <thead>
+                              <tr className="bg-gray-50">
+                                <th className="border border-gray-200 px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">Praça</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Impactos</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Cobertura (pessoas)</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Cobertura (%)</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Frequência</th>
+                                <th className="border border-gray-200 px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">GRP</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dadosConsolidadoTarget.map((item, index) => (
+                                <tr key={index} className="hover:bg-gray-50">
+                                  <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">{item.cidade_st}{item.temIndoor_fl ? ' •' : ''}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{Math.round(item.impactosTotal_vl || 0).toLocaleString('pt-BR')}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{Math.round(item.coberturaPessoasTotal_vl || 0).toLocaleString('pt-BR')}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{(item.coberturaProp_vl || 0).toFixed(1)}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{(item.frequencia_vl || 0).toFixed(1)}</td>
+                                  <td className="border border-gray-300 px-4 py-2 text-right">{(item.grp_vl || 0).toFixed(3)}</td>
+                                </tr>
+                              ))}
+                              {totaisConsolidadoTarget && (
+                                <tr className="bg-gray-50 font-semibold">
+                                  <td className="border border-gray-200 px-4 py-2 text-[#3a3a3a]">Total</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{Math.round(totaisConsolidadoTarget.impactosTotal_vl || 0).toLocaleString('pt-BR')}</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{Math.round(totaisConsolidadoTarget.coberturaPessoasTotal_vl || 0).toLocaleString('pt-BR')}</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{(totaisConsolidadoTarget.coberturaProp_vl || 0).toFixed(1)}</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{(totaisConsolidadoTarget.frequencia_vl || 0).toFixed(1)}</td>
+                                  <td className="border border-gray-200 px-4 py-2 text-right text-[#3a3a3a]">{(totaisConsolidadoTarget.grp_vl || 0).toFixed(3)}</td>
                                 </tr>
                               )}
                             </tbody>
