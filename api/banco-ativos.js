@@ -8,6 +8,7 @@ const handlers = {
   'busca':             require('../handlers/busca-pontos-midia'),
   'relatorio-praca':   require('../handlers/banco-ativos-relatorio-praca'),
   'relatorio-exibidor': require('../handlers/banco-ativos-relatorio-exibidor'),
+  'delete-pontos':     require('../handlers/banco-ativos-delete-pontos'),
 };
 
 module.exports = async (req, res) => {

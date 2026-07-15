@@ -145,9 +145,18 @@ function requireInternalUser(req, res) {
   return true;
 }
 
+function requireAdmin(req, res) {
+  if (req.user?.perfil_nome !== 'Admin') {
+    res.status(403).json({ error: 'Acesso restrito a administradores' });
+    return false;
+  }
+  return true;
+}
+
 module.exports = {
   authMiddleware,
   extractToken,
   isAuthenticated,
-  requireInternalUser
+  requireInternalUser,
+  requireAdmin,
 };
