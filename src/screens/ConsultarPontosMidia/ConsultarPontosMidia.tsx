@@ -101,6 +101,13 @@ function formatarNumero(n: number): string {
   return new Intl.NumberFormat('pt-BR').format(n);
 }
 
+function normalizeText(value: string): string {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
 // ── Sub-componentes ────────────────────────────────────────────────────────
 
 function FilterField({
@@ -198,16 +205,20 @@ export const ConsultarPontosMidia: React.FC = () => {
       setSugestoesPraca(cidades.slice(0, 15));
       return;
     }
-    const t = termo.toLowerCase();
-    setSugestoesPraca(
-      cidades
-        .filter(
-          (c) =>
-            c.nome_cidade.toLowerCase().includes(t) ||
-            c.nome_estado.toLowerCase().includes(t)
-        )
-        .slice(0, 15)
+    const t = normalizeText(termo);
+    const correspondentes = cidades.filter(
+      (c) =>
+        normalizeText(c.nome_cidade).includes(t) ||
+        normalizeText(c.nome_estado).includes(t)
     );
+    // Prioriza cidades cujo nome começa com o termo buscado (ex.: "sao" → "São Paulo" antes de "Cabo de Santo Agostinho")
+    const ordenadas = [...correspondentes].sort((a, b) => {
+      const aStarts = normalizeText(a.nome_cidade).startsWith(t) ? 0 : 1;
+      const bStarts = normalizeText(b.nome_cidade).startsWith(t) ? 0 : 1;
+      if (aStarts !== bStarts) return aStarts - bStarts;
+      return a.nome_cidade.localeCompare(b.nome_cidade, 'pt-BR');
+    });
+    setSugestoesPraca(ordenadas.slice(0, 15));
   };
 
   const buscarExibidores = (termo: string) => {
