@@ -5183,19 +5183,17 @@ export const CriarRoteiro: React.FC = () => {
                       <div>
                         <h4 className="text-lg font-bold text-[#3a3a3a] mb-4">VISÃO POR PRAÇA</h4>
                         {dadosSemanais.length > 0 ? (() => {
-                            // Agrupar dados por cidade e organizar por semana
-                            const dadosPorCidade = dadosSemanais.reduce((acc: any, item: any) => {
-                              const cidade = item.cidade_st;
-                              if (!acc[cidade]) {
-                                acc[cidade] = {};
-                              }
-                              acc[cidade][item.week_vl] = item;
-                              return acc;
-                            }, {});
+                            // Normaliza maiúsculas/acentos para evitar duplicar a mesma praça quando
+                            // a grafia varia entre semanas de Vias Públicas e semanas só de Indoor
+                            // (ex.: "BRASILIA" nas semanas de VP vs "Brasília" nas semanas de Indoor)
+                            const normalizarCidade = (nome: string) =>
+                              (nome || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
-                            // Usar dados de resumo da stored procedure
+                            // Usar dados de resumo da stored procedure (nome de exibição canônico)
                             const totaisPorCidade = dadosSemanaisSummary.reduce((acc: any, item: any) => {
-                              acc[item.cidade_st] = {
+                              const chave = normalizarCidade(item.cidade_st);
+                              acc[chave] = {
+                                nomeExibicao: item.cidade_st,
                                 impactos_vl: item.impactosTotal_vl || 0,
                                 coberturaPessoas_vl: item.coberturaPessoasTotal_vl || 0,
                                 coberturaProp_vl: item.coberturaProp_vl || 0,
@@ -5205,24 +5203,37 @@ export const CriarRoteiro: React.FC = () => {
                               return acc;
                             }, {});
 
+                            // Agrupar dados por cidade (grafia normalizada) e organizar por semana
+                            const dadosPorCidade = dadosSemanais.reduce((acc: any, item: any) => {
+                              const chave = normalizarCidade(item.cidade_st);
+                              if (!acc[chave]) {
+                                acc[chave] = {
+                                  nomeExibicao: totaisPorCidade[chave]?.nomeExibicao || item.cidade_st,
+                                  semanas: {}
+                                };
+                              }
+                              acc[chave].semanas[item.week_vl] = item;
+                              return acc;
+                            }, {});
+
                             return (
                               <div className="space-y-8">
-                                {Object.entries(dadosPorCidade).map(([cidade, dadosCidade]: [string, any]) => (
-                                  <div key={cidade} className="border border-gray-300 rounded-lg p-6">
+                                {Object.entries(dadosPorCidade).map(([chaveCidade, dadosCidade]: [string, any]) => (
+                                  <div key={chaveCidade} className="border border-gray-300 rounded-lg p-6">
                                     <div className="flex items-center justify-between mb-4">
                                       <div className="flex items-center">
-                                        <span className="text-lg font-bold text-[#3a3a3a]">• {cidade}</span>
+                                        <span className="text-lg font-bold text-[#3a3a3a]">• {dadosCidade.nomeExibicao}</span>
                                       </div>
                                       <button 
                                         onClick={() => {
-                                          console.log('🗺️ [DEBUG] Navegando para Mapa com cidade:', cidade);
+                                          console.log('🗺️ [DEBUG] Navegando para Mapa com cidade:', dadosCidade.nomeExibicao);
                                           console.log('🗺️ [DEBUG] RoteiroData:', roteiroData);
                                           console.log('🗺️ [DEBUG] planoMidiaGrupo_pk:', roteiroData?.planoMidiaGrupo_pk);
                                           
                                           // Navegar com grupo na URL
                                           navigate(`/mapa?grupo=${roteiroData?.planoMidiaGrupo_pk}`, {
                                             state: {
-                                              cidadePreSelecionada: cidade,
+                                              cidadePreSelecionada: dadosCidade.nomeExibicao,
                                               semanaPreSelecionada: '1',
                                               roteiroData: roteiroData
                                             }
@@ -5252,7 +5263,7 @@ export const CriarRoteiro: React.FC = () => {
                                           <tr className="hover:bg-gray-50">
                                             <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">Impactos IPV</td>
                                             {Array.from({ length: 12 }, (_, i) => {
-                                              const semana = dadosCidade[i + 1];
+                                              const semana = dadosCidade.semanas[i + 1];
                                               return (
                                                 <td key={i} className="border border-gray-300 px-4 py-2 text-right">
                                                   {semana?.impactos_vl ? Math.round(semana.impactos_vl).toLocaleString('pt-BR') : '0'}
@@ -5260,7 +5271,7 @@ export const CriarRoteiro: React.FC = () => {
                                               );
                                             })}
                                             <td className="border border-gray-300 px-4 py-2 text-right font-bold">
-                                              {totaisPorCidade[cidade]?.impactos_vl ? Math.round(totaisPorCidade[cidade].impactos_vl).toLocaleString('pt-BR') : '0'}
+                                              {totaisPorCidade[chaveCidade]?.impactos_vl ? Math.round(totaisPorCidade[chaveCidade].impactos_vl).toLocaleString('pt-BR') : '0'}
                                             </td>
                                           </tr>
                                           
@@ -5268,7 +5279,7 @@ export const CriarRoteiro: React.FC = () => {
                                           <tr className="hover:bg-gray-50">
                                             <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">Cobertura (N° pessoas)</td>
                                             {Array.from({ length: 12 }, (_, i) => {
-                                              const semana = dadosCidade[i + 1];
+                                              const semana = dadosCidade.semanas[i + 1];
                                               return (
                                                 <td key={i} className="border border-gray-300 px-4 py-2 text-right">
                                                   {semana?.coberturaPessoas_vl ? Math.round(semana.coberturaPessoas_vl).toLocaleString('pt-BR') : '0'}
@@ -5276,7 +5287,7 @@ export const CriarRoteiro: React.FC = () => {
                                               );
                                             })}
                                             <td className="border border-gray-300 px-4 py-2 text-right font-bold">
-                                              {totaisPorCidade[cidade]?.coberturaPessoas_vl ? Math.round(totaisPorCidade[cidade].coberturaPessoas_vl).toLocaleString('pt-BR') : '0'}
+                                              {totaisPorCidade[chaveCidade]?.coberturaPessoas_vl ? Math.round(totaisPorCidade[chaveCidade].coberturaPessoas_vl).toLocaleString('pt-BR') : '0'}
                                             </td>
                                           </tr>
                                           
@@ -5284,7 +5295,7 @@ export const CriarRoteiro: React.FC = () => {
                                           <tr className="hover:bg-gray-50">
                                             <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">Cobertura %</td>
                                             {Array.from({ length: 12 }, (_, i) => {
-                                              const semana = dadosCidade[i + 1];
+                                              const semana = dadosCidade.semanas[i + 1];
                                               return (
                                                 <td key={i} className="border border-gray-300 px-4 py-2 text-right">
                                                   {semana?.coberturaProp_vl ? semana.coberturaProp_vl.toFixed(1) + '%' : '0.0%'}
@@ -5292,7 +5303,7 @@ export const CriarRoteiro: React.FC = () => {
                                               );
                                             })}
                                             <td className="border border-gray-300 px-4 py-2 text-right font-bold">
-                                              {totaisPorCidade[cidade]?.coberturaProp_vl ? totaisPorCidade[cidade].coberturaProp_vl.toFixed(1) + '%' : '0.0%'}
+                                              {totaisPorCidade[chaveCidade]?.coberturaProp_vl ? totaisPorCidade[chaveCidade].coberturaProp_vl.toFixed(1) + '%' : '0.0%'}
                                             </td>
                                           </tr>
                                           
@@ -5300,7 +5311,7 @@ export const CriarRoteiro: React.FC = () => {
                                           <tr className="hover:bg-gray-50">
                                             <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">Frequência</td>
                                             {Array.from({ length: 12 }, (_, i) => {
-                                              const semana = dadosCidade[i + 1];
+                                              const semana = dadosCidade.semanas[i + 1];
                                               return (
                                                 <td key={i} className="border border-gray-300 px-4 py-2 text-right">
                                                   {semana?.frequencia_vl ? semana.frequencia_vl.toFixed(1) : '0.0'}
@@ -5308,7 +5319,7 @@ export const CriarRoteiro: React.FC = () => {
                                               );
                                             })}
                                             <td className="border border-gray-300 px-4 py-2 text-right font-bold">
-                                              {totaisPorCidade[cidade]?.frequencia_vl ? totaisPorCidade[cidade].frequencia_vl.toFixed(1) : '0.0'}
+                                              {totaisPorCidade[chaveCidade]?.frequencia_vl ? totaisPorCidade[chaveCidade].frequencia_vl.toFixed(1) : '0.0'}
                                             </td>
                                           </tr>
                                           
@@ -5316,7 +5327,7 @@ export const CriarRoteiro: React.FC = () => {
                                           <tr className="hover:bg-gray-50">
                                             <td className="border border-gray-300 px-4 py-2 font-medium text-[#3a3a3a]">GRP</td>
                                             {Array.from({ length: 12 }, (_, i) => {
-                                              const semana = dadosCidade[i + 1];
+                                              const semana = dadosCidade.semanas[i + 1];
                                               return (
                                                 <td key={i} className="border border-gray-300 px-4 py-2 text-right">
                                                   {semana?.grp_vl ? semana.grp_vl.toFixed(3) : '0.000'}
@@ -5324,7 +5335,7 @@ export const CriarRoteiro: React.FC = () => {
                                               );
                                             })}
                                             <td className="border border-gray-300 px-4 py-2 text-right font-bold">
-                                              {totaisPorCidade[cidade]?.grp_vl ? totaisPorCidade[cidade].grp_vl.toFixed(3) : '0.000'}
+                                              {totaisPorCidade[chaveCidade]?.grp_vl ? totaisPorCidade[chaveCidade].grp_vl.toFixed(3) : '0.000'}
                                             </td>
                                           </tr>
                                         </tbody>

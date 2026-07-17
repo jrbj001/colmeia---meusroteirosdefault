@@ -18,7 +18,7 @@ module.exports = async function handler(req, res) {
       .input('report_pk', report_pk)
       .query(`
         SELECT *
-        FROM [serv_product_be180].[reportDataIndicadoresViasPublicasWeek_dm_vw]
+        FROM [serv_product_be180].[reportDataIndicadoresConsolidadoWeek_dm_vw]
         WHERE report_pk = @report_pk
         ORDER BY cidade_st, week_vl
       `);
