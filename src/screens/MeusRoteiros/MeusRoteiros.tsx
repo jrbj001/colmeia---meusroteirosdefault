@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Avatar } from "../../components/Avatar";
 import { Sidebar } from "../../components/Sidebar/Sidebar";
 import { Topbar } from "../../components/Topbar/Topbar";
@@ -19,6 +19,7 @@ import { useRoteirosRefresh } from "../../hooks/useRoteirosRefresh";
 import { useDebounce } from "../../hooks/useDebounce";
 import { ConfirmDeleteModal } from "../../components/ConfirmDeleteModal/ConfirmDeleteModal";
 import { useAuth } from "../../contexts/AuthContext";
+import { MultiSelectFilter, MultiSelectOption } from "../../components/MultiSelectFilter/MultiSelectFilter";
 
 // Definir a interface dos dados da view
 interface Roteiro {
@@ -27,6 +28,7 @@ interface Roteiro {
   planoMidiaDesc_st_concat: string;
   usuarioId_st: string;
   usuarioName_st: string;
+  marca_st?: string;
   gender_st: string;
   class_st: string;
   age_st: string;
@@ -62,9 +64,39 @@ interface PaginationInfo {
   pageSize: number;
 }
 
+// Badge discreto de dimensão (Usuário / Marca / Agência) — 3 primeiras letras,
+// TAMANHO FIXO igual para todos; vazio quando não há dado.
+// Outline-only (contorno + texto, sem preenchimento); cores do Design System Colmeia.
+const first3 = (s?: string | null) => (s ? s.trim().slice(0, 3).toUpperCase() : "");
+// Uma cor só (laranja do DS), tom MUTED pra não "marcar" demais: texto laranja
+// fechado + borda bem suave. Contorno sólido, sem preenchimento.
+const BADGE_TEXT = "#C2410C";   // laranja fechado/muted (calmo, legível)
+const BADGE_BORDER = "#F0D0C0"; // borda laranja bem clara (discreta)
+const DimBadge: React.FC<{ dim: string; value?: string | null }> = ({ dim, value }) => {
+  const empty = !value;
+  return (
+    <span
+      title={value ? `${dim}: ${value}` : `${dim}: —`}
+      className="inline-flex h-[18px] w-10 flex-shrink-0 items-center justify-center rounded-[4px] border border-solid bg-transparent font-mono text-[10px] font-medium uppercase tracking-tight leading-none"
+      style={empty
+        ? { color: "#C1C1C1", borderColor: "#ECECEC" }
+        : { color: BADGE_TEXT, borderColor: BADGE_BORDER }}
+    >
+      {first3(value)}
+    </span>
+  );
+};
+
+interface FilterOptions {
+  usuarios: { name: string; ids: string[] }[];
+  marcas: string[];
+  agencias: string[];
+  categorias: string[];
+}
+
 export const MeusRoteiros: React.FC = () => {
   const navigate = useNavigate();
-  const { isAgencia } = useAuth();
+  const { isAgencia, user } = useAuth();
   const [menuReduzido, setMenuReduzido] = useState(false);
   const [dados, setDados] = useState<Roteiro[]>([]);
   const [paginacao, setPaginacao] = useState<PaginationInfo>({
@@ -86,6 +118,60 @@ export const MeusRoteiros: React.FC = () => {
   });
   const [isDeleting, setIsDeleting] = useState(false);
   const [statusOpcoes, setStatusOpcoes] = useState<StatusOpcao[]>([]);
+
+  // ── Filtros multiselect (usuário / marca / agência / categoria) ──
+  const [filterOptions, setFilterOptions] = useState<FilterOptions>({
+    usuarios: [], marcas: [], agencias: [], categorias: [],
+  });
+  const [filtroUsuarios, setFiltroUsuarios] = useState<string[]>([]);
+  const [filtroMarcas, setFiltroMarcas] = useState<string[]>([]);
+  const [filtroAgencias, setFiltroAgencias] = useState<string[]>([]);
+  const [filtroCategorias, setFiltroCategorias] = useState<string[]>([]);
+
+  // Monta a querystring dos filtros ativos (append em /roteiros e /roteiros-search)
+  const buildFiltroQS = useCallback(() => {
+    const p = new URLSearchParams();
+    if (filtroUsuarios.length) p.set("usuarioId", filtroUsuarios.join(","));
+    if (filtroMarcas.length) p.set("marca", filtroMarcas.join(","));
+    if (filtroAgencias.length) p.set("agencia", filtroAgencias.join(","));
+    if (filtroCategorias.length) p.set("categoria", filtroCategorias.join(","));
+    const s = p.toString();
+    return s ? `&${s}` : "";
+  }, [filtroUsuarios, filtroMarcas, filtroAgencias, filtroCategorias]);
+
+  const totalFiltros =
+    filtroUsuarios.length + filtroMarcas.length + filtroAgencias.length + filtroCategorias.length;
+
+  const limparTodosFiltros = () => {
+    setFiltroUsuarios([]); setFiltroMarcas([]); setFiltroAgencias([]); setFiltroCategorias([]);
+  };
+
+  // Opções para os comboboxes. No de usuário, o próprio usuário sobe destacado.
+  const usuarioOpts: MultiSelectOption[] = useMemo(
+    () => filterOptions.usuarios.map((u) => {
+      const isSelf = user?.id ? u.ids.includes(user.id) : false;
+      return { value: u.ids.join(","), label: u.name, pinned: isSelf, pinnedLabel: isSelf ? "Você" : undefined };
+    }),
+    [filterOptions.usuarios, user?.id]
+  );
+  const marcaOpts: MultiSelectOption[] = useMemo(
+    () => filterOptions.marcas.map((m) => ({ value: m, label: m })), [filterOptions.marcas]);
+  const agenciaOpts: MultiSelectOption[] = useMemo(
+    () => filterOptions.agencias.map((a) => ({ value: a, label: a })), [filterOptions.agencias]);
+  const categoriaOpts: MultiSelectOption[] = useMemo(
+    () => filterOptions.categorias.map((c) => ({ value: c, label: c })), [filterOptions.categorias]);
+
+  // Chips dos filtros ativos (label legível + remover individual)
+  const chipsFiltros = useMemo(() => {
+    const rm = (setter: React.Dispatch<React.SetStateAction<string[]>>, v: string) =>
+      () => setter((s) => s.filter((x) => x !== v));
+    return [
+      ...filtroUsuarios.map((v) => ({ key: `u:${v}`, grupo: "Usuário", label: usuarioOpts.find((o) => o.value === v)?.label ?? v, remove: rm(setFiltroUsuarios, v) })),
+      ...filtroMarcas.map((v) => ({ key: `m:${v}`, grupo: "Marca", label: v, remove: rm(setFiltroMarcas, v) })),
+      ...filtroAgencias.map((v) => ({ key: `a:${v}`, grupo: "Agência", label: v, remove: rm(setFiltroAgencias, v) })),
+      ...filtroCategorias.map((v) => ({ key: `c:${v}`, grupo: "Categoria", label: v, remove: rm(setFiltroCategorias, v) })),
+    ];
+  }, [filtroUsuarios, filtroMarcas, filtroAgencias, filtroCategorias, usuarioOpts]);
 
   // Aplicar debounce ao termo de busca (300ms)
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -118,12 +204,16 @@ export const MeusRoteiros: React.FC = () => {
 
   const formatarData = (dataString: string) => {
     const data = new Date(dataString);
+    // date_dh já é gravado em horário local (BRT, -03:00) no banco, mas o driver
+    // o devolve etiquetado como UTC (…Z). Formatar em timeZone:'UTC' exibe o
+    // relógio literal gravado, sem reconverter fuso (senão subtrairia 3h de novo).
     return data.toLocaleDateString('pt-BR', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      timeZone: 'UTC'
     });
   };
 
@@ -131,7 +221,7 @@ export const MeusRoteiros: React.FC = () => {
     try {
       setLoading(true);
       setErro(null);
-      const response = await api.get(`/roteiros?page=${pagina}`);
+      const response = await api.get(`/roteiros?page=${pagina}${buildFiltroQS()}`);
       console.log('Resposta da API:', response.data);
       if (response.data && response.data.data) {
         setDados(response.data.data);
@@ -152,7 +242,7 @@ export const MeusRoteiros: React.FC = () => {
       setLoading(true);
       setErro(null);
       setIsSearching(true);
-      const response = await api.get(`/roteiros-search?q=${encodeURIComponent(termo)}&page=${pagina}`);
+      const response = await api.get(`/roteiros-search?q=${encodeURIComponent(termo)}&page=${pagina}${buildFiltroQS()}`);
       console.log('Resposta da busca:', response.data);
       if (response.data && response.data.data) {
         setDados(response.data.data);
@@ -178,6 +268,30 @@ export const MeusRoteiros: React.FC = () => {
       .then((res) => setStatusOpcoes(res.data.data || []))
       .catch((err) => console.error('Erro ao carregar opções de status:', err));
   }, []);
+
+  // Carregar opções dos filtros (usuário / marca / agência / categoria)
+  useEffect(() => {
+    api.get('/roteiros?action=filter-options')
+      .then((res) => setFilterOptions({
+        usuarios: res.data.usuarios || [],
+        marcas: res.data.marcas || [],
+        agencias: res.data.agencias || [],
+        categorias: res.data.categorias || [],
+      }))
+      .catch((err) => console.error('Erro ao carregar opções de filtro:', err));
+  }, []);
+
+  // Ao mudar um filtro, volta para a página 1 (respeitando busca ativa). Pula o mount.
+  const didMountFiltros = useRef(false);
+  useEffect(() => {
+    if (!didMountFiltros.current) { didMountFiltros.current = true; return; }
+    if (isSearching && debouncedSearchTerm && debouncedSearchTerm.length >= 2) {
+      buscarRoteiros(debouncedSearchTerm, 1);
+    } else {
+      carregarDados(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroUsuarios, filtroMarcas, filtroAgencias, filtroCategorias]);
 
   // Effect para busca com debounce
   useEffect(() => {
@@ -359,13 +473,17 @@ Email: suporte@be180.com.br`;
               <h1 className="text-lg font-bold text-[#222] tracking-wide uppercase font-sans mt-4 pl-6">
                 Meus roteiros
               </h1>
-              <div className="flex items-center gap-4 mt-4">
+              <div className="flex flex-wrap items-center justify-end gap-3 mt-4">
                 {hasProcessing && (
                   <div className="flex items-center gap-2 text-xs text-[#FF9800]">
                     <div className="w-2 h-2 bg-[#FF9800] rounded-full animate-pulse"></div>
                     <span className="font-medium">Atualizando automaticamente</span>
                   </div>
                 )}
+                <MultiSelectFilter label="Usuário" options={usuarioOpts} selected={filtroUsuarios} onChange={setFiltroUsuarios} searchable className="w-40" />
+                <MultiSelectFilter label="Marca" options={marcaOpts} selected={filtroMarcas} onChange={setFiltroMarcas} searchable className="w-36" />
+                <MultiSelectFilter label="Agência" options={agenciaOpts} selected={filtroAgencias} onChange={setFiltroAgencias} searchable className="w-36" />
+                <MultiSelectFilter label="Categoria" options={categoriaOpts} selected={filtroCategorias} onChange={setFiltroCategorias} searchable className="w-40" />
                 <div className="relative w-96">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
                   <input
@@ -387,6 +505,36 @@ Email: suporte@be180.com.br`;
                 </div>
               </div>
             </div>
+
+            {totalFiltros > 0 && (
+              <div className="flex flex-wrap items-center gap-2 px-6 mb-2">
+                {chipsFiltros.map((chip) => (
+                  <span
+                    key={chip.key}
+                    className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 py-0.5 pl-2.5 pr-1 text-xs text-[#3A3A3A]"
+                  >
+                    <span className="text-gray-400">{chip.grupo}:</span>
+                    <span className="font-medium max-w-[16rem] truncate">{chip.label}</span>
+                    <button
+                      type="button"
+                      onClick={chip.remove}
+                      title="Remover filtro"
+                      className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full text-gray-500 hover:bg-gray-300 hover:text-[#222] transition-colors"
+                    >
+                      <svg width="9" height="9" viewBox="0 0 20 20" fill="none">
+                        <path d="M5 5 15 15 M15 5 5 15" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  </span>
+                ))}
+                <button
+                  onClick={limparTodosFiltros}
+                  className="ml-1 text-xs font-medium text-gray-400 hover:text-[#FF9800] transition-colors"
+                >
+                  Limpar filtros ({totalFiltros})
+                </button>
+              </div>
+            )}
 
             {isSearching && searchTerm && searchTerm.length >= 2 && (
               <div className="px-6 py-2 text-sm text-gray-600 mb-2">
@@ -461,7 +609,14 @@ Email: suporte@be180.com.br`;
                         key={idx}
                         className={`${idx % 2 === 0 ? "bg-[#f7f7f7]" : "bg-white"} hover:bg-[#ececec] transition-colors duration-200`}
                       >
-                        <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans max-w-xs truncate">{item.planoMidiaGrupo_st}</td>
+                        <td className="px-6 py-4 max-w-xs">
+                          <div className="text-[#222] text-sm font-normal font-sans truncate">{item.planoMidiaGrupo_st}</div>
+                          <div className="mt-1.5 flex items-center justify-end gap-1">
+                            <DimBadge dim="Usuário" value={item.usuarioName_st} />
+                            <DimBadge dim="Marca" value={item.marca_st} />
+                            <DimBadge dim="Agência" value={item.agencia_st} />
+                          </div>
+                        </td>
                         <td className="text-[#222] text-sm font-normal px-6 py-4 whitespace-nowrap font-sans">{formatarData(item.date_dh)}</td>
 
                         {/* Coluna STATUS — badge (agência) ou select (interno) */}

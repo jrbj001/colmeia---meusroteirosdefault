@@ -1,4 +1,5 @@
 const { getPool } = require('./db');
+const { buildRoteiroFilters, applyBinds } = require('./_roteirosFilters');
 
 module.exports = async (req, res) => {
   if (req.method !== 'GET') {
@@ -17,10 +18,14 @@ module.exports = async (req, res) => {
       ? 'AND agencia_pk = @empresaPk AND liberadoAgencia_bl = 1'
       : '';
 
+    // Filtros multiselect (usuário / marca / agência / categoria)
+    const { sql: filtrosSql, binds: filtrosBinds } = buildRoteiroFilters(req.query);
+
     const countReq = pool.request();
     if (empresaPk) countReq.input('empresaPk', empresaPk);
+    applyBinds(countReq, filtrosBinds);
     const countResult = await countReq.query(
-      `SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaGrupo_dm_vw WHERE delete_bl = 0 ${agenciaFilter}`
+      `SELECT COUNT(*) as total FROM serv_product_be180.planoMidiaGrupo_dm_vw WHERE delete_bl = 0 ${agenciaFilter} ${filtrosSql}`
     );
     const total = countResult.recordset[0].total;
 
@@ -28,10 +33,11 @@ module.exports = async (req, res) => {
       .input('offset', offset)
       .input('pageSize', pageSize);
     if (empresaPk) dataReq.input('empresaPk', empresaPk);
+    applyBinds(dataReq, filtrosBinds);
 
     const result = await dataReq.query(`
       SELECT * FROM serv_product_be180.planoMidiaGrupo_dm_vw
-      WHERE delete_bl = 0 ${agenciaFilter}
+      WHERE delete_bl = 0 ${agenciaFilter} ${filtrosSql}
       ORDER BY date_dh DESC
       OFFSET @offset ROWS
       FETCH NEXT @pageSize ROWS ONLY

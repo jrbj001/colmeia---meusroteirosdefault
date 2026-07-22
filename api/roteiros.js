@@ -9,6 +9,7 @@ const handlers = {
   'liberar-agencia': require('../handlers/roteiros-liberar-agencia'),
   'status-list': require('../handlers/roteiros-status-list'),
   'atualizar-status': require('../handlers/roteiros-atualizar-status'),
+  'filter-options': require('../handlers/roteiros-filter-options'),
 };
 
 module.exports = async (req, res) => {
